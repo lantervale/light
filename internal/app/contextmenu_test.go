@@ -280,7 +280,9 @@ func TestARightClickOnARequestCopiesOrOpensItsAddress(t *testing.T) {
 	})
 	s.frame()
 	s.rightClick(s.requestRow("/site.css"))
-	if got, want := labels(s.entries()), "[Open in new tab Copy address]"; got != want {
+	if got, want := labels(s.entries()), "[Open in new tab Copy address - Copy as HAR (sanitized) "+
+		"Save as HAR (sanitized) Save all as HAR (sanitized) - Copy as HAR (with sensitive data) "+
+		"Save as HAR (with sensitive data) Save all as HAR (with sensitive data)]"; got != want {
 		t.Fatalf("a request's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy address")

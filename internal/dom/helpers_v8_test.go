@@ -29,9 +29,15 @@ type scripted struct {
 	console []dom.Message
 	opened  []string
 	went    []string
+	// posted are the forms sent with a POST, each as its address, its
+	// type and what it carries, after "script" for one a script sent.
+	posted  []string
 	fetched []dom.Request
-	// answers are what the page's fetches get, by address.
+	// answers are what the page's fetches get, by address: one whose
+	// status is pending never comes. stopped are the fetches the page
+	// stopped, by address.
 	answers map[string]dom.Response
+	stopped []string
 	stores  map[string]dom.Storage
 }
 
@@ -46,7 +52,12 @@ func (s *scripted) start(markup string, host dom.Host) {
 	s.t.Helper()
 	loader := &web.Loader{Client: fetch.New(nil), Scripts: true}
 	open := func(to string) { s.opened = append(s.opened, to) }
-	s.page = loader.Local(address, markup, web.Links{Open: open, Over: func(string) {}})
+	post := func(by string) func(web.Submission) {
+		return func(sent web.Submission) {
+			s.posted = append(s.posted, by+sent.Address+" "+sent.Form.Type+" "+string(sent.Form.Body))
+		}
+	}
+	s.page = loader.Local(address, markup, web.Links{Open: open, Over: func(string) {}, Post: post("")})
 	if s.page.Err != nil {
 		s.t.Fatal(s.page.Err)
 	}
@@ -57,13 +68,14 @@ func (s *scripted) start(markup string, host dom.Host) {
 		}
 		s.went = append(s.went, to)
 	}
+	host.Post = post("script ")
 	host.Moved = func(how, to string) { s.went = append(s.went, how+" "+to) }
 	host.Viewport = func() (float32, float32) { return 800, 600 }
 	host.Fetch = s.fetch
 	if s.stores != nil {
 		host.Storage = func(area string) dom.Storage { return s.stores[area] }
 	}
-	host.Agent = "light/test"
+	host.Navigator.Agent = "light/test"
 	rt, err := dom.New(s.page, host)
 	if err != nil {
 		s.t.Fatal(err)
@@ -75,9 +87,15 @@ func (s *scripted) start(markup string, host dom.Host) {
 	s.layout()
 }
 
+// pending is the status of an answer that never comes.
+const pending = -1
+
 func (s *scripted) fetch(q dom.Request, done func(dom.Response)) func() {
 	s.fetched = append(s.fetched, q)
 	answer, known := s.answers[q.Address]
+	if answer.Status == pending {
+		return func() { s.stopped = append(s.stopped, q.Address) }
+	}
 	if !known {
 		answer = dom.Response{Status: 404, StatusText: "404 Not Found", Address: q.Address}
 	}

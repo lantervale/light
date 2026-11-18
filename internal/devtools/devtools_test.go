@@ -38,7 +38,9 @@ type shown struct {
 	named  string
 	served map[string][]byte
 	closed int
-	warns  []error
+	// exported counts the times the screen was asked to save a HAR file.
+	exported int
+	warns    []error
 	// unscripted is why the page runs no script, "" when it does.
 	unscripted string
 	// resized are the heights the screen was told, sources and opened
@@ -108,7 +110,9 @@ func show(t *testing.T) *shown {
 		Source: func(address string, line int) {
 			s.sources = append(s.sources, address+"#"+strconv.Itoa(line))
 		},
-		Open: func(address string) { s.opened = append(s.opened, address) },
+		Open:    func(address string) { s.opened = append(s.opened, address) },
+		Export:  func() { s.exported++ },
+		Version: "1.2.3",
 	})
 	s.doc.Body().Append(ui.Main(), s.panel.Node())
 	win := platform.NewWindow(platform.Size(1024, 680))

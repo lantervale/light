@@ -45,21 +45,25 @@ define(window, {
   queueMicrotask, requestIdleCallback, cancelIdleCallback: clearTimeout, setImmediate: undefined,
   history, navigator, performance, crypto, customElements, CSS, structuredClone,
   localStorage: storage("local"), sessionStorage: storage("session"),
+  // light is not told its monitor's size: the screen scripts read is
+  // the window itself, the part of it light knows.
   screen: {
-    get width() { return host("viewport")[0]; }, get height() { return host("viewport")[1]; },
-    get availWidth() { return host("viewport")[0]; }, get availHeight() { return host("viewport")[1]; },
-    colorDepth: 24, pixelDepth: 24, orientation: { type: "landscape-primary", angle: 0, addEventListener() {} },
+    get width() { return host("around")[0]; }, get height() { return host("around")[1]; },
+    get availWidth() { return host("around")[0]; }, get availHeight() { return host("around")[1]; },
+    colorDepth: 24, pixelDepth: 24,
+    orientation: {
+      get type() { const [width, height] = host("around"); return width >= height ? "landscape-primary" : "portrait-primary"; },
+      angle: 0, addEventListener() {}, removeEventListener() {},
+    },
   },
-  visualViewport: undefined, devicePixelRatio: 1, name: "", closed: false, opener: null, frameElement: null, length: 0,
+  visualViewport: undefined, name: "", closed: false, opener: null, frameElement: null, length: 0,
   isSecureContext: here.protocol === "https:", origin: here.origin, event: undefined, status: "",
   alert(message) { host("log", "info", "alert: " + (message === undefined ? "" : String(message))); },
   confirm(message) { host("log", "info", "confirm, answered no: " + String(message)); return false; },
   prompt(message) { host("log", "info", "prompt, left unanswered: " + String(message)); return null; },
   print() {}, focus() {}, blur() {}, stop() {}, close() {},
   open() { host("log", "warn", "light opens no window for a script"); return null; },
-  postMessage(data) {
-    setTimeout(() => dispatch(window, new MessageEvent("message", { data: structuredClone(data), origin: here.origin, source: window })), 0);
-  },
+  postMessage,
   matchMedia: (query) => new MediaQueryList(query),
   getComputedStyle: (element) => computedStyle(element),
   getSelection: () => selection,
@@ -88,7 +92,7 @@ define(window, {
   XMLSerializer, ShadowRoot, XPathEvaluator, MutationObserver, IntersectionObserver, ResizeObserver, PerformanceObserver, MediaQueryList,
   Window, EventTarget, Event, CustomEvent, UIEvent, MouseEvent, PointerEvent, KeyboardEvent, InputEvent, FocusEvent,
   SubmitEvent, PopStateEvent, HashChangeEvent, ErrorEvent, PromiseRejectionEvent, ProgressEvent, StorageEvent,
-  MessageEvent, TransitionEvent, AnimationEvent, WheelEvent, TouchEvent, DragEvent, ClipboardEvent,
+  MessageEvent, MessageChannel, MessagePort, BroadcastChannel, TransitionEvent, AnimationEvent, WheelEvent, TouchEvent, DragEvent, ClipboardEvent,
   CompositionEvent, BeforeUnloadEvent, PageTransitionEvent,
   Node, Element, HTMLElement, HTMLUnknownElement, SVGElement, Text, Comment, CharacterData, DocumentType, DocumentFragment, Document,
   HTMLDocument: Document, NodeList, HTMLCollection, HTMLFormControlsCollection, RadioNodeList, DOMTokenList, NamedNodeMap, Attr, DOMRect, DOMRectReadOnly,
@@ -109,14 +113,15 @@ accessors(window, {
   location: { get() { return location; }, set(address) { go(address, false); } },
   innerWidth: { get() { return host("viewport")[0]; } },
   innerHeight: { get() { return host("viewport")[1]; } },
-  outerWidth: { get() { return host("viewport")[0]; } },
-  outerHeight: { get() { return host("viewport")[1]; } },
+  outerWidth: { get() { return host("around")[0]; } },
+  outerHeight: { get() { return host("around")[1]; } },
+  devicePixelRatio: { get() { return host("around")[4]; } },
   scrollX: { get() { return host("viewport")[2]; } },
   scrollY: { get() { return host("viewport")[3]; } },
   pageXOffset: { get() { return host("viewport")[2]; } },
   pageYOffset: { get() { return host("viewport")[3]; } },
-  screenX: { get() { return 0; } }, screenY: { get() { return 0; } },
-  screenLeft: { get() { return 0; } }, screenTop: { get() { return 0; } },
+  screenX: { get() { return host("around")[2]; } }, screenY: { get() { return host("around")[3]; } },
+  screenLeft: { get() { return host("around")[2]; } }, screenTop: { get() { return host("around")[3]; } },
 });
 
 // ---- what light calls

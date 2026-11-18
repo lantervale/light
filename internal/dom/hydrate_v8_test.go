@@ -6,6 +6,8 @@ import (
 	_ "embed"
 	"strings"
 	"testing"
+
+	"github.com/lantervale/light/internal/dom"
 )
 
 // React 18.3.1's production builds (testdata/react, MIT, see its
@@ -73,9 +75,9 @@ func TestReactHydratesThePageItsServerWrote(t *testing.T) {
 		t.Errorf("after hydration the page is\n     %s\nwant %s", got, served)
 	}
 	count := s.byID("count")
-	s.rt.Click(count, 10, 10)
+	s.rt.Click(count, 10, 10, dom.Keys{})
 	s.frames("the click's render", func() bool { return count.Text() == "Clicked 1 times" })
-	s.rt.Click(count, 10, 10)
+	s.rt.Click(count, 10, 10, dom.Keys{})
 	s.frames("the second click's render", func() bool { return count.Text() == "Clicked 2 times" })
 	if got := s.eval(`count.innerHTML + "|" + count.childNodes.length`); got != "Clicked <!-- -->2<!-- --> times|5" {
 		t.Errorf("the button holds %s", got)

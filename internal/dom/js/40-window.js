@@ -386,14 +386,21 @@ const performance = {
   toJSON() { return {}; },
 };
 
-const userAgent = host("agent");
+// navigator says what light's requests say: its User-Agent, the user's
+// languages, and of the machine what is true. The names every browser
+// answers alike (Netscape, Mozilla, Gecko) are those constants; light
+// has no plugin, and nothing here names another browser.
+const told = host("navigator");
+const none = (extra) => Object.freeze({ length: 0, item: () => null, namedItem: () => null, ...extra, [Symbol.iterator]: function* () {} });
 const navigator = {
-  userAgent, appName: "Netscape", appCodeName: "Mozilla", appVersion: userAgent, product: "Gecko", vendor: "",
-  platform: host("platform"), language: "en-US", languages: ["en-US", "en"], onLine: true,
+  userAgent: told.agent, appName: "Netscape", appCodeName: "Mozilla", appVersion: told.agent.replace(/^Mozilla\//, ""),
+  product: "Gecko", vendor: "", platform: told.platform,
+  language: told.languages[0], languages: Object.freeze([...told.languages]), onLine: true,
   get cookieEnabled() { return host("canCookie"); },
-  doNotTrack: "1", hardwareConcurrency: 1, maxTouchPoints: 0, webdriver: false, plugins: [], mimeTypes: [],
+  doNotTrack: null, hardwareConcurrency: told.cores, maxTouchPoints: 0, webdriver: told.driven,
+  plugins: none({ refresh() {} }), mimeTypes: none(), pdfViewerEnabled: false,
   javaEnabled: () => false,
-  sendBeacon: () => false,
+  sendBeacon: (url, data) => beacon(url, data),
   clipboard: {
     writeText: () => Promise.reject(new DOMException("light keeps the clipboard from scripts.", "NotAllowedError")),
     readText: () => Promise.reject(new DOMException("light keeps the clipboard from scripts.", "NotAllowedError")),
@@ -499,9 +506,23 @@ const selection = {
   getRangeAt() { throw new DOMException("light gives scripts no range of the selection.", "IndexSizeError"); },
 };
 
+// Bytes cross to light and back in a buffer both see: shared is one
+// holding bytes, for light to read, and a new one is for it to fill.
+const SharedBuffer = SharedArrayBuffer;
+const shared = (bytes) => {
+  const buffer = new SharedBuffer(bytes.length);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+};
+// utf8 decodes as UTF-8 without its byte order mark, and with a label
+// in the encoding a byte order mark tells of, else the label's.
 const utf8 = {
-  encode(text) { return Uint8Array.from(host("utf8", String(text))); },
-  decode(bytes) { return host("text8", Array.from(bytes)); },
+  encode(text) {
+    text = String(text);
+    const buffer = new SharedBuffer(text.length * 3);
+    return new Uint8Array(buffer, 0, host("utf8", text, buffer)).slice();
+  },
+  decode(bytes, label = "") { return host("text8", shared(bytes), label); },
 };
 class TextEncoder {
   get encoding() { return "utf-8"; }
@@ -523,39 +544,6 @@ class TextDecoder {
     return utf8.decode(view);
   }
 }
-
-const clone = (value, seen = new Map()) => {
-  if (value === null || typeof value !== "object") {
-    if (typeof value === "function" || typeof value === "symbol") throw new DOMException("The value could not be cloned.", "DataCloneError");
-    return value;
-  }
-  if (seen.has(value)) return seen.get(value);
-  if (value instanceof Date) return new Date(value.getTime());
-  if (value instanceof RegExp) return new RegExp(value.source, value.flags);
-  if (value instanceof Node) throw new DOMException("A node could not be cloned.", "DataCloneError");
-  if (ArrayBuffer.isView(value)) return value.slice();
-  if (value instanceof ArrayBuffer) return value.slice(0);
-  let copy;
-  if (Array.isArray(value)) {
-    copy = [];
-    seen.set(value, copy);
-    for (const item of value) copy.push(clone(item, seen));
-  } else if (value instanceof Map) {
-    copy = new Map();
-    seen.set(value, copy);
-    for (const [k, v] of value) copy.set(clone(k, seen), clone(v, seen));
-  } else if (value instanceof Set) {
-    copy = new Set();
-    seen.set(value, copy);
-    for (const item of value) copy.add(clone(item, seen));
-  } else {
-    copy = {};
-    seen.set(value, copy);
-    for (const key of Object.keys(value)) copy[key] = clone(value[key], seen);
-  }
-  return copy;
-};
-const structuredClone = (value) => clone(value);
 
 const crypto = {
   getRandomValues(array) {

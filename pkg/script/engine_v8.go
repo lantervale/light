@@ -23,6 +23,11 @@ func Available() bool { return true }
 // initialHeap is the heap a context starts with.
 const initialHeap = 8 << 20
 
+// errorsSource makes an Error of a message, of the kind named when it
+// is one of the engine's.
+const errorsSource = `(({ TypeError, SyntaxError, RangeError, ReferenceError }) => (message, kind) =>
+	new ({ TypeError, SyntaxError, RangeError, ReferenceError }[kind] || Error)(message))(globalThis)`
+
 // context is a V8 isolate with one context: a page shares nothing with
 // another, and closing it frees all of it.
 type context struct {
@@ -42,8 +47,9 @@ type context struct {
 	// answered is what the last bound function gave back, the engine's
 	// own by the time of the next call.
 	answered *v8.Value
-	// errors makes an Error of a message.
+	// errors makes an Error of a message, of the kind named.
 	errors *v8.Function
+	modules
 }
 
 // forget releases the last answer of a bound function.
@@ -64,12 +70,15 @@ func New(opts Options) (Context, error) {
 	iso := v8.NewIsolate(v8.WithResourceConstraints(initialHeap, opts.memory()), v8.WithExceptionMessages())
 	c := &context{opts: opts, iso: iso, ctx: v8.NewContext(iso)}
 	iso.SetPromiseRejectedCallback(c.promiseRejected)
-	made, err := c.ctx.RunScript("(message) => new Error(message)", "light:error")
+	made, err := c.ctx.RunScript(errorsSource, "light:error")
 	if err != nil {
 		c.Close()
 		return nil, err
 	}
 	c.errors, err = made.AsFunction()
+	if err == nil {
+		err = c.importing()
+	}
 	if err != nil {
 		c.Close()
 		return nil, err
@@ -103,7 +112,14 @@ func (c *context) Bind(name string, fn Func) error {
 		c.forget()
 		args := make([]any, len(info.Args()))
 		for i, arg := range info.Args() {
-			if !arg.IsFunction() {
+			switch {
+			case arg.IsFunction():
+			case arg.IsSharedArrayBuffer():
+				if shared, release, failed := arg.SharedArrayBufferGetContents(); failed == nil {
+					args[i] = shared
+					defer release()
+				}
+			default:
 				args[i] = c.plain(arg)
 			}
 		}
@@ -122,6 +138,7 @@ func (c *context) Run(source, origin string) (any, error) {
 	if c.ctx == nil {
 		return nil, ErrClosed
 	}
+	source = c.calls(source, origin)
 	return c.guarded(func() (*v8.Value, error) { return c.ctx.RunScript(source, origin) })
 }
 
@@ -139,6 +156,7 @@ func (c *context) Close() {
 	c.watch.Lock()
 	defer c.watch.Unlock()
 	c.iso.SetPromiseRejectedCallback(nil)
+	c.close()
 	c.ctx.Close()
 	c.iso.Dispose()
 	c.ctx = nil
@@ -147,13 +165,35 @@ func (c *context) Close() {
 // guarded runs one entry into the engine under the budget, and gives
 // its value as a plain one.
 func (c *context) guarded(enter func() (*v8.Value, error)) (any, error) {
+	var value *v8.Value
+	err := c.within(func() error {
+		var failed error
+		value, failed = enter()
+		return failed
+	})
+	if err != nil {
+		if value != nil {
+			value.Release()
+		}
+		return nil, err
+	}
+	plain := c.plain(value)
+	if _, kept := plain.(Function); !kept {
+		value.Release()
+	}
+	return plain, nil
+}
+
+// within runs one entry into the engine under the budget: the
+// outermost's, which also tells of the rejections nobody handled.
+func (c *context) within(enter func() error) error {
 	c.depth++
 	outermost := c.depth == 1
 	var watchdog *time.Timer
 	if outermost {
 		watchdog = time.AfterFunc(c.opts.budget(), c.expire)
 	}
-	value, err := enter()
+	err := enter()
 	c.depth--
 	if outermost {
 		watchdog.Stop()
@@ -161,17 +201,12 @@ func (c *context) guarded(enter func() (*v8.Value, error)) (any, error) {
 		defer c.report()
 	}
 	if err != nil {
-		return nil, c.failure(err, outermost)
+		return c.failure(err, outermost)
 	}
 	if outermost && c.settle() {
-		value.Release()
-		return nil, ErrInterrupted
+		return ErrInterrupted
 	}
-	plain := c.plain(value)
-	if _, kept := plain.(Function); !kept {
-		value.Release()
-	}
-	return plain, nil
+	return nil
 }
 
 // expire is the watchdog: the budget is spent.

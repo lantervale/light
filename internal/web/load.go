@@ -18,6 +18,8 @@ import (
 	"github.com/lantervale/light/pkg/content"
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
+	"github.com/lantervale/light/pkg/identity"
+	"github.com/lantervale/light/pkg/localnet"
 	"github.com/lantervale/light/pkg/netlog"
 )
 
@@ -34,9 +36,14 @@ const (
 	schemeHTTPS = "https"
 )
 
-// drawn are the pictures light draws, as it asks for them: no type it
-// would be sent and could not read.
+// drawn are the types of the pictures light draws.
 const drawn = "image/png, image/jpeg, image/gif, image/webp, image/svg+xml"
+
+// asking is ctx for one request of the page ctx is for, by what it is
+// for.
+func asking(ctx context.Context, dest identity.Destination) context.Context {
+	return fetch.Asking(ctx, identity.Request{Destination: dest})
+}
 
 // Loader loads pages through its client.
 type Loader struct {
@@ -62,7 +69,11 @@ func (l *Loader) Local(address, source string, links Links) *Page {
 		return &Page{Address: address, Err: err}
 	}
 	page := &Page{Address: address, Status: http.StatusOK, Kind: content.Page, Media: "text/html"}
-	l.build(context.Background(), page, &fetch.Answer{Address: address, URL: at, Body: []byte(source)}, links)
+	if !opened(address) {
+		page.Space = localnet.Loopback
+	}
+	l.build(context.Background(), page, &fetch.Answer{Address: address, URL: at, Body: []byte(source),
+		Space: page.Space}, links)
 	return page
 }
 
@@ -70,19 +81,29 @@ func (l *Loader) Local(address, source string, links Links) *Page {
 // redirects and an immediate refresh, and builds it. It runs off the
 // frame, until ctx ends it; links are called on the frame, by the links
 // of the page once it is shown.
-//
+func (l *Loader) Load(ctx context.Context, address string, links Links) *Page {
+	return l.load(ctx, address, nil, links)
+}
+
+// Post is Load for a form sent with a POST: the page is what answers
+// it, or where that answer redirects to.
+func (l *Loader) Post(ctx context.Context, sent Submission, links Links) *Page {
+	return l.load(fetch.Referring(ctx, sent.Referrer), sent.Address, sent.Form, links)
+}
+
 //nolint:nonamedreturns // a page that breaks the build is answered from the recover
-func (l *Loader) Load(ctx context.Context, address string, links Links) (page *Page) {
+func (l *Loader) load(ctx context.Context, address string, form *fetch.Form, links Links) (page *Page) {
 	defer func() {
 		if r := recover(); r != nil {
 			page = &Page{Address: address, Err: fmt.Errorf("the page broke light: %v", r)}
 		}
 	}()
 	for hops := 0; ; hops++ {
-		stream, err := l.Client.Open(fetch.After(ctx, hops), address, "text/html, */*")
+		stream, err := l.open(fetch.After(ctx, hops), address, form)
 		if err != nil {
 			return &Page{Address: address, Err: err}
 		}
+		form = nil
 		if file := saved(stream); file != nil {
 			return file
 		}
@@ -102,8 +123,25 @@ func (l *Loader) Load(ctx context.Context, address string, links Links) (page *P
 			return &Page{Address: answer.Address,
 				Err: fmt.Errorf("it refreshes to %s, and only http and https addresses are opened", to)}
 		}
-		address, ctx = to, cookies.From(netlog.As(ctx, byRefresh, netlog.Document), answer.URL)
+		ctx = localnet.From(cookies.From(netlog.As(ctx, byRefresh, netlog.Document), answer.URL), answer.Space)
+		address, ctx = to, refreshing(ctx, answer.URL)
 	}
+}
+
+// refreshing is ctx for the navigation a page's refresh begins: the
+// page's doing, not the user's, and from the page.
+func refreshing(ctx context.Context, page *url.URL) context.Context {
+	return fetch.Asking(fetch.Referring(ctx, ""), identity.Request{Destination: identity.Document, Initiator: page})
+}
+
+// accepted is what a navigation says it accepts.
+var accepted = identity.Accept(identity.Document) //nolint:gochecknoglobals // a constant a function gives
+
+func (l *Loader) open(ctx context.Context, address string, form *fetch.Form) (*fetch.Stream, error) {
+	if form != nil {
+		return l.Client.Post(ctx, address, accepted, *form)
+	}
+	return l.Client.Open(ctx, address, accepted)
 }
 
 func opened(address string) bool {
@@ -132,7 +170,7 @@ func saved(stream *fetch.Stream) *Page {
 
 // read makes the page of an answer, by its status, then by its kind.
 func (l *Loader) read(ctx context.Context, answer *fetch.Answer, links Links) *Page {
-	page := &Page{Address: answer.Address, Status: answer.Status}
+	page := &Page{Address: answer.Address, Status: answer.Status, Space: answer.Space}
 	status := fmt.Sprintf("%d %s", answer.Status, http.StatusText(answer.Status))
 	switch {
 	case answer.Status == http.StatusUnauthorized || answer.Status == http.StatusProxyAuthRequired:
@@ -178,7 +216,8 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	}
 	b := newBuilder(l, answer.URL, links)
 	b.encode = encoderOf(answer.Body, answer.Header.Get("Content-Type"))
-	ctx = cookies.Within(netlog.As(ctx, byDocument, netlog.Other), answer.URL)
+	ctx = fetch.By(cookies.Within(netlog.As(ctx, byDocument, netlog.Other), answer.URL), answer.URL)
+	ctx = localnet.From(ctx, answer.Space)
 	icon := make(chan []byte, 1)
 	go func() { icon <- b.icon(ctx, root) }()
 	b.load(ctx, root)
@@ -205,8 +244,8 @@ func refresh(answer *fetch.Answer, scripts bool) (string, bool) {
 // Picture gets the picture at address for a page to draw or the player
 // to save.
 func (l *Loader) Picture(ctx context.Context, address string) ([]byte, error) {
-	answer, err := l.Client.Get(netlog.As(ctx, byPicture, netlog.Image), address,
-		drawn)
+	answer, err := l.Client.Get(asking(netlog.As(ctx, byPicture, netlog.Image), identity.Image), address,
+		identity.Accept(identity.Image))
 	switch {
 	case err != nil:
 		return nil, err

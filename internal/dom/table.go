@@ -72,8 +72,8 @@ func (r *Runtime) table() map[string]op {
 		"where":      r.where,
 		"now":        func(arguments) (any, error) { return r.now(), nil },
 		"address":    func(arguments) (any, error) { return r.page.Address, nil },
-		"agent":      func(arguments) (any, error) { return r.host.Agent, nil },
-		"platform":   platform,
+		"navigator":  r.navigator,
+		"around":     r.around,
 		"navigate":   r.navigate,
 		"reload":     r.reload,
 		"history":    r.history,
@@ -85,8 +85,9 @@ func (r *Runtime) table() map[string]op {
 		"storage":    r.storage,
 		"atob":       atob,
 		"btoa":       btoa,
-		"utf8":       utf8Of,
-		"text8":      text8,
+		"utf8":       utf8Into,
+		"text8":      decoded,
+		"body":       r.answered,
 		"random":     random,
 	}
 }

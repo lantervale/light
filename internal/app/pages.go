@@ -78,10 +78,10 @@ func homePage(s *Screen) []*ui.Node {
 	ui.On(search, ui.EventSubmit, func() { s.Open(tabs.Resolve(s.doc.Value(search))) })
 	tiles := ui.Div(ui.ID("tiles"))
 	for _, page := range pages()[1:] {
-		tiles.Append(tile("go-"+page.name, page.title, page.summary, func() { s.Open(tabs.Page(page.name)) }))
+		tiles.Append(s.tile("go-"+page.name, page.title, page.summary, tabs.Page(page.name)))
 	}
-	tiles.Append(tile("go-demo", "CSS Zen Garden", "A page of the web, to see what light draws: csszengarden.com",
-		func() { s.Open(demo) }))
+	tiles.Append(s.tile("go-demo", "CSS Zen Garden", "A page of the web, to see what light draws: csszengarden.com",
+		demo))
 	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")), search, tiles}
 }
 
@@ -95,9 +95,10 @@ func (s *Screen) switcher() *ui.Node {
 	return picture
 }
 
-func tile(id, title, summary string, open func()) *ui.Node {
-	return ui.Button(ui.ID(id), ui.Class("tile"), ui.Strong(ui.Text(title)), ui.Span(ui.Text(summary)),
-		ui.OnClick(open))
+// tile is a link of the start page, to address.
+func (s *Screen) tile(id, title, summary, address string) *ui.Node {
+	return ui.Button(ui.ID(id), ui.Class("tile"), ui.Attr(linked, address), ui.Strong(ui.Text(title)),
+		ui.Span(ui.Text(summary)), ui.OnClick(func() { s.activate(address) }))
 }
 
 func guidePage(s *Screen) []*ui.Node {

@@ -17,6 +17,7 @@ import (
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/content"
+	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/netlog"
 )
 
@@ -46,8 +47,8 @@ func (b *builder) icon(ctx context.Context, root *html.Node) []byte {
 		if address == "" {
 			continue
 		}
-		answer, err := b.loader.Client.Get(netlog.As(ctx, byDocument, netlog.Image), address,
-			drawn+", image/x-icon, image/vnd.microsoft.icon")
+		answer, err := b.loader.Client.Get(asking(netlog.As(ctx, byDocument, netlog.Image), identity.Image), address,
+			identity.Accept(identity.Image))
 		if err != nil || !answer.OK() {
 			continue
 		}
@@ -188,20 +189,24 @@ func (b *builder) load(ctx context.Context, root *html.Node) {
 // script keeps the script element n, its source fetched meanwhile when
 // it names one.
 func (b *builder) script(ctx context.Context, n *html.Node, wg *sync.WaitGroup, limit chan struct{}) {
-	why, runs := unread(n)
-	if !runs {
+	kind := scriptKind(n)
+	if kind == "" {
 		return
 	}
-	s := &Script{Address: b.base.String(), Skipped: why, Node: n}
+	s := &Script{Address: b.base.String(), Node: n, Module: kind == moduleScript, ImportMap: kind == importMap}
 	_, deferred := lookup(n, "defer")
 	_, async := lookup(n, "async")
 	src, external := lookup(n, "src")
-	s.Deferred = external && (deferred || async)
+	s.Deferred, s.Async = s.Module || external && (deferred || async), s.Module && async
 	if n.FirstChild != nil && !external {
 		s.Source = cut(n.FirstChild.Data)
 	}
 	b.scripts = append(b.scripts, s)
-	if !external || s.Skipped != "" {
+	switch {
+	case !external:
+		return
+	case s.ImportMap:
+		s.Skipped = "it is an import map with a src, and one is read only from the page itself"
 		return
 	}
 	if len(b.scripts) > maxScripts {
@@ -214,6 +219,9 @@ func (b *builder) script(ctx context.Context, n *html.Node, wg *sync.WaitGroup, 
 		return
 	}
 	s.Address = address
+	if s.Module {
+		return
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -241,7 +249,7 @@ func (b *builder) ordered() []Script {
 // text, and the address it came from after its redirects, which its
 // url() are fetched from. One that cannot be fetched stays empty.
 func (b *builder) sheet(ctx context.Context, address string, into *stylesheet) {
-	answer, err := b.loader.Client.Get(ctx, address, "text/css, */*")
+	answer, err := b.loader.Client.Get(asking(ctx, identity.Style), address, identity.Accept(identity.Style))
 	if err != nil || !answer.OK() {
 		return
 	}

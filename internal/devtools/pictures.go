@@ -18,6 +18,7 @@ const (
 var pictures = map[string]string{
 	"close":      `<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>`,
 	"clear":      `<path d="M3 4.5h10M6.5 4.5v-2h3v2M4.5 4.5l.6 9h5.8l.6-9M6.8 7v4M9.2 7v4"/>`,
+	"save":       `<path d="M8 2.5v7.5M5 7.2 8 10l3-2.8M3 13.5h10"/>`,
 	"filter":     `<path d="M2.5 3.5h11L9.5 8.5v4l-3 1v-5z"/>`,
 	"lock":       `<path d="M4 7.5h8v6H4zM5.8 7.5V5.2a2.2 2.2 0 0 1 4.4 0v2.3"/>`,
 	"failed":     `<circle cx="8" cy="8" r="6"/><path d="M8 4.8v3.8M8 11v.2"/>`,

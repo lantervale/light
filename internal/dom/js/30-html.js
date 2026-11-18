@@ -261,7 +261,7 @@ class HTMLTemplateElement extends HTMLElement {
 class HTMLScriptElement extends HTMLElement {
   get text() { return this.textContent; }
   set text(source) { this.textContent = source; }
-  static supports(type) { return type === "classic"; }
+  static supports(type) { return type === "classic" || type === "module" || type === "importmap"; }
 }
 located(HTMLScriptElement.prototype, { src: "src" });
 reflect(HTMLScriptElement.prototype, {

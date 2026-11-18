@@ -2,7 +2,6 @@ package web //nolint:testpackage // uses the package's unexported test helpers (
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -49,7 +48,7 @@ func TestAPagesFontsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem(t *testing
 	if font.Initiator != "stylesheet" || font.Type != netlog.Font || font.Status != http.StatusOK {
 		t.Errorf("the font is recorded as %q %q %d, want stylesheet font 200", font.Initiator, font.Type, font.Status)
 	}
-	if accept := font.Request.Get("Accept"); !strings.Contains(accept, "font/woff2") || !strings.Contains(accept, "*/*") {
+	if accept := font.Request.Get("Accept"); accept != "*/*" {
 		t.Errorf("the font was asked for with Accept: %s", accept)
 	}
 	if referer := font.Request.Get("Referer"); referer != srv.URL+"/css/site.css" {
@@ -79,23 +78,6 @@ func TestAFontThatCannotBeFetchedIsAWarningOfThePage(t *testing.T) {
 		srv.URL + "/page.woff: woff: not a font file"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the warnings lack %q:\n%s", want, all)
-		}
-	}
-}
-
-func TestAReferrerIsCutToItsOriginAcrossSites(t *testing.T) {
-	for _, c := range []struct{ from, to, want string }{
-		{"https://site.test/css/a.css?v=2#top", "https://site.test/fonts/a.woff2", "https://site.test/css/a.css?v=2"},
-		{"https://fonts.test/css2?family=A", "https://static.test/a.woff2", "https://fonts.test/"},
-		{"https://site.test/a.css", "http://site.test/a.woff2", ""},
-		{"http://site.test/a.css", "https://cdn.test/a.woff2", "http://site.test/"},
-		{"https://user:secret@site.test/a.css", "https://site.test/a.woff2", "https://site.test/a.css"},
-		{"about:blank", "https://site.test/a.woff2", ""},
-	} {
-		from, _ := url.Parse(c.from)
-		to, _ := url.Parse(c.to)
-		if got := referrer(from, to); got != c.want {
-			t.Errorf("from %s to %s: %q, want %q", c.from, c.to, got, c.want)
 		}
 	}
 }

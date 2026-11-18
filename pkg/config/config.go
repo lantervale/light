@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -56,8 +57,12 @@ type Config struct {
 	// Redirects how many redirects one navigation follows.
 	Timeout   int `json:"timeout"`
 	Redirects int `json:"redirects"`
-	// UserAgent is the User-Agent requests are sent with.
+	// UserAgent is the User-Agent requests are sent with, "" for
+	// light's own (identity.UserAgent).
 	UserAgent string `json:"user_agent"`
+	// Languages is the languages a site is asked for, most wanted
+	// first, as "fr-FR, en"; "" for the system's.
+	Languages string `json:"accept_language"`
 	// MetaRefresh is whether a page that refreshes elsewhere at once is
 	// followed there.
 	MetaRefresh bool `json:"meta_refresh"`
@@ -69,6 +74,9 @@ type Config struct {
 	// are too.
 	Cookies           bool `json:"cookies"`
 	ThirdPartyCookies bool `json:"third_party_cookies"`
+	// LocalNetwork is whether pages of the Internet reach this machine
+	// and the network around it, which they do not unless it is set.
+	LocalNetwork bool `json:"local_network"`
 	// PreserveLog is whether a new tab's developer tools keep the
 	// requests over a navigation; Requests how many its log keeps.
 	PreserveLog bool `json:"preserve_log"`
@@ -78,11 +86,15 @@ type Config struct {
 	ToolsHeight int `json:"tools_height"`
 }
 
+// formerUserAgent is the User-Agent light once had by default and wrote
+// in its file: it is read as the default.
+const formerUserAgent = "light/1.0 (ember)"
+
 // Default is the settings light starts with.
 func Default() Config {
 	return Config{
 		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
-		Timeout: 30, Redirects: 10, UserAgent: "light/1.0 (ember)", MetaRefresh: true, Requests: 1000,
+		Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
 		JavaScript: true, Cookies: true,
 	}
 }
@@ -92,7 +104,10 @@ func (c Config) Valid() Config {
 	d := Default()
 	c.StartPage = text(c.StartPage, d.StartPage)
 	c.Downloads = strings.TrimSpace(c.Downloads)
-	c.UserAgent = text(c.UserAgent, d.UserAgent)
+	if c.UserAgent = text(c.UserAgent, d.UserAgent); c.UserAgent == formerUserAgent {
+		c.UserAgent = d.UserAgent
+	}
+	c.Languages = strings.Join(identity.Tags(text(c.Languages, d.Languages)), ", ")
 	c.HistoryLimit = within(c.HistoryLimit, MinHistory, MaxHistory, d.HistoryLimit)
 	c.Zoom = within(c.Zoom, MinZoom, MaxZoom, d.Zoom)
 	c.Timeout = within(c.Timeout, MinTimeout, MaxTimeout, d.Timeout)

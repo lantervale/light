@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 
+	"github.com/lantervale/light/internal/devtools"
 	"github.com/lantervale/light/internal/menu"
 	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/tabs"
@@ -24,6 +25,9 @@ type target struct {
 	link      string
 	picture   string
 	selection string
+	// archive is whether the click is on what saves the requests of the
+	// developer tools: its button, or their table.
+	archive bool
 	// node is the element of the page under the click, nil for what is
 	// not of the page.
 	node *ui.Node
@@ -62,6 +66,7 @@ func (s *Screen) targetOf(n *ui.Node) target {
 		if row, ok := s.tools.RowAt(n); ok && t.request == nil {
 			t.request = &row
 		}
+		t.archive = t.archive || n.ID() == devtools.ExportID || n.ID() == "dt-rows"
 		if number, ok := strings.CutPrefix(n.ID(), "tab-"); ok && n.HasClass("tab") {
 			t.tab, _ = strconv.Atoi(number)
 		}
@@ -104,7 +109,10 @@ func (s *Screen) entries(t target) []menu.Entry {
 	case t.tab >= 0:
 		return s.tabEntries(t.tab)
 	case t.request != nil:
-		return s.addressEntries("Open in new tab", "Copy address", t.request.Address)
+		return append(s.addressEntries("Open in new tab", "Copy address", t.request.Address),
+			s.archiveEntries(t.request.ID)...)
+	case t.archive:
+		return s.archiveEntries(0)[1:]
 	case t.field != nil:
 		return s.fieldEntries(t.field)
 	}

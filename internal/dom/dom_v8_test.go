@@ -187,11 +187,11 @@ func TestTheConsoleIsTold(t *testing.T) {
 		console.warn("careful %s: %d", "now", 4.7); console.error(new TypeError("bad"));
 		alert("hello"); console.info("after");</script><script>
 		undefinedFunction()</script><script>console.log("still runs")</script>
-		<script>Promise.reject(new Error("lost"))</script><script type="module">import x from "y"</script>`)
+		<script>Promise.reject(new Error("lost"))</script><script src="ftp://site.test/y.js"></script>`)
 	for i, want := range []string{
 		`log: a 1 {b: [true, null]} <body>`, "warn: careful now: 4", "error: TypeError: bad", "info: alert: hello",
 		"info: after", "error: Uncaught ReferenceError: undefinedFunction is not defined", "log: still runs",
-		"error: Uncaught (in promise) Error: lost", "warn: A script was not run: it is a module",
+		"error: Uncaught (in promise) Error: lost", "warn: A script was not run: its src",
 	} {
 		if i >= len(s.console) {
 			t.Fatalf("the console has %d lines, want %q next:\n%s", len(s.console), want, s.said())

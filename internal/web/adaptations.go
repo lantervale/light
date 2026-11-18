@@ -126,11 +126,11 @@ var adaptations = []adaptation{
 	{
 		name: "scripts",
 		what: "No script is fetched or kept unless JavaScript is on in a build that has an engine. Then a " +
-			"page's classic scripts are kept in the order they run, the first " + strconv.Itoa(maxScripts) +
+			"page's scripts are kept in the order they run, the first " + strconv.Itoa(maxScripts) +
 			" of them, one with a src fetched as a sheet is. Scripts read the page as its parser made it: its " +
 			"comments, the elements ui has none for (svg, noscript, template, script, style…) and every " +
 			"attribute as written; ui is given only what it has an element for, as without scripts. A " +
-			"module is not read.",
+			"module script is kept with its address alone: the page's scripts fetch it, and what it imports.",
 	},
 	{
 		name: "noscript",

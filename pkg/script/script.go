@@ -25,7 +25,9 @@ var (
 
 // Func is a Go function scripts call. Its arguments and its result are
 // plain values: nil for null and undefined, bool, float64, string,
-// []any and map[string]any. An error is thrown to the script.
+// []any and map[string]any. A SharedArrayBuffer comes as []byte, the
+// script's own memory, to read and to write until the function returns:
+// how bytes cross either way. An error is thrown to the script.
 type Func func(args []any) (any, error)
 
 // Function is a function of a script, kept to be called later.
@@ -45,10 +47,37 @@ type Context interface {
 	// then the tasks it queued. Its value comes back as a plain one, a
 	// function as a Function.
 	Run(source, origin string) (any, error)
+	// Module reads source as a module that address names in errors and
+	// in its import.meta.url; nothing of it runs yet. JSON is the module
+	// whose default export is what a JSON text says.
+	Module(source, address string) (Module, error)
+	JSON(text, address string) (Module, error)
 	// Interrupt stops the script that is running, from any goroutine.
 	Interrupt()
 	// Close frees the context; it is safe to call twice.
 	Close()
+}
+
+// Import is one module another asks for: its specifier as written, and
+// the type its attributes name, "" for a script.
+type Import struct {
+	Specifier, Type string
+}
+
+// Module is a module of a page: read, linked to those it imports, then
+// run, once.
+type Module interface {
+	// Imports are the modules it imports by name, in its order.
+	Imports() []Import
+	// Link binds it to the modules it imports and those to theirs, each
+	// asked of resolve by the module that names it. A module already
+	// linked is left as it is.
+	Link(resolve func(from Module, what Import) (Module, error)) error
+	// Run runs the modules it imports, then it, each once in the life
+	// of the Context. done is told how it ended, an Error for what it
+	// threw: before Run returns, or when what it awaits at its top
+	// level has come.
+	Run(done func(error))
 }
 
 // Options are a Context's limits and who hears of its failures.
@@ -61,6 +90,15 @@ type Options struct {
 	// Rejected is told each promise rejected with nobody to handle it,
 	// once the script that left it so has returned.
 	Rejected func(*Error)
+	// Import is asked for the module an import() names, from the
+	// script or the module at the address from: done is given it once
+	// it ran, or why there is none, an Error whose Message begins with
+	// the name of its kind ("TypeError: …"). Without it an import() is
+	// rejected.
+	Import func(from string, what Import, done func(Module, error))
+	// Resolve is the address import.meta.resolve gives for a specifier
+	// in the module at from; without it a module has no such function.
+	Resolve func(from, specifier string) (string, error)
 }
 
 const (

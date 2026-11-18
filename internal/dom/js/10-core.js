@@ -238,8 +238,18 @@ class MessageEvent extends Event {
   constructor(type, init = {}) {
     super(type, init);
     this.data = init.data === undefined ? null : init.data;
-    this.origin = init.origin || "";
+    this.origin = init.origin === undefined ? "" : String(init.origin);
+    this.lastEventId = init.lastEventId === undefined ? "" : String(init.lastEventId);
     this.source = init.source || null;
+    this.ports = Object.freeze(Array.from(init.ports || []));
+  }
+  initMessageEvent(type, bubbles, cancelable, data = null, origin = "", lastEventId = "", source = null, ports = []) {
+    this.initEvent(type, bubbles, cancelable);
+    this.data = data;
+    this.origin = String(origin);
+    this.lastEventId = String(lastEventId);
+    this.source = source;
+    this.ports = Object.freeze(Array.from(ports));
   }
 }
 class TransitionEvent extends Event {}

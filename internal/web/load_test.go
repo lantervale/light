@@ -343,8 +343,8 @@ func TestPicturesAreAskedForInTheFormatsLightDraws(t *testing.T) {
 	}
 	for _, path := range []string{"/icon", "/door"} {
 		accept, _ := accepts.Load(path)
-		if got, _ := accept.(string); !strings.Contains(got, "image/webp") || strings.Contains(got, "avif") ||
-			strings.Contains(got, "*") {
+		if got, _ := accept.(string); !strings.HasPrefix(got, "image/webp,image/png,image/svg+xml,") ||
+			strings.Contains(got, "avif") {
 			t.Errorf("%s was asked for with Accept: %s", path, got)
 		}
 	}

@@ -140,11 +140,11 @@ func (s *Screen) link(text, address string) *ui.Node {
 // address in, for the context menu.
 const linked = "data-href"
 
-// anchor opens address in the shown tab, and names it in the status
-// bubble while the pointer is over it.
+// anchor opens address where the keys held at its click say, and names
+// it in the status bubble while the pointer is over it.
 func (s *Screen) anchor(address string, args ...ui.Arg) *ui.Node {
 	a := ui.Span(ui.Class("link"), ui.TabIndex(0), ui.Attr(linked, address),
-		ui.OnClick(func() { s.Open(address) }),
+		ui.OnClick(func() { s.activate(address) }),
 		ui.OnPointerEnter(func() { s.point(address) }),
 		ui.OnPointerLeave(func() { s.point("") }))
 	for _, arg := range args {

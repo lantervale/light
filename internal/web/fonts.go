@@ -11,6 +11,7 @@ import (
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/fetch"
+	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/netlog"
 )
 
@@ -20,8 +21,6 @@ const (
 	// the largest read.
 	fontTimeout = 30 * time.Second
 	maxFont     = 16 << 20
-	// fontFiles are the fonts light reads, as it asks for them.
-	fontFiles = "font/woff2, font/woff, font/ttf, font/otf, */*;q=0.1"
 )
 
 // fonts fetches the fonts of the page's @font-face rules as ui asks
@@ -48,12 +47,11 @@ func (b *builder) fonts(ctx context.Context) ui.FontFetcher {
 // request names as where it comes from.
 func (l *Loader) Font(ctx context.Context, address, sheet string) ([]byte, error) {
 	from, _ := url.Parse(sheet)
-	to, err := url.Parse(address)
-	if err != nil {
+	if _, err := url.Parse(address); err != nil {
 		return nil, err
 	}
-	ctx = fetch.Referring(netlog.As(ctx, bySheet, netlog.Font), referrer(from, to))
-	answer, err := l.Client.Get(ctx, address, fontFiles)
+	ctx = fetch.Asking(netlog.As(ctx, bySheet, netlog.Font), identity.Request{Destination: identity.Font, Referrer: from})
+	answer, err := l.Client.Get(ctx, address, identity.Accept(identity.Font))
 	switch {
 	case err != nil:
 		return nil, err
@@ -63,23 +61,4 @@ func (l *Loader) Font(ctx context.Context, address, sheet string) ([]byte, error
 		return nil, errors.New("the font is over " + megabytes(maxFont))
 	}
 	return answer.Body, nil
-}
-
-// referrer is what a request for to says of from, the address it comes
-// from, as browsers do by default: the whole address without its
-// fragment and its user within a site, the site alone to another, and
-// nothing from https to http.
-func referrer(from, to *url.URL) string {
-	if from == nil || to == nil || (from.Scheme != schemeHTTP && from.Scheme != schemeHTTPS) {
-		return ""
-	}
-	if from.Scheme == schemeHTTPS && to.Scheme != schemeHTTPS {
-		return ""
-	}
-	if from.Scheme != to.Scheme || from.Host != to.Host {
-		return from.Scheme + "://" + from.Host + "/"
-	}
-	said := *from
-	said.User, said.Fragment, said.RawFragment = nil, "", ""
-	return said.String()
 }

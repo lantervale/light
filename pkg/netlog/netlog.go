@@ -18,6 +18,13 @@ import (
 // PreviewCap is how much of an answer's body a row keeps to be looked at.
 const PreviewCap = 256 << 10
 
+// BodyCap and BodyBudget are what KeepBodies is given by who has no
+// reason for other sizes: the most kept of one body, and of them all.
+const (
+	BodyCap    = 4 << 20
+	BodyBudget = 32 << 20
+)
+
 // Type is what a request fetched, as the panel groups them.
 type Type string
 
@@ -31,8 +38,11 @@ const (
 	Font       Type = "font"
 	Media      Type = "media"
 	// XHR is what a script asked for through fetch or XMLHttpRequest.
-	XHR   Type = "xhr"
-	Other Type = "other"
+	XHR Type = "xhr"
+	// Preflight is the OPTIONS request that asks another origin whether
+	// it takes a script's request, before that request is sent.
+	Preflight Type = "preflight"
+	Other     Type = "other"
 )
 
 // TypeOf is the type of an answer of that media type: who asked first,
@@ -41,7 +51,7 @@ const (
 // failure does.
 func TypeOf(media string, wanted Type) Type {
 	switch {
-	case media == "" || wanted == XHR:
+	case media == "" || wanted == XHR || wanted == Preflight:
 		return wanted
 	case media == "text/html" || media == "application/xhtml+xml":
 		return Document
@@ -86,7 +96,8 @@ type Row struct {
 	// Initiator is who asked, as With named it: "document", "stylesheet",
 	// or the script and the line of a script's request.
 	Initiator string
-	// Blocked is whether light refused to send the request: Err says why.
+	// Blocked is whether light refused to send the request, or kept its
+	// answer from the script that asked: Err says why.
 	Blocked bool
 	// Size is the body's bytes read so far, as the client got them: after
 	// a gzip encoding was undone. Transferred is those the server sent.
@@ -105,6 +116,23 @@ type Row struct {
 	Truncated bool
 	// From is the row whose redirect this request follows, 0 for none.
 	From int
+	// Proto is the answer's protocol, as "HTTP/1.1", and Unzipped
+	// whether the encoding its headers name, gzip or deflate, was undone.
+	Proto    string
+	Unzipped bool
+	// Sent is what the request carried and Body the answer's body as
+	// Size counts it, each up to the cap of a log that keeps bodies
+	// (KeepBodies) and nil in one that does not. SentSize is all the
+	// request carried; SentCut and BodyCut tell one that went on past
+	// the cap, and BodyDropped one whose place newer bodies took.
+	Sent                          []byte
+	SentSize                      int64
+	Body                          []byte
+	SentCut, BodyCut, BodyDropped bool
+	// marks are when the steps of the request were taken, and gone
+	// whether the row left its log.
+	marks marks
+	gone  bool
 }
 
 // Failed reports whether the request got no answer, or an error status.
@@ -123,11 +151,14 @@ func (r Row) Host() string {
 func (r Row) Secure() bool { return strings.HasPrefix(strings.ToLower(r.Address), "https://") }
 
 // Kind is what the answer is in a word, as a network panel's Type
-// column: the end of its media type ("html", "css", "js", "json", "png"),
-// else the extension of its address, "" when neither says.
+// column: "preflight" for one, else the end of its media type ("html",
+// "css", "js", "json", "png"), else the extension of its address, ""
+// when neither says.
 func (r Row) Kind() string {
 	kind := r.Media[strings.LastIndexAny(r.Media, "/.")+1:]
 	switch {
+	case r.Type == Preflight:
+		return string(Preflight)
 	case scripted(r.Media):
 		return "js"
 	case kind == "":
@@ -172,6 +203,9 @@ type Log struct {
 	version uint64
 	// hops are the rows of redirects not yet followed, by their answer.
 	hops map[*http.Response]int
+	// each is the most kept of one body, all of every row's together,
+	// and held what is.
+	each, all, held int64
 }
 
 // New is an empty log keeping the last limit rows.
@@ -218,7 +252,10 @@ func (l *Log) Version() uint64 {
 func (l *Log) Clear() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.rows, l.dropped = nil, 0
+	for _, r := range l.rows {
+		r.gone = true
+	}
+	l.rows, l.dropped, l.held = nil, 0, 0
 	clear(l.hops)
 	l.version++
 }
@@ -240,6 +277,19 @@ func (l *Log) add(r Row, follows *http.Response) *Row {
 	return row
 }
 
+// Refuse marks the row numbered id as one whose answer light kept from
+// the script that asked, and why: the request was sent.
+func (l *Log) Refuse(id int, why string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range l.rows {
+		if r.ID == id {
+			r.Blocked, r.Err = true, why
+			l.version++
+		}
+	}
+}
+
 // Block lists a request light refused to send, and why.
 func (l *Log) Block(method, address, initiator string, wanted Type, why string) {
 	l.add(Row{
@@ -251,6 +301,10 @@ func (l *Log) Block(method, address, initiator string, wanted Type, why string) 
 // trim drops the oldest rows past the cap, and counts them.
 func (l *Log) trim() {
 	if over := len(l.rows) - l.limit; over > 0 {
+		for _, r := range l.rows[:over] {
+			l.held -= int64(len(r.Body) + len(r.Sent))
+			r.gone = true
+		}
 		l.rows = slices.Delete(l.rows, 0, over)
 		l.dropped += over
 	}
@@ -315,12 +369,13 @@ func Chain(rows []Row, id int) []Row {
 }
 
 // Filter is the rows whose address holds text, whatever its case, and
-// whose type is kind.
+// whose type is kind: a preflight goes with the requests of scripts.
 func Filter(rows []Row, text string, kind Type) []Row {
 	text = strings.ToLower(text)
 	var out []Row
 	for _, r := range rows {
-		if (kind == Any || r.Type == kind) && strings.Contains(strings.ToLower(r.Address), text) {
+		of := kind == Any || r.Type == kind || (kind == XHR && r.Type == Preflight)
+		if of && strings.Contains(strings.ToLower(r.Address), text) {
 			out = append(out, r)
 		}
 	}

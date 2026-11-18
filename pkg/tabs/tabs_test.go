@@ -1,6 +1,7 @@
 package tabs_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lantervale/light/pkg/tabs"
@@ -194,5 +195,32 @@ func TestABrowserStartsAndStartsAgainOnItsStartPage(t *testing.T) {
 	b.Close(0)
 	if got := b.Tab().Current(); len(b.Tabs) != 1 || got != "https://example.org" || b.Tab().CanBack() {
 		t.Fatalf("closing the last tab leaves one at %s", got)
+	}
+}
+
+func addresses(b *tabs.Browser) string {
+	var out []string
+	for _, tab := range b.Tabs {
+		out = append(out, tab.Current())
+	}
+	return strings.Join(out, " ")
+}
+
+func TestATabOpenedBesideTheShownOneFollowsThoseItOpened(t *testing.T) {
+	b := tabs.NewBrowser("a")
+	b.Open("z")
+	b.Select(0)
+	first := b.OpenBeside("b", false)
+	b.OpenBeside("c", false)
+	if got := addresses(b); got != "a b c z" || b.Active != 0 || first.Current() != "b" {
+		t.Fatalf("the tabs are %q, tab %d shown", got, b.Active)
+	}
+	b.OpenBeside("d", true)
+	if got := addresses(b); got != "a b c d z" || b.Tab().Current() != "d" {
+		t.Fatalf("the tabs are %q, %q shown", got, b.Tab().Current())
+	}
+	b.OpenBeside("e", false)
+	if got := addresses(b); got != "a b c d e z" || b.Tab().Current() != "d" {
+		t.Fatalf("the tabs are %q, %q shown", got, b.Tab().Current())
 	}
 }

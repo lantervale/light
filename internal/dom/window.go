@@ -5,10 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
-	"runtime"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -113,16 +111,6 @@ func (r *Runtime) uncaught(a arguments) (any, error) {
 func (r *Runtime) where(a arguments) (any, error) {
 	source, line, column := where(a.text(0))
 	return []any{source, line, column}, nil
-}
-
-func platform(arguments) (any, error) {
-	switch runtime.GOOS {
-	case "darwin":
-		return "MacIntel", nil
-	case "windows":
-		return "Win32", nil
-	}
-	return "Linux " + runtime.GOARCH, nil
 }
 
 func (r *Runtime) navigate(a arguments) (any, error) {
@@ -335,28 +323,6 @@ func btoa(a arguments) (any, error) {
 		bytes[i] = byte(c & 0xff)
 	}
 	return base64.StdEncoding.EncodeToString(bytes), nil
-}
-
-func utf8Of(a arguments) (any, error) {
-	bytes := []byte(a.text(0))
-	out := make([]int, len(bytes))
-	for i, b := range bytes {
-		out[i] = int(b)
-	}
-	return out, nil
-}
-
-func text8(a arguments) (any, error) {
-	list, _ := a[0].([]any)
-	bytes := make([]byte, len(list))
-	for i, b := range list {
-		n, _ := b.(float64)
-		bytes[i] = byte(n)
-	}
-	if !utf8.Valid(bytes) {
-		return strings.ToValidUTF8(string(bytes), "�"), nil
-	}
-	return string(bytes), nil
 }
 
 // maxRandom is how many random bytes a script may ask for at once.

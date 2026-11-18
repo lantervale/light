@@ -60,9 +60,13 @@ func TestAPagesScriptsAreKeptInTheOrderTheyRun(t *testing.T) {
 		"/": markup(`<head><script>first()</script><script src="/late.js" defer></script>
 			<script src="lib/second.js"></script><script type="module">import "x"</script>
 			<script type="text/template">not a script</script><script src="/gone.js"></script>
-			<script nomodule>fallback()</script><script async src="/async.js"></script></head>
-			<body><p>text</p><script type="text/javascript">third()</script><script type="application/ld+json">{}</script>`),
+			<script nomodule>fallback()</script><script nomodule src="/fallback.js"></script>
+			<script async src="/async.js"></script><script type="importmap">{"imports": {}}</script>
+			<script type="importmap" src="/map.json"></script></head>
+			<body><p>text</p><script type="text/javascript">third()</script><script type="application/ld+json">{}</script>
+			<script type="Module" src="lib/module.js" async></script><script type="module" src="/last.js"></script>`),
 		"/late.js": source("late()"), "/lib/second.js": source("second()"), "/async.js": source("whenever()"),
+		"/lib/module.js": source("module()"), "/last.js": source("last()"), "/fallback.js": source("fallback()"),
 	}, "/")
 	var ran, skipped []string
 	for _, s := range page.Scripts {
@@ -70,13 +74,26 @@ func TestAPagesScriptsAreKeptInTheOrderTheyRun(t *testing.T) {
 			skipped = append(skipped, s.Skipped)
 			continue
 		}
-		ran = append(ran, s.Source+"@"+s.Address[strings.LastIndex(s.Address, "/"):])
+		kind := ""
+		switch {
+		case s.ImportMap:
+			kind = " map"
+		case s.Module && s.Async:
+			kind = " async module"
+		case s.Module:
+			kind = " module"
+		}
+		if s.Module != s.Deferred && s.Module {
+			t.Errorf("the module %s does not wait for the page", s.Address)
+		}
+		ran = append(ran, s.Source+"@"+s.Address[strings.LastIndex(s.Address, "/"):]+kind)
 	}
-	want := "first()@/ second()@/second.js fallback()@/ third()@/ late()@/late.js whenever()@/async.js"
-	if got := strings.Join(ran, " "); got != want {
+	want := `first()@/, second()@/second.js, {"imports": {}}@/ map, third()@/, late()@/late.js, import "x"@/ module, ` +
+		`whenever()@/async.js, @/module.js async module, @/last.js module`
+	if got := strings.Join(ran, ", "); got != want {
 		t.Errorf("the scripts run as %s\nwant %s", got, want)
 	}
-	if len(skipped) != 2 || !strings.Contains(skipped[0], "module") || !strings.Contains(skipped[1], "404") {
+	if len(skipped) != 2 || !strings.Contains(skipped[0], "404") || !strings.Contains(skipped[1], "import map") {
 		t.Errorf("the scripts skipped are %q", skipped)
 	}
 	scripts := 0

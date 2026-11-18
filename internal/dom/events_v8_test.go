@@ -80,7 +80,7 @@ func TestAPreventedClickFollowsNoLink(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			s := run(t, page)
 			s.rt.Frame()
-			s.rt.Click(s.byID(c.clicked), 5, 5)
+			s.rt.Click(s.byID(c.clicked), 5, 5, dom.Keys{})
 			s.page.Tree.Activate(s.byID(c.link), func() {
 				href, _ := s.byID(c.link).Attr("href")
 				s.opened = append(s.opened, "https://site.test"+href)
@@ -226,24 +226,27 @@ func TestScriptsFetch(t *testing.T) {
 		fetch("https://other.test/closed").then(() => seen.push("leaked"), (e) => seen.push("blocked " + e.name));
 		fetch("/down").catch((e) => seen.push("down " + e.name));
 		fetch("/missing").then((r) => seen.push("missing " + r.status + " " + r.ok));
-		fetch("/post", { method: "POST", body: "x" }).catch((e) => seen.push("post " + e.name));
+		fetch("/post", { method: "POST", body: "x" }).then((r) => seen.push("post " + r.status));
 		const xhr = new XMLHttpRequest(); xhr.open("GET", "/data.json");
 		xhr.onload = () => seen.push("xhr " + xhr.status + " " + xhr.readyState + " " + JSON.parse(xhr.responseText).n);
 		xhr.send();</script>`, dom.Host{})
 	s.frames("the answers", func() bool { return s.eval(`seen.length`) == "7" })
 	got := s.eval(`seen.sort().join("|")`)
 	want := "blocked TypeError|cors open|down TypeError|json 200 true 3 application/json|missing 404 false|" +
-		"post TypeError|xhr 200 4 3"
+		"post 404|xhr 200 4 3"
 	if got != want {
 		t.Errorf("the page saw %s\n        want %s", got, want)
 	}
 	for _, q := range s.fetched {
-		if q.Method != http.MethodGet || strings.HasSuffix(q.Address, "/post") {
-			t.Errorf("light was asked to send %s %s for a script", q.Method, q.Address)
+		if posted := strings.HasSuffix(q.Address, "/post"); posted != (q.Method == http.MethodPost) ||
+			posted && string(q.Body) != "x" {
+			t.Errorf("light was asked to send %s %s with %q for a script", q.Method, q.Address, q.Body)
 		}
 	}
-	if !strings.Contains(s.said(), "POST") || !strings.Contains(s.said(), "CORS") {
-		t.Errorf("the console does not tell of what was refused:\n%s", s.said())
+	if kept := "Access to fetch at 'https://other.test/closed' from origin 'https://site.test' has been blocked by " +
+		"CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."; !strings.Contains(
+		s.said(), kept) {
+		t.Errorf("the console does not tell of what was kept from the script:\n%s", s.said())
 	}
 }
 
@@ -387,13 +390,13 @@ func TestWhatFieldsTellUIIsToldToScripts(t *testing.T) {
 		t.Errorf("with Enter prevented the page saw %q", got)
 	}
 	s.eval(`seen.length = 0`)
-	s.rt.Click(s.byID("plain"), 1, 1)
-	s.rt.Click(s.byID("send"), 1, 1)
+	s.rt.Click(s.byID("plain"), 1, 1, dom.Keys{})
+	s.rt.Click(s.byID("send"), 1, 1, dom.Keys{})
 	if got := s.eval(`seen.join()`); got != "submit form " {
 		t.Errorf("after its buttons were clicked the page saw %q", got)
 	}
 	s.eval(`seen.length = 0; send.addEventListener("click", (e) => e.preventDefault())`)
-	s.rt.Click(s.byID("send"), 1, 1)
+	s.rt.Click(s.byID("send"), 1, 1, dom.Keys{})
 	if got := s.eval(`seen.join()`); got != "" {
 		t.Errorf("a prevented click submitted: %q", got)
 	}

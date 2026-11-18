@@ -1,7 +1,9 @@
-// Package fetch is one way to make an HTTP GET as a browser makes it:
-// redirects followed up to a cap and only to http and https, the body
-// held up to a limit or read as it comes, its text decoded by its
-// charset, the whole stopped by its context.
+// Package fetch is one way to make an HTTP GET, or the POST of a form,
+// as a browser makes it: redirects followed up to a cap and only to http
+// and https, the body held up to a limit or read as it comes, its text
+// decoded by its charset, the whole stopped by its context. It also
+// makes the requests of a page's scripts (Script), by the rules that
+// keep one origin's pages from another's answers (Policy).
 package fetch
 
 import (
@@ -16,8 +18,11 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html/charset"
+
+	"github.com/lantervale/light/pkg/localnet"
 )
 
 const (
@@ -47,6 +52,9 @@ type Answer struct {
 	Body    []byte
 	// Hops is how many redirects led to it.
 	Hops int
+	// Space is how far from the Internet the address that answered is:
+	// what a page made of the answer may reach (localnet).
+	Space localnet.Space
 }
 
 // OK reports whether the status is a success.
@@ -84,10 +92,16 @@ func (a *Answer) Code() string {
 
 // Client makes the requests.
 type Client struct {
-	http      *http.Client
+	http *http.Client
+	// direct follows no redirect: a script's request follows its own.
+	direct    *http.Client
 	agent     string
+	languages string
 	limit     int64
 	redirects int
+	// mu guards leaves, what the preflights of scripts' requests allowed.
+	mu     sync.Mutex
+	leaves map[asking]leave
 }
 
 // Option sets a Client up.
@@ -107,11 +121,14 @@ func Redirects(most int) Option { return func(c *Client) { c.redirects = most } 
 // http.DefaultTransport when nil. It sets no timeout: a request lasts as
 // long as its context.
 func New(transport http.RoundTripper, opts ...Option) *Client {
-	c := &Client{limit: DefaultLimit, redirects: MaxRedirects}
+	c := &Client{limit: DefaultLimit, redirects: MaxRedirects, leaves: map[asking]leave{}}
 	for _, opt := range opts {
 		opt(c)
 	}
 	c.http = &http.Client{Transport: transport, CheckRedirect: c.checkRedirect}
+	c.direct = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
 	return c
 }
 
@@ -132,8 +149,8 @@ func After(ctx context.Context, redirects int) context.Context {
 	return context.WithValue(ctx, beforeKey{}, redirects)
 }
 
-func (c *Client) checkRedirect(req *http.Request, _ []*http.Request) error {
-	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	if !web(req.URL) {
 		return fmt.Errorf("it redirects to %s, and only http and https addresses are opened", req.URL)
 	}
 	h, _ := req.Context().Value(hopsKey{}).(*hops)
@@ -141,8 +158,29 @@ func (c *Client) checkRedirect(req *http.Request, _ []*http.Request) error {
 		return ErrTooManyRedirects
 	}
 	h.followed++
+	elsewhere(req, via[len(via)-1].URL)
+	c.present(req, "")
 	return nil
 }
+
+// elsewhere has the request a redirect from the address before leads to
+// say where it comes from as a browser does: a form sent on (307, 308)
+// to another origin is of no origin, one that became a GET names none
+// and no type, and another origin is told the site of the referrer
+// alone.
+func elsewhere(req *http.Request, before *url.URL) {
+	if req.Method == http.MethodGet || req.Method == http.MethodHead {
+		req.Header.Del("Origin")
+		req.Header.Del("Content-Type")
+	} else if req.Header.Get("Origin") != "" && !sameOrigin(before, req.URL) {
+		req.Header.Set("Origin", "null")
+	}
+	if from, err := url.Parse(req.Header.Get("Referer")); err == nil && from.Host != "" && !sameOrigin(from, req.URL) {
+		req.Header.Set("Referer", from.Scheme+"://"+from.Host+"/")
+	}
+}
+
+func sameOrigin(a, b *url.URL) bool { return a.Scheme == b.Scheme && a.Host == b.Host }
 
 // Stream is an answer whose body is read as it comes: Read takes it,
 // Close ends it.
@@ -157,6 +195,8 @@ type Stream struct {
 	Length int64
 	// Hops is how many redirects led to it.
 	Hops int
+	// Space is the space of the address that answered.
+	Space localnet.Space
 
 	body  io.Closer
 	read  *bufio.Reader
@@ -191,7 +231,8 @@ func (s *Stream) Answer() (*Answer, error) {
 	if int64(len(body)) > s.limit {
 		return nil, &TooBigError{s.limit}
 	}
-	return &Answer{Address: s.Address, URL: s.URL, Status: s.Status, Header: s.Header, Body: body, Hops: s.Hops}, nil
+	return &Answer{Address: s.Address, URL: s.URL, Status: s.Status, Header: s.Header, Body: body, Hops: s.Hops,
+		Space: s.Space}, nil
 }
 
 // peeked is how much of a stream Peek can show.
@@ -202,11 +243,41 @@ const peeked = 4 << 10
 // Stream; an error is no answer at all: a server not reached, a redirect
 // refused, ctx ended.
 func (c *Client) Open(ctx context.Context, address, accept string) (*Stream, error) {
+	return c.send(ctx, http.MethodGet, address, accept, nil)
+}
+
+// Form is what a POST carries: a form's fields as its type writes them,
+// and the origin of the page that sends it.
+type Form struct {
+	Type   string
+	Body   []byte
+	Origin string
+}
+
+// Post is Open for a form sent with a POST. A redirect that answers it
+// is followed as browsers follow it: with a GET after a 301, a 302 or a
+// 303, with the form again after a 307 or a 308.
+func (c *Client) Post(ctx context.Context, address, accept string, form Form) (*Stream, error) {
+	return c.send(ctx, http.MethodPost, address, accept, &form)
+}
+
+func (c *Client) send(ctx context.Context, method, address, accept string, form *Form) (*Stream, error) {
 	before, _ := ctx.Value(beforeKey{}).(int)
 	count := &hops{before: before}
-	req, err := http.NewRequestWithContext(context.WithValue(ctx, hopsKey{}, count), http.MethodGet, address, nil)
+	var body io.Reader
+	if form != nil {
+		body = bytes.NewReader(form.Body)
+	}
+	ctx, served := localnet.Watch(ctx)
+	req, err := http.NewRequestWithContext(context.WithValue(ctx, hopsKey{}, count), method, address, body)
 	if err != nil {
 		return nil, plain(err)
+	}
+	if form != nil {
+		req.Header.Set("Content-Type", form.Type)
+		if form.Origin != "" {
+			req.Header.Set("Origin", form.Origin)
+		}
 	}
 	if c.agent != "" {
 		req.Header.Set("User-Agent", c.agent)
@@ -215,13 +286,14 @@ func (c *Client) Open(ctx context.Context, address, accept string) (*Stream, err
 	if from, _ := ctx.Value(referrerKey{}).(string); from != "" {
 		req.Header.Set("Referer", from)
 	}
+	c.present(req, "")
 	resp, err := c.http.Do(req) //nolint:bodyclose // the Stream returned holds the body, and its Close closes it
 	if err != nil {
 		return nil, plain(err)
 	}
 	return &Stream{
 		Address: resp.Request.URL.String(), URL: resp.Request.URL, Status: resp.StatusCode, Header: resp.Header,
-		Length: resp.ContentLength, Hops: count.followed,
+		Length: resp.ContentLength, Hops: count.followed, Space: served.Space(),
 		body: resp.Body, read: bufio.NewReaderSize(resp.Body, peeked), limit: c.limit,
 	}, nil
 }

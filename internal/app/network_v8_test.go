@@ -4,25 +4,30 @@ package app //nolint:testpackage // the screen is driven by what it holds: its e
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lantervale/light/pkg/netlog"
 )
 
-func TestWhatAPagesScriptAsksForIsListedAsXHRAndARefusedOneAsBlocked(t *testing.T) {
+func TestWhatAPagesScriptAsksForIsListedAsXHRAndWhatIsKeptFromItAsBlocked(t *testing.T) {
 	srv, seen := answers(t, map[string]answer{
 		"/": typed("text/html", `<title>Feed</title><p id="said">none</p><script src="/app.js"></script>`),
 		"/app.js": typed("text/javascript", `fetch("/items.json").then((r) => r.json()).then((d) => {
 				document.getElementById("said").textContent = d.n + " items";
 			});
-			fetch("/collect", { method: "POST", body: "seen" }).catch(() => {});`),
+			fetch(location.href.replace("127.0.0.1", "localhost") + "collect", { method: "POST", body: "seen" })
+				.catch(() => {});`),
 		"/items.json": typed("application/json", `{"n": 3}`),
 	})
 	s := show(t)
 	s.toggleTools()
 	s.visit(srv.URL + "/")
 	s.until("the script's answer came", func() bool { return s.pageText("said") == "3 items" })
+	s.until("the answer kept from the script came", func() bool {
+		return slices.ContainsFunc(s.session().log.Rows(), func(r netlog.Row) bool { return r.Blocked })
+	})
 	var asked, refused netlog.Row
 	for _, r := range s.session().log.Rows() {
 		switch {
@@ -36,8 +41,9 @@ func TestWhatAPagesScriptAsksForIsListedAsXHRAndARefusedOneAsBlocked(t *testing.
 		t.Errorf("the script's request is %s by %s, a %s answered %d", asked.Type, asked.Initiator, asked.Kind(),
 			asked.Status)
 	}
-	if !refused.Blocked || refused.Method != http.MethodPost || refused.Type != netlog.XHR ||
-		refused.Initiator != "app.js:4" || seen.count("/collect") != 0 {
+	const why = "No 'Access-Control-Allow-Origin' header is present on the requested resource."
+	if !refused.Blocked || refused.Method != http.MethodPost || refused.Type != netlog.XHR || refused.Err != why ||
+		refused.Initiator != "app.js:4" || refused.Status != http.StatusNotFound || seen.count("/collect") != 1 {
 		t.Errorf("the POST is %+v, sent %d times", refused, seen.count("/collect"))
 	}
 	s.click("dt-chip-xhr")
@@ -49,8 +55,8 @@ func TestWhatAPagesScriptAsksForIsListedAsXHRAndARefusedOneAsBlocked(t *testing.
 	s.click("dt-tab-console")
 	s.click("dt-show-xhr")
 	text := s.node("dt-lines").Text()
-	for _, want := range []string{"XHR GET " + srv.URL + "/items.json [HTTP 200 OK ", "XHR POST " + srv.URL +
-		"/collect [Blocked: light sends no POST for a script]"} {
+	for _, want := range []string{"XHR GET " + srv.URL + "/items.json [HTTP 200 OK ", "XHR POST " +
+		strings.Replace(srv.URL, "127.0.0.1", "localhost", 1) + "/collect [Blocked: " + why + "]"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the console lacks %q in %q", want, text)
 		}

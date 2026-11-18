@@ -78,9 +78,9 @@ func (s *Screen) visitRow(v history.Visit, remove func()) *ui.Node {
 		title = shownAs(v.Address)
 	}
 	row := ui.Div(ui.Class("visit"), ui.Span(ui.Class("time"), ui.Text(v.At.Format("15:04"))))
-	icon := s.icon(v.Address)
-	if icon == nil {
-		icon = ui.Span(ui.Class("icon"))
+	icon := ui.Span(ui.Class("icon"))
+	if name := s.icon(v.Address); name != "" {
+		icon = ui.Img(ui.Class("icon"), ui.Attr("src", name), ui.Attr("alt", ""))
 	}
 	row.Append(icon)
 	row.Append(s.link(title, v.Address), ui.Span(ui.Class("address"), ui.Text(shownAs(v.Address))),

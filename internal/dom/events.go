@@ -2,6 +2,7 @@ package dom
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/fetch"
 )
 
 // activation is the last click scripts were told of: what was clicked,
@@ -47,12 +49,16 @@ func (r *Runtime) fire(n *html.Node, kind string, init map[string]any) bool {
 	return prevented
 }
 
+// Keys are the keys held with a click.
+type Keys struct{ Ctrl, Shift, Alt, Meta bool }
+
 // Click tells the page's scripts the pointer was pressed and released
-// on n, at a place of the page's view. A link under it is then followed
-// only if no script prevented the click; Frame forgets it, so Click
-// comes after Frame in the frame of the click.
-func (r *Runtime) Click(n *ui.Node, x, y float32) bool {
-	at := map[string]any{"clientX": x, "clientY": y, button: 0, "detail": 1}
+// on n, at a place of the page's view, with keys held. A link under it
+// is then followed only if no script prevented the click; Frame forgets
+// it, so Click comes after Frame in the frame of the click.
+func (r *Runtime) Click(n *ui.Node, x, y float32, held Keys) bool {
+	at := map[string]any{"clientX": x, "clientY": y, button: 0, "detail": 1, "ctrlKey": held.Ctrl,
+		"shiftKey": held.Shift, "altKey": held.Alt, "metaKey": held.Meta}
 	r.Fire(n, "mousedown", at)
 	r.Fire(n, "mouseup", at)
 	prevented := r.Fire(n, "click", at)
@@ -66,15 +72,9 @@ func (r *Runtime) Click(n *ui.Node, x, y float32) bool {
 // submitted is the form a click on n submits and the button of it that
 // was pressed: n is in one that submits, nil otherwise.
 func (r *Runtime) submitted(n *ui.Node) (*ui.Node, *ui.Node) {
-	var pressed *ui.Node
 	for at := n; at != nil; at = at.Parent() {
-		kind, _ := at.Attr("type")
-		switch tag := r.tagOf(at); {
-		case pressed == nil && tag == button && (kind == "" || kind == submit),
-			pressed == nil && tag == input && (kind == submit || kind == "image"):
-			pressed = at
-		case tag == "form" && pressed != nil:
-			return at, pressed
+		if form := web.SubmittedBy(at); form != nil {
+			return form, at
 		}
 	}
 	return nil, nil
@@ -125,18 +125,21 @@ func (r *Runtime) unsent(err error) {
 	r.say("warn", "A form was not sent: "+err.Error()+".", "")
 }
 
-// submitForm is a form sent by a script: the tab opens where it leads.
+// submitForm is a form sent by a script: the tab opens where it leads,
+// or is sent there with what a POST carries.
 func (r *Runtime) submitForm(form *ui.Node, a arguments) (any, error) {
 	var submitter *ui.Node
 	if pressed := r.nodes[int(a.number(1))]; pressed != nil {
 		submitter = r.tree.Make(pressed)
 	}
-	to, err := r.tree.Submission(form, submitter)
+	sent, err := r.tree.Submission(form, submitter)
 	switch {
 	case err != nil:
 		r.unsent(err)
-	case r.host.Navigate != nil:
-		r.host.Navigate(to, false)
+	case sent.Form != nil && r.host.Post != nil:
+		r.host.Post(sent)
+	case sent.Form == nil && r.host.Navigate != nil:
+		r.host.Navigate(sent.Address, false)
 	}
 	return nothing()
 }
@@ -256,8 +259,15 @@ func (r *Runtime) added(element *html.Node) {
 	kind, _ := attribute(element, "type")
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "", "text/javascript", "application/javascript":
+		if _, fallback := attribute(element, "nomodule"); fallback {
+			return
+		}
 	case "module":
-		r.say("warn", "A script was not run: it is a module, which light does not read.", r.page.Address)
+		source, external := attribute(element, "src")
+		r.load(element, textOf(element), r.resolve(source), external, r.execute)
+		return
+	case "importmap":
+		r.mapImports(textOf(element))
 		return
 	default:
 		return
@@ -286,7 +296,7 @@ func failure(answer Response) string {
 	return "the server answered " + answer.StatusText + "."
 }
 
-// methodGet is the method of the requests light sends for a script.
+// methodGet is the method a script element's source is asked for with.
 const methodGet = "GET"
 
 var errNoFetch = errors.New("light fetches nothing for this page's scripts")
@@ -314,63 +324,99 @@ func (r *Runtime) request(q Request, done func(Response)) func() {
 	}
 }
 
-// fetch asks for what a script's fetch or XMLHttpRequest names. light
-// sends nothing for scripts but a GET, and gives them an answer of
-// another site only when that site allows it.
+// maxKept is the most a request that outlives its page carries.
+const maxKept = 64 << 10
+
+// fetch asks for what a script's fetch, XMLHttpRequest or sendBeacon
+// names: the browser sends it by the rules of the web, and says what
+// the script may see of its answer.
 func (r *Runtime) fetch(a arguments) (any, error) {
-	id, method, address := int(a.number(0)), a.text(1), a.text(2)
+	id := int(a.number(0))
+	q, api := asked(a)
 	fail := func(why string) {
-		r.waiting = append(r.waiting, func() { r.enter("answered", id, why, 0, "", "", map[string]string{}, "") })
+		r.waiting = append(r.waiting, func() { r.enter("answered", id, why, 0, "", "", map[string]string{}, 0, "", false) })
 	}
-	source, line, _ := where(a.text(4))
-	to, err := url.Parse(address)
+	to, err := url.Parse(q.Address)
 	switch {
-	case err != nil || (to.Scheme != "http" && to.Scheme != "https" && originOf(to) != r.origin()):
+	case err != nil || (!onWeb(to) && originOf(to) != r.origin()):
 		fail("light fetches http:// and https:// addresses only")
 		return nothing()
-	case method != methodGet && method != "HEAD":
-		r.say("warn", "light sends nothing but a GET for a script: "+method+" "+address+" was not sent.", "")
-		if r.host.Refused != nil {
-			r.host.Refused(Request{Method: method, Address: address, Source: source, Line: line})
-		}
-		fail("light sends no " + method)
+	case q.Keepalive && len(q.Body) > maxKept:
+		fail("a request that outlives its page carries no more than 64 KiB")
 		return nothing()
-	}
-	header, _ := a[3].(map[string]any)
-	q := Request{Method: method, Address: address, Header: map[string]string{}, Source: source, Line: line}
-	for name, value := range header {
-		q.Header[name], _ = value.(string)
 	}
 	r.requests[id] = r.request(q, func(answer Response) {
 		delete(r.requests, id)
-		r.answer(id, to, answer)
+		delete(r.kept, id)
+		r.answer(id, api, to, answer)
 	})
+	if q.Keepalive {
+		r.kept[id] = true
+	}
 	return nothing()
 }
 
+// onWeb reports whether u is an http or an https address.
+func onWeb(u *url.URL) bool { return u.Scheme == "http" || u.Scheme == "https" }
+
+// asked is the request a script described, and what of the page's API
+// it asked through: "fetch" or "XMLHttpRequest".
+func asked(a arguments) (Request, string) {
+	said, _ := a[1].(map[string]any)
+	text := func(name string) string {
+		value, _ := said[name].(string)
+		return value
+	}
+	q := Request{Method: text("method"), Address: text("url"), Header: map[string]string{}, Mode: text("mode"),
+		Credentials: text("credentials"), Redirect: text("redirect")}
+	q.Keepalive, _ = said["keepalive"].(bool)
+	q.Source, q.Line, _ = where(a.text(2))
+	header, _ := said["headers"].(map[string]any)
+	for name, value := range header {
+		q.Header[name], _ = value.(string)
+	}
+	if len(a) < 4 {
+		return q, text("api")
+	}
+	if carried, has := a[3].([]byte); has {
+		q.Body = append([]byte{}, carried...)
+	}
+	return q, text("api")
+}
+
 // answer gives a script what its request came to.
-func (r *Runtime) answer(id int, asked *url.URL, answer Response) {
+func (r *Runtime) answer(id int, api string, asked *url.URL, answer Response) {
+	if answer.Err == nil && answer.Kind == "" {
+		answer = r.vetted(asked, answer)
+	}
+	var blocked *fetch.BlockedError
+	switch {
+	case errors.As(answer.Err, &blocked):
+		r.say("error", blocked.Console(api), "")
+	case answer.Err != nil:
+		r.say("error", "Failed to load "+asked.String()+": "+failure(answer), "")
+	}
+	if answer.Err != nil {
+		r.enter("answered", id, answer.Err.Error(), 0, "", "", map[string]string{}, 0, "", false)
+		return
+	}
+	if kind := fetch.Kind(answer.Kind); kind == fetch.Opaque || kind == fetch.OpaqueRedirect {
+		answer = Response{Kind: answer.Kind}
+	}
 	header := map[string]string{}
 	for name, value := range answer.Header {
 		header[strings.ToLower(name)] = value
 	}
-	why := ""
-	switch {
-	case answer.Err != nil:
-		why = answer.Err.Error()
-		r.say("error", "Failed to load "+asked.String()+": "+failure(answer), "")
-	case !r.shared(asked, answer.Address, header):
-		why = "the answer is another site's, which does not share it (CORS)"
-		r.say("error", "Access to "+asked.String()+" from "+r.origin()+" was blocked: "+why+".", "")
-	}
-	if why != "" {
-		r.enter("answered", id, why, 0, "", "", map[string]string{}, "")
-		return
-	}
-	if answer.Status >= 400 {
+	if answer.Status >= http.StatusBadRequest {
 		r.say("error", "Failed to load "+asked.String()+": "+failure(answer), "")
 	}
-	r.enter("answered", id, "", answer.Status, answer.StatusText, answer.Address, header, answer.Text)
+	r.answering = answer.Body
+	if r.answering == nil {
+		r.answering = []byte(answer.Text)
+	}
+	r.enter("answered", id, "", answer.Status, answer.StatusText, answer.Address, header, len(r.answering), answer.Kind,
+		answer.Redirected)
+	r.answering = nil
 }
 
 func (r *Runtime) origin() string {
@@ -381,18 +427,39 @@ func (r *Runtime) origin() string {
 	return originOf(u)
 }
 
-// shared reports whether an answer is the page's site's, or another
-// site's that allows the page to read it.
-func (r *Runtime) shared(asked *url.URL, from string, header map[string]string) bool {
-	own := r.origin()
-	if final, err := url.Parse(from); err == nil && from != "" {
-		asked = final
+// vetted is an answer whose host did not say what the script may see
+// of it, as a fetch that names no mode sees it: its own origin's whole,
+// another's only when that origin shares it, and then the headers it
+// exposes.
+func (r *Runtime) vetted(asked *url.URL, answer Response) Response {
+	at, _ := url.Parse(r.page.Address)
+	policy := fetch.Policy{Origin: fetch.OriginOf(at), Mode: fetch.ModeCORS, Credentials: fetch.CredentialsSameOrigin}
+	from := asked
+	if final, err := url.Parse(answer.Address); err == nil && answer.Address != "" {
+		from = final
 	}
-	if originOf(asked) == own {
-		return true
+	if originOf(from) == r.origin() && !onWeb(from) {
+		answer.Kind = string(fetch.Basic)
+		return answer
 	}
-	allowed := strings.TrimSpace(header["access-control-allow-origin"])
-	return allowed == "*" || allowed == own
+	header := http.Header{}
+	for name, value := range answer.Header {
+		header.Set(name, value)
+	}
+	kind, err := policy.Decide(from, !policy.Same(asked), header)
+	var blocked *fetch.BlockedError
+	if errors.As(err, &blocked) {
+		blocked.Address, blocked.Origin = from.String(), policy.Origin
+	}
+	if err != nil {
+		return Response{Err: err}
+	}
+	answer.Kind, answer.Header = string(kind), map[string]string{}
+	for name := range policy.Visible(kind, header) {
+		answer.Header[name] = header.Get(name)
+	}
+	answer.Redirected = answer.Redirected || from.String() != asked.String()
+	return answer
 }
 
 func (r *Runtime) abort(a arguments) (any, error) {

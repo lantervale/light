@@ -24,11 +24,15 @@ func (s *Screen) point(address string) {
 	s.say()
 }
 
-// say fills the status bubble: the address under the pointer, else the
+// say fills the status bubble: the address under the pointer, unless it
+// has not moved since tell had something to say, else the
 // host the shown page is waited for from, else what the tab's last move
 // came to, else nothing, and no bubble.
 func (s *Screen) say() {
 	text := shownAs(s.over)
+	if s.telling = s.telling && s.win.Input().Mouse() == s.told; s.telling {
+		text = ""
+	}
 	switch {
 	case text != "":
 	case s.loading():

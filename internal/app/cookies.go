@@ -8,6 +8,9 @@ import (
 
 	"github.com/lantervale/light/internal/devtools"
 	"github.com/lantervale/light/pkg/cookies"
+	"github.com/lantervale/light/pkg/fetch"
+	"github.com/lantervale/light/pkg/identity"
+	"github.com/lantervale/light/pkg/localnet"
 )
 
 // cookiesFile is the cookies' file in the folder light is given.
@@ -25,13 +28,36 @@ func (s *Screen) byPage(do func()) {
 // linked opens address as the shown tab's page asked for it.
 func (s *Screen) linked(address string) { s.byPage(func() { s.Open(address) }) }
 
+// byScript is byPage for what a script of the page did unasked: the
+// navigation is not the player's act.
+func (s *Screen) byScript(do func()) {
+	s.unasked = true
+	defer func() { s.unasked = false }()
+	s.byPage(do)
+}
+
 // began is ctx for a navigation, from the page that asked for it when
-// one did.
+// one did, described as what it is: the player's own, a link or a form
+// of a page, or a script's.
 func (s *Screen) began(ctx context.Context) context.Context {
+	q := identity.Request{Destination: identity.Document, User: !s.unasked}
 	if from, err := url.Parse(s.from); s.from != "" && err == nil {
-		return cookies.From(ctx, from)
+		q.Initiator = from
+		ctx = cookies.From(ctx, from)
+		if s.unasked && onTheWeb(s.from) {
+			ctx = localnet.From(ctx, s.spaceOf(s.from))
+		}
 	}
-	return ctx
+	return fetch.Asking(ctx, q)
+}
+
+// spaceOf is the space the shown tab's page at address came from, the
+// Internet for one that is not known.
+func (s *Screen) spaceOf(address string) localnet.Space {
+	if page := s.session().pages[address]; page != nil {
+		return page.Space
+	}
+	return localnet.Public
 }
 
 // address is where the scripts' page is now, its own moves followed.

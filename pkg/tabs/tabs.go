@@ -35,10 +35,12 @@ func Own(address string) (string, string, bool) {
 	return u.Host, u.Query().Get("q"), true
 }
 
-// Tab is one tab: its visited addresses and where it stands among them.
+// Tab is one tab: its visited addresses, where it stands among them, and
+// the tab it was opened beside.
 type Tab struct {
 	urls []string
 	at   int
+	from *Tab
 }
 
 func NewTab(address string) *Tab { return &Tab{urls: []string{address}} }
@@ -105,6 +107,22 @@ func (b *Browser) Tab() *Tab { return b.Tabs[b.Active] }
 func (b *Browser) Open(address string) {
 	b.Tabs = append(b.Tabs, NewTab(address))
 	b.Active = len(b.Tabs) - 1
+}
+
+// OpenBeside opens a tab at address after the shown one and those opened
+// beside it already, and shows it when shown says so.
+func (b *Browser) OpenBeside(address string, shown bool) *Tab {
+	tab := NewTab(address)
+	tab.from = b.Tab()
+	i := b.Active + 1
+	for i < len(b.Tabs) && b.Tabs[i].from == tab.from {
+		i++
+	}
+	b.Tabs = slices.Insert(b.Tabs, i, tab)
+	if shown {
+		b.Active = i
+	}
+	return tab
 }
 
 func (b *Browser) Select(i int) {

@@ -427,10 +427,11 @@ func TestATabShowsItsSitesIconElseLightsLogo(t *testing.T) {
 	t.Cleanup(srv.Close)
 	s := show(t)
 	picture := func() *ui.Node {
-		if first := s.doc.ByID("tab-0").Children()[0].Children()[0]; first.HasClass("icon") {
-			return first
+		first := s.doc.ByID("tab-0").Children()[0].Children()[0]
+		if _, hidden := first.Attr("hidden"); hidden || !first.HasClass("icon") {
+			return nil
 		}
-		return nil
+		return first
 	}
 	if src(picture()) != logo {
 		t.Fatalf("a page of light's own shows %q", src(picture()))

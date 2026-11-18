@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/content"
+	"github.com/lantervale/light/pkg/localnet"
 )
 
 // Page is what an address gave, or why it gave nothing.
@@ -18,7 +19,11 @@ type Page struct {
 	Title   string
 	// Status is the answer's HTTP status.
 	Status int
-	Kind   content.Kind
+	// Space is how far from the Internet the address that answered is:
+	// what the page's own requests may reach. A page of light's is of
+	// this machine.
+	Space localnet.Space
+	Kind  content.Kind
 	// Media is the media type the answer is taken for.
 	Media string
 	// Doc is an HTML page built, nil for the other kinds.
@@ -46,10 +51,12 @@ type Page struct {
 	Err error
 }
 
-// Links is what a page's links do: open an address, name it while the
-// pointer is over one, and save it, under a name when the link gives
-// one.
+// Links is what a page's links and forms do: open an address, name it
+// while the pointer is over one, save it, under a name when the link
+// gives one, send a form with a POST, and tell why a form was not sent.
 type Links struct {
 	Open, Over func(address string)
 	Save       func(address, name string)
+	Post       func(sent Submission)
+	Unsent     func(why error)
 }

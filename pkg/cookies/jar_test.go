@@ -260,6 +260,16 @@ func TestSameSite(t *testing.T) {
 			"lax=1; named=1; strict=1; none=1; odd=1"},
 		{"a link from another site", func(t *testing.T) cookies.Request { return followed(t, other) },
 			"lax=1; named=1; none=1; odd=1"},
+		{"a form posted within the site", func(t *testing.T) cookies.Request {
+			q := followed(t, "https://www.site.test/")
+			q.Unsafe = true
+			return q
+		}, "lax=1; named=1; strict=1; none=1; odd=1"},
+		{"a form posted from another site", func(t *testing.T) cookies.Request {
+			q := followed(t, other)
+			q.Unsafe = true
+			return q
+		}, "none=1"},
 		{"a link from the site over http", func(t *testing.T) cookies.Request { return followed(t, "http://site.test/") },
 			"lax=1; named=1; none=1; odd=1"},
 		{"a link from a page of light's own", func(t *testing.T) cookies.Request { return followed(t, "light://home") },

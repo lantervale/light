@@ -111,7 +111,7 @@ func TestAGzippedAnswerIsCountedAsSentAndAsRead(t *testing.T) {
 			t.Fatalf("%s is read as %d bytes (%v), encoded %q", path, len(got), err, resp.Header.Get("Content-Encoding"))
 		}
 	}
-	if encoding != "gzip" {
+	if encoding != netlog.Encodings {
 		t.Errorf("the server was asked for %q", encoding)
 	}
 	rows := l.Rows()
@@ -146,5 +146,70 @@ func TestAnEncodingTheRequestAskedForIsLeftToIt(t *testing.T) {
 	resp.Body.Close()
 	if string(got) != "raw" || resp.Header.Get("Content-Encoding") != "gzip" {
 		t.Fatalf("the body is %q, encoded %q", got, resp.Header.Get("Content-Encoding"))
+	}
+}
+
+func TestAPreflightIsARowOfItsOwnKind(t *testing.T) {
+	srv := site(t)
+	l := netlog.New(10)
+	ctx, trail := netlog.Trailed(netlog.With(t.Context(), l, "app.js:3", netlog.XHR))
+	if trail.Last() != 0 {
+		t.Errorf("a trail with no request ends at row %d", trail.Last())
+	}
+	for _, method := range []string{http.MethodOptions, http.MethodPut, http.MethodOptions} {
+		req, err := http.NewRequestWithContext(ctx, method, srv.URL+"/", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if method == http.MethodOptions && trail.Last() == 0 {
+			req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+		}
+		resp, err := (&http.Client{Transport: &netlog.Transport{}}).Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+	}
+	rows := l.Rows()
+	if rows[0].Type != netlog.Preflight || rows[0].Kind() != "preflight" || rows[0].Initiator != "app.js:3" ||
+		rows[1].Type != netlog.XHR || rows[2].Type != netlog.XHR || rows[2].Kind() == "preflight" {
+		t.Errorf("the rows are %s (%s), %s and %s", rows[0].Type, rows[0].Kind(), rows[1].Type, rows[2].Type)
+	}
+	if got := netlog.TypeOf("text/html", netlog.Preflight); got != netlog.Preflight {
+		t.Errorf("a preflight answered a page is %s", got)
+	}
+	if kept := netlog.Filter(rows, "", netlog.XHR); len(kept) != 3 {
+		t.Errorf("XHR keeps %d rows of a preflight and two requests", len(kept))
+	}
+	if kept := netlog.Filter(rows, "", netlog.Preflight); len(kept) != 1 {
+		t.Errorf("preflight keeps %d rows", len(kept))
+	}
+	if kept := netlog.Filter(rows, "", netlog.Document); len(kept) != 0 {
+		t.Errorf("document keeps %d rows", len(kept))
+	}
+	if trail.Last() != rows[2].ID {
+		t.Errorf("the trail ends at row %d, want %d", trail.Last(), rows[2].ID)
+	}
+	if _, other := netlog.Trailed(netlog.As(ctx, "document", netlog.Other)); other.Last() != 0 {
+		t.Errorf("a new trail ends at row %d", other.Last())
+	}
+}
+
+func TestAnAnswerKeptFromAScriptIsABlockedRow(t *testing.T) {
+	srv := site(t)
+	l := netlog.New(10)
+	ctx, trail := netlog.Trailed(netlog.With(t.Context(), l, "app.js:3", netlog.XHR))
+	get(ctx, t, srv.URL+"/")
+	get(netlog.As(ctx, "app.js:4", netlog.XHR), t, srv.URL+"/gone")
+	before := l.Version()
+	l.Refuse(trail.Last(), "No 'Access-Control-Allow-Origin' header is present on the requested resource.")
+	l.Refuse(99, "no such row")
+	rows := l.Rows()
+	if rows[0].Blocked || rows[0].Err != "" || l.Version() != before+1 {
+		t.Errorf("the first row is %+v", rows[0])
+	}
+	if kept := rows[1]; !kept.Blocked || !kept.Failed() || kept.Status != http.StatusNotFound || kept.Request == nil ||
+		!strings.HasPrefix(kept.Err, "No 'Access-Control-Allow-Origin'") || kept.Initiator != "app.js:4" {
+		t.Errorf("the row of the answer that was kept is %+v", kept)
 	}
 }

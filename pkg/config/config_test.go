@@ -14,7 +14,7 @@ func TestTheDefaultsAreWhatLightDidBeforeItHadSettings(t *testing.T) {
 	c := config.Default()
 	want := config.Config{
 		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
-		Timeout: 30, Redirects: 10, UserAgent: "light/1.0 (ember)", MetaRefresh: true, Requests: 1000,
+		Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
 		JavaScript: true, Cookies: true,
 	}
 	if c != want {
@@ -41,6 +41,24 @@ func TestAValueOutOfItsBoundsFallsBackToItsDefault(t *testing.T) {
 	want.StartPage, want.Downloads, want.UserAgent = "https://example.com", "/tmp/files", "Mozilla/5.0"
 	if got := c.Valid(); got != want {
 		t.Fatalf("values at their bounds became %+v, want %+v", got, want)
+	}
+}
+
+func TestTheUserAgentLightOnceWroteIsTheDefaultAndOneThatWasSetIsKept(t *testing.T) {
+	former, err := config.Decode([]byte(`{"version": 1, "user_agent": "light/1.0 (ember)", "zoom": 150}`))
+	if err != nil || former.UserAgent != "" || former.Zoom != 150 {
+		t.Fatalf("the file of an earlier light is read as %+v (%v)", former, err)
+	}
+	set, err := config.Decode([]byte(
+		`{"version": 1, "user_agent": "Probe/2.0", "accept_language": "fr_ch, fr;q=0.9,, en"}`))
+	if err != nil || set.UserAgent != "Probe/2.0" || set.Languages != "fr-CH, fr, en" {
+		t.Fatalf("what was set is read as %+v (%v)", set, err)
+	}
+	if got := (config.Config{Languages: "no language, here!"}).Valid().Languages; got != "no, language" {
+		t.Fatalf("words are read as the tags %q", got)
+	}
+	if got := (config.Config{Languages: "fr\nX-Injected: 1"}).Valid().Languages; got != "" {
+		t.Fatalf("a list with a line break is kept as %q", got)
 	}
 }
 
@@ -155,5 +173,18 @@ func TestCookiesAreKeptUntilSetNotToAndThirdPartiesOnesNot(t *testing.T) {
 	}
 	if got, err = config.Load(path); err != nil || got != set {
 		t.Fatalf("read back %+v, %v, want %+v", got, err, set)
+	}
+}
+
+func TestPagesAreKeptFromTheLocalNetworkUntilSetNotToBe(t *testing.T) {
+	if config.Default().LocalNetwork {
+		t.Fatal("light starts with pages let into the local network")
+	}
+	got, err := config.Decode([]byte(`{"version": 1, "local_network": true}`))
+	if err != nil || !got.LocalNetwork {
+		t.Fatalf("read %+v, %v, want pages let into the local network", got, err)
+	}
+	if got, err = config.Decode([]byte(`{"version": 1}`)); err != nil || got.LocalNetwork {
+		t.Fatalf("read %+v, %v from a file that says nothing of it", got, err)
 	}
 }

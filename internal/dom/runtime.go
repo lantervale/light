@@ -58,8 +58,16 @@ type Message struct {
 type Request struct {
 	Method, Address string
 	Header          map[string]string
+	// Body is what a fetch carries, nil for nothing.
+	Body []byte
+	// Mode, Credentials and Redirect are those of a fetch, as scripts
+	// name them ("cors", "same-origin", "follow"), and Keepalive whether
+	// it goes on once the page is left.
+	Mode, Credentials, Redirect string
+	Keepalive                   bool
 	// Script is a script element's source, and Sheet a link's
-	// stylesheet, where the rest is a fetch.
+	// stylesheet, where the rest is a fetch. A module script is a Script
+	// that says its Mode: asked for as a fetch is, and listed as a script.
 	Script bool
 	Sheet  bool
 	// Source is the address of the script that asked through fetch or
@@ -75,8 +83,23 @@ type Response struct {
 	// Address is where the answer came from, after its redirects.
 	Address string
 	Header  map[string]string
-	Text    string
-	Err     error
+	// Text is the source of a script or a sheet, decoded, and Body what
+	// a fetch was answered, as it came: a script reads its bytes, and
+	// decodes them when it asks for text. A fetch answered a Text and
+	// no Body reads that text's UTF-8.
+	Text string
+	Body []byte
+	// Kind is what the script may see of a fetch's answer, a Response's
+	// type: "basic", "cors", "opaque" or "opaqueredirect". An answer
+	// that says none is read as a browser reads a fetch that says
+	// nothing of its mode: another origin's only when it shares it.
+	Kind string
+	// Redirected is whether the answer is of another address than the
+	// one asked for.
+	Redirected bool
+	// Err is why there is no answer; a *fetch.BlockedError is a request, or
+	// its answer, kept from the script.
+	Err error
 }
 
 // Storage is one area of a site's storage.
@@ -109,6 +132,8 @@ type Host struct {
 	// its history when replace is set, and Reload fetches the page again.
 	Navigate func(address string, replace bool)
 	Reload   func()
+	// Post sends the page's tab where a form goes with a POST.
+	Post func(sent web.Submission)
 	// Moved says the page is at another address without having left:
 	// how is "push" or "replace". Travel goes that many steps through
 	// the tab's history, and Steps is how many it holds.
@@ -116,10 +141,10 @@ type Host struct {
 	Travel func(delta int)
 	Steps  func() int
 	// Fetch asks for a request off the frame; done may be called from
-	// any goroutine, once. What it returns stops the request.
+	// any goroutine, once. What it returns stops the request. A fetch,
+	// one that is neither a Script nor a Sheet, is the host's to make by
+	// the rules of the web (fetch.Client's Script), and to say the Kind of.
 	Fetch func(r Request, done func(Response)) (cancel func())
-	// Refused is told a request of a script that light does not send.
-	Refused func(r Request)
 	// Storage is an area of the page's site: "local" or "session".
 	Storage func(area string) Storage
 	// Cookies are the page's cookies; without them, they last as long
@@ -129,8 +154,11 @@ type Host struct {
 	Viewport func() (width, height float32)
 	// Titled is told the title a script gave the page.
 	Titled func(title string)
-	// Agent is what navigator.userAgent says.
-	Agent string
+	// Navigator is what navigator says of light and of its machine, and
+	// Window the window around the page's view, which screen and the
+	// window's own sizes are read from (navigator.go).
+	Navigator Navigator
+	Window    func() Window
 	// Budget is how long one script may run, script.DefaultBudget when 0.
 	Budget time.Duration
 }
@@ -153,14 +181,27 @@ type Runtime struct {
 	ran map[*html.Node]bool
 	// waiting are the scripts to run at the next frame.
 	waiting []func()
+	// loaded are the page's modules, later the scripts that wait their
+	// turn once the page is read, and racing how many modules run as
+	// soon as they came and have not yet (modules.go).
+	loaded moduleMap
+	later  []*turn
+	racing int
+	// state is how far the page is in its load, starting while its
+	// scripts are found and proceeding while those in turn run.
+	state                int
+	starting, proceeding bool
 	// landed is what ended off the frame, for the next one to run.
 	landed struct {
 		sync.Mutex
 		list []func()
 	}
 	// requests are the fetches on their way, by the number scripts know
-	// each by.
+	// each by, and kept those of them that go on once the page is left.
 	requests map[int]func()
+	kept     map[int]bool
+	// answering is the body of the answer a script is being told of.
+	answering []byte
 	// cookies are what document.cookie reads and sets (jar), and stores
 	// the storage areas the browser has none for.
 	cookies Cookies
@@ -187,14 +228,15 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 	r := &Runtime{
 		host: host, page: page, doc: page.Doc, tree: page.Tree, began: time.Now(),
 		handles: newHandles(), selectors: map[string]selectors{}, stores: map[string]Storage{},
-		ran: map[*html.Node]bool{}, requests: map[int]func(){},
+		ran: map[*html.Node]bool{}, requests: map[int]func(){}, kept: map[int]bool{}, loaded: newModuleMap(),
 	}
 	r.ops = r.table()
 	r.sheets = newSheets()
 	r.sheetOps()
 	r.fontOps()
 	r.seedSheets()
-	ctx, err := script.New(script.Options{Budget: host.Budget, Rejected: r.rejected})
+	ctx, err := script.New(script.Options{Budget: host.Budget, Rejected: r.rejected, Import: r.imported,
+		Resolve: r.specified})
 	if err != nil {
 		return nil, err
 	}
@@ -255,20 +297,30 @@ func (r *Runtime) call(args []any) (any, error) {
 }
 
 // Start runs the page's scripts in their order, then tells the page it
-// is ready and loaded.
+// is ready and loaded: at once, unless a module waits for what it
+// imports, which the frames to come bring.
 func (r *Runtime) Start() {
+	r.starting = true
 	for _, s := range r.page.Scripts {
 		if s.Node != nil {
 			r.ran[s.Node] = true
 		}
-		if s.Skipped != "" {
+		switch {
+		case s.Skipped != "":
 			r.say("warn", fmt.Sprintf("A script was not run: %s.", s.Skipped), s.Address)
-			continue
+		case s.ImportMap:
+			r.mapImports(s.Source)
+		case s.Module:
+			r.begin(s)
+		case s.Deferred:
+			r.later = append(r.later, &turn{ready: true, run: func() { r.run(s.Source, s.Address, s.Node) }})
+		default:
+			r.run(s.Source, s.Address, s.Node)
 		}
-		r.run(s.Source, s.Address, s.Node)
 	}
-	r.enter("ready", "interactive")
-	r.enter("ready", "complete")
+	r.preload()
+	r.starting = false
+	r.proceed()
 	r.syncSheets()
 }
 
@@ -300,8 +352,12 @@ func (r *Runtime) failed(err error) {
 	case err == nil || errors.Is(err, script.ErrClosed):
 	case errors.As(err, &thrown):
 		message := "Uncaught " + thrown.Message
-		if taken, _ := r.quietly("failed", message, thrown.Source, thrown.Line, thrown.Column); taken != true {
-			r.fault(message, thrown.Source, thrown.Line, thrown.Stack)
+		source, line, column := thrown.Source, thrown.Line, thrown.Column
+		if source == "" {
+			source, line, column = where(thrown.Stack)
+		}
+		if taken, _ := r.quietly("failed", message, source, line, column); taken != true {
+			r.fault(message, source, line, thrown.Stack)
 		}
 	default:
 		r.say("error", err.Error(), "")
@@ -366,7 +422,8 @@ func (r *Runtime) Frame() bool {
 	r.syncSheets()
 	r.watchFonts()
 	r.tree.Redraw()
-	return r.fonts.waited || left > 0 || len(r.waiting) > 0 || len(r.requests) > 0 || r.sheets.loading > 0
+	return r.fonts.waited || left > 0 || len(r.waiting) > 0 || len(r.requests) > 0 || r.sheets.loading > 0 ||
+		len(r.later) > 0
 }
 
 // take is what landed since the last frame.
@@ -415,14 +472,16 @@ func (r *Runtime) Close() {
 		return
 	}
 	r.closed = true
-	for _, cancel := range r.requests {
-		cancel()
+	for id, cancel := range r.requests {
+		if !r.kept[id] {
+			cancel()
+		}
 	}
 	r.tree.Activate, r.tree.Heard, r.tree.Submit = nil, nil, nil
 	r.entry.Release()
 	r.ctx.Close()
 	r.handles = newHandles()
-	r.ran, r.requests, r.waiting = nil, nil, nil
+	r.ran, r.requests, r.kept, r.waiting, r.later, r.loaded = nil, nil, nil, nil, nil, moduleMap{}
 }
 
 // Closed reports whether the Runtime was closed.

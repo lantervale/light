@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +31,7 @@ import (
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/downloads"
 	"github.com/lantervale/light/pkg/history"
+	"github.com/lantervale/light/pkg/localnet"
 	"github.com/lantervale/light/pkg/storage"
 	"github.com/lantervale/light/pkg/tabs"
 )
@@ -45,6 +48,9 @@ const (
 type Options struct {
 	// Transport makes the requests, http.DefaultTransport when nil.
 	Transport http.RoundTripper
+	// Space is the space of an address, for tests whose servers are all
+	// of this machine; nil for each address's own (localnet.Of).
+	Space func(netip.AddrPort) localnet.Space
 	// Dir is the folder the history is kept in between runs; with none,
 	// it is kept in memory only.
 	Dir string
@@ -60,6 +66,16 @@ type Options struct {
 	// ScriptBudget is how long one script of a page may run, the
 	// engine's own limit when 0.
 	ScriptBudget time.Duration
+	// Version is light's, which the HAR files it saves name, and its
+	// User-Agent when a build was given one ("" and "dev" are a build
+	// made by hand).
+	Version string
+	// Languages are the languages the system's user prefers, most
+	// wanted first, and Driven whether the run is driven by something
+	// else than a person at its window: what light tells a site
+	// (identity.go).
+	Languages []string
+	Driven    bool
 }
 
 // Screen is the window's screen, redrawn from the browser after each
@@ -81,6 +97,7 @@ type Screen struct {
 	fields   []func()
 
 	tabs, back, forward, reload, lock, field, address, view, status, list *ui.Node
+	strip                                                                 []stripTab
 	menu                                                                  *menu.Menu
 	tools                                                                 *devtools.Panel
 	inspect                                                               *inspector.Inspector
@@ -108,15 +125,28 @@ type Screen struct {
 	// jar is the cookies every request shares, jarFile its file, and
 	// from the page a navigation is being opened by, "" for the
 	// player's own.
-	jar     *cookies.Jar
+	jar *cookies.Jar
+	// guard keeps the pages of the Internet from this machine and from
+	// the network around it.
+	guard   *localnet.Guard
 	jarFile *store
 	from    string
+	// unasked is whether that navigation is a script's doing, not an
+	// act of the player's.
+	unasked bool
 
 	// saves runs the downloads; savesSeen is its version last shown, and
 	// announced the state each download was last said to be in.
 	saves     *downloads.Manager
 	savesSeen uint64
 	announced map[int]downloads.State
+	// archived are the downloads that are HAR files of the developer
+	// tools, each with whether it holds the sensitive data; telling is
+	// whether the status bubble says what came of one over the address
+	// under the pointer, which was at told then.
+	archived map[int]bool
+	telling  bool
+	told     geom.Vec2
 	// downloads is the navigation row's button, recent its list, and
 	// listed the list of the downloads page while it is shown.
 	downloads, progress, recent, listed *ui.Node
@@ -135,6 +165,10 @@ type Screen struct {
 	size    geom.Vec2
 	editing bool
 	over    string
+	// system is the system light runs on, as runtime.GOOS names it, and
+	// aimed the link the middle button went down on.
+	system string
+	aimed  string
 	// picked counts the times a page was asked what is under the pointer
 	// for its scripts, for tests.
 	picked int
@@ -145,7 +179,8 @@ func New(win *platform.Window, opts Options) *Screen {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	s := &Screen{win: win, opts: opts, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64)}
+	s := &Screen{win: win, opts: opts, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64),
+		system: runtime.GOOS}
 	s.restore()
 	s.browser = tabs.NewBrowser(s.config.StartPage)
 	s.restoreDownloads()
@@ -167,6 +202,7 @@ func (s *Screen) restore() {
 	s.sites = storage.New()
 	s.stored = &store{name: storageFile, write: func(path string) error { return s.sites.Save(path) }}
 	s.jar = cookies.New()
+	s.guard = &localnet.Guard{Base: s.opts.Transport, Space: s.opts.Space}
 	s.jarFile = &store{name: cookiesFile, write: func(path string) error { return s.jar.Save(path) }}
 	if s.opts.Dir == "" {
 		return
@@ -225,6 +261,9 @@ func (s *Screen) build() {
 		Source:  func(address string, _ int) { s.OpenInNewTab(tabs.SourceOf(address)) },
 		Open:    s.OpenInNewTab,
 		Storage: s.storedBy,
+		Export:  func() { s.saveHAR(0, false) },
+		Title:   s.titled,
+		Version: s.opts.Version,
 	})
 	s.tools.SetHeight(s.config.ToolsHeight)
 	s.doc.Body().Append(
@@ -264,6 +303,7 @@ func (s *Screen) move(step func(*tabs.Tab)) {
 func (s *Screen) Update(world.Frame) {
 	s.header()
 	s.closeUnderMiddle()
+	s.followUnderMiddle()
 	s.closeMenuWhenMoved()
 	s.follow()
 	s.sizePicture()
@@ -332,6 +372,7 @@ func (s *Screen) show() {
 	s.leave(tab, session)
 	s.showNavigation()
 	s.tools.SetDark(s.config.DarkMode)
+	s.keepBodies(session)
 	s.tools.Show(&session.tools, session.log, session.said, s.warnings)
 	s.over = ""
 	s.say()

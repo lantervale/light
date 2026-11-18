@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lantervale/ember/ui"
@@ -12,6 +13,7 @@ import (
 	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
+	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/script"
 	"github.com/lantervale/light/pkg/tabs"
@@ -85,13 +87,15 @@ func (s *Screen) measure() {
 func (s *Screen) apply() {
 	c := s.config
 	s.loader.Store(&web.Loader{
-		Client: fetch.New(&cookies.Transport{Jar: s.jar, Base: &netlog.Transport{Base: s.opts.Transport}},
-			fetch.Agent(c.UserAgent), fetch.Redirects(c.Redirects)),
+		Client: fetch.New(&cookies.Transport{Jar: s.jar, Base: &netlog.Transport{Base: s.guard}},
+			fetch.Agent(s.agent()), fetch.Languages(identity.AcceptLanguage(s.languages())),
+			fetch.Redirects(c.Redirects)),
 		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100, Scripts: s.scripting(),
 		Viewport: s.viewport,
 	})
 	s.jar.SetEnabled(c.Cookies)
 	s.jar.SetThirdParty(c.ThirdPartyCookies)
+	s.guard.Open(c.LocalNetwork)
 	s.browser.Start = c.StartPage
 	s.visits.SetLimit(c.HistoryLimit)
 	s.saves.SetDir(s.downloadsDir())
@@ -211,12 +215,19 @@ func configBody(s *Screen) []*ui.Node {
 			func(c *config.Config) *bool { return &c.ThirdPartyCookies }),
 		s.clearCookiesSetting(),
 		ui.H2(ui.Text("Network")),
+		s.checkSetting("set-local-network", "Let pages reach this machine and the local network",
+			func(c *config.Config) *bool { return &c.LocalNetwork }),
 		s.numberSetting("set-timeout", "Request timeout", "Seconds a page and its sheets may take.",
 			config.MinTimeout, config.MaxTimeout, func(c *config.Config) *int { return &c.Timeout }),
 		s.numberSetting("set-redirects", "Redirects followed", "For one navigation.",
 			config.MinRedirects, config.MaxRedirects, func(c *config.Config) *int { return &c.Redirects }),
-		s.textSetting("set-user-agent", "User-Agent", "What light says it is to a server.",
-			func(c *config.Config) *string { return &c.UserAgent }, same),
+		placeholder(s.textSetting("set-user-agent", "User-Agent", "What light says it is to a server and to a "+
+			"page's scripts. Empty is light's own.", func(c *config.Config) *string { return &c.UserAgent }, same),
+			identity.Default(s.opts.Version)),
+		placeholder(s.textSetting("set-accept-language", "Languages", "The languages a site is asked for, most "+
+			"wanted first, as fr-FR, en. Empty is the system's.",
+			func(c *config.Config) *string { return &c.Languages }, same),
+			strings.Join(identity.Languages(s.opts.Languages), ", ")),
 		ui.H2(ui.Text("Developer tools")),
 		s.checkSetting("set-preserve-log", "Preserve the log in new tabs",
 			func(c *config.Config) *bool { return &c.PreserveLog }),
@@ -277,6 +288,13 @@ func (s *Screen) textSetting(id, label, hint string, of func(*config.Config) *st
 		})
 	}, func() { s.doc.SetValue(field, *of(&s.config)) })
 	return setting(id, label, hint, field)
+}
+
+// placeholder has the field of a text setting's row show what the
+// setting is when it is left empty.
+func placeholder(row *ui.Node, text string) *ui.Node {
+	row.Children()[1].SetAttr("placeholder", text)
+	return row
 }
 
 // numberSetting is a setting that is a whole number between low and

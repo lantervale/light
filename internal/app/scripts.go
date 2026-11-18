@@ -16,6 +16,7 @@ import (
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/cookies"
+	"github.com/lantervale/light/pkg/fetch"
 	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/script"
 	"github.com/lantervale/light/pkg/tabs"
@@ -49,6 +50,9 @@ type running struct {
 	at       string
 	pressed  *ui.Node
 	keyboard bool
+	// acting is whether the scripts are being told of a click of the
+	// player's: what they do meanwhile is the player's act.
+	acting bool
 }
 
 // scripting reports whether pages are loaded for their scripts to run.
@@ -60,7 +64,7 @@ func (s *Screen) scriptsBody() shownPage {
 	session := s.session()
 	page := session.pages[scriptsPage]
 	if page == nil {
-		page = s.current().Local(scriptsPage, scriptsDemo, web.Links{Open: s.Open, Over: s.point, Save: s.download})
+		page = s.current().Local(scriptsPage, scriptsDemo, web.Links{Open: s.activate, Over: s.point, Save: s.download})
 		session.pages[scriptsPage] = page
 		s.zoomPages(session)
 	}
@@ -171,7 +175,9 @@ func (s *Screen) click(live *running) {
 		live.pressed, live.keyboard = target, over
 	case target != nil && target == live.pressed:
 		zoom := live.page.Doc.Zoom()
-		live.rt.Click(target, at.X/zoom, at.Y/zoom)
+		live.acting = true
+		live.rt.Click(target, at.X/zoom, at.Y/zoom, s.held())
+		live.acting = false
 	}
 }
 
@@ -243,18 +249,23 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 		},
 		Cleared: session.said.Clear,
 		Navigate: func(address string, replace bool) {
+			by := live.by(s)
 			later(func() {
 				if replace {
-					s.byPage(func() {
+					by(func() {
 						tab.Redirect(tab.Current(), address)
 						s.show()
 					})
 					return
 				}
-				s.linked(address)
+				by(func() { s.Open(address) })
 			})
 		},
 		Reload: func() { later(s.reloadOrStop) },
+		Post: func(sent web.Submission) {
+			by := live.by(s)
+			later(func() { by(func() { s.posted(sent) }) })
+		},
 		Moved: func(how, address string) {
 			if how == "replace" {
 				tab.Redirect(tab.Current(), address)
@@ -278,9 +289,6 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 		Steps:   tab.Len,
 		Fetch:   func(q dom.Request, done func(dom.Response)) func() { return s.fetchFor(session, live, q, done) },
 		Cookies: s.jar.Page(live.address),
-		Refused: func(q dom.Request) {
-			session.log.Block(q.Method, q.Address, asker(q), netlog.XHR, "light sends no "+q.Method+" for a script")
-		},
 		Storage: func(area string) dom.Storage { return s.storageOf(session, live.page.Address, area) },
 		Viewport: func() (float32, float32) {
 			if s.host == nil {
@@ -290,9 +298,10 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 			zoom := live.page.Doc.Zoom()
 			return box.W / zoom, box.H / zoom
 		},
-		Titled: func(string) { later(s.showTabs) },
-		Agent:  s.config.UserAgent,
-		Budget: s.opts.ScriptBudget,
+		Titled:    func(string) { later(s.showTabs) },
+		Navigator: s.navigator(),
+		Window:    func() dom.Window { return s.around(live.page.Doc.Zoom()) },
+		Budget:    s.opts.ScriptBudget,
 	}
 }
 
@@ -302,34 +311,79 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 func (s *Screen) fetchFor(session *session, live *running, q dom.Request, done func(dom.Response)) func() {
 	if q.Address == scriptsData {
 		go done(dom.Response{Status: http.StatusOK, StatusText: "200 OK", Address: q.Address, Text: scriptsAnswer,
-			Header: map[string]string{"Content-Type": "application/json"}})
+			Header: map[string]string{"Content-Type": "application/json"}, Kind: string(fetch.Basic)})
 		return func() {}
 	}
-	ctx, cancel := context.WithTimeout(cookies.Within(context.Background(), live.address()), s.timeout())
-	kind, loader := netlog.XHR, s.current()
-	switch {
-	case q.Script:
-		kind = netlog.Script
-	case q.Sheet:
+	page := live.address()
+	ctx, cancel := context.WithTimeout(asking(cookies.Within(context.Background(), page), live, q), s.timeout())
+	client := s.current().Client
+	if q.Mode != "" || (!q.Script && !q.Sheet) {
+		go func() {
+			defer cancel()
+			done(called(ctx, client, session.log, page, q))
+		}()
+		return cancel
+	}
+	kind := netlog.Script
+	if q.Sheet {
 		kind = netlog.Stylesheet
 	}
 	go func() {
 		defer cancel()
-		answer, err := loader.Client.Get(netlog.With(ctx, session.log, asker(q), kind), q.Address, "*/*")
+		answer, err := client.Get(netlog.With(ctx, session.log, asker(q), kind), q.Address, "*/*")
 		if err != nil {
 			done(dom.Response{Err: err})
 			return
 		}
-		header := map[string]string{}
-		for name := range answer.Header {
-			if name != "Set-Cookie" {
-				header[name] = answer.Header.Get(name)
-			}
-		}
 		done(dom.Response{Status: answer.Status, StatusText: http.StatusText(answer.Status), Address: answer.Address,
-			Header: header, Text: answer.Code()})
+			Header: flat(answer.Header), Text: answer.Code()})
 	}()
 	return cancel
+}
+
+// called is what came of a fetch of the script of a page, or of its
+// asking for a module script: sent as a
+// browser sends it, another origin's answer given only when that origin
+// shares it. A request that was blocked is a blocked row of log: one of
+// its own when nothing was sent, the row of what was sent otherwise.
+func called(ctx context.Context, client *fetch.Client, log *netlog.Log, page *url.URL, q dom.Request) dom.Response {
+	kind := netlog.XHR
+	if q.Script {
+		kind = netlog.Script
+	}
+	ctx, trail := netlog.Trailed(netlog.With(ctx, log, asker(q), kind))
+	header := http.Header{}
+	for name, value := range q.Header {
+		header.Set(name, value)
+	}
+	result, err := client.Script(ctx, fetch.Call{
+		Method: q.Method, Address: q.Address, Header: header, Body: q.Body, Page: page,
+		Mode: fetch.Mode(q.Mode), Credentials: fetch.Credentials(q.Credentials), Redirect: fetch.Redirect(q.Redirect),
+	})
+	var blocked *fetch.BlockedError
+	switch {
+	case errors.As(err, &blocked) && blocked.Sent:
+		log.Refuse(trail.Last(), blocked.Why)
+	case errors.As(err, &blocked):
+		log.Block(q.Method, blocked.Address, asker(q), kind, blocked.Why)
+	}
+	if err != nil {
+		return dom.Response{Err: err}
+	}
+	return dom.Response{Status: result.Status, StatusText: http.StatusText(result.Status), Address: result.Address,
+		Header: flat(result.Header), Body: result.Body, Kind: string(result.Kind), Redirected: result.Redirected}
+}
+
+// flat is an answer's headers as scripts read them, a value each, but
+// the cookies it sets.
+func flat(header http.Header) map[string]string {
+	out := map[string]string{}
+	for name := range header {
+		if name != "Set-Cookie" {
+			out[name] = strings.Join(header.Values(name), ", ")
+		}
+	}
+	return out
 }
 
 // asker is who a request of a script is listed as asked by: the script

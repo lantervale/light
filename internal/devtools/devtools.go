@@ -148,6 +148,12 @@ type Host struct {
 	Open func(address string)
 	// Storage is what the site of the tab's page keeps (storage.go).
 	Storage func() Stored
+	// Export saves the requests the Network tab lists as a HAR file
+	// (har.go), Title is the title of the page at address, "" when it
+	// has none, and Version light's, for the file to say.
+	Export  func()
+	Title   func(address string) string
+	Version string
 }
 
 // rowID is the id of the element of a row, before its number.

@@ -11,6 +11,8 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/lantervale/ember/ui"
+
+	"github.com/lantervale/light/pkg/identity"
 )
 
 // Script is one script element of a page.
@@ -23,8 +25,14 @@ type Script struct {
 	// Node is its element in the Tree.
 	Node *html.Node
 	// Deferred is a script that runs after those the page has in line
-	// (defer, async).
+	// (defer, async, a module).
 	Deferred bool
+	// Module is a module script: its text is its own, or what Address
+	// names, which is left for the page's scripts to fetch as a module
+	// is. Async is one that runs as soon as it and what it imports came.
+	Module, Async bool
+	// ImportMap is an import map, which Source holds.
+	ImportMap bool
 	// Skipped is why it does not run, "" for one that does.
 	Skipped string
 }
@@ -601,24 +609,38 @@ func (b *builder) live(a *ui.Node) {
 	ui.OnPointerLeave(func() { b.links.Over("") }).Apply(a)
 }
 
-// unread is why a script element is not run, "" for one that is, and
-// whether it is a script at all: one of another type holds data. A
-// module is not read; a script marked nomodule runs in its place.
-func unread(n *html.Node) (string, bool) {
+// The kinds of script elements that are scripts.
+const (
+	classicScript = "classic"
+	moduleScript  = "module"
+	importMap     = "importmap"
+)
+
+// scriptKind is the kind of script a script element is, "" for one
+// that is none: one of another type holds data, and one marked nomodule
+// is for the browsers that read no module.
+func scriptKind(n *html.Node) string {
 	switch kind := strings.ToLower(strings.TrimSpace(attr(n, "type"))); kind {
 	case "", "text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript",
 		"application/x-javascript", "text/jscript", "text/livescript":
-		return "", true
-	case "module":
-		return "it is a module, which light does not read", true
+		if _, fallback := lookup(n, "nomodule"); fallback {
+			return ""
+		}
+		return classicScript
+	case moduleScript, importMap:
+		return kind
 	}
-	return "", false
+	return ""
 }
+
+// Fetched reports whether address is one light fetches: of http or of
+// https.
+func Fetched(address string) bool { return opened(address) }
 
 // Script gets the script at address for a page: its text, where it
 // came from, and why it is not run when it could not be read.
 func (l *Loader) Script(ctx context.Context, address string) (string, string, string) {
-	answer, err := l.Client.Get(ctx, address, "*/*")
+	answer, err := l.Client.Get(asking(ctx, identity.Script), address, identity.Accept(identity.Script))
 	switch {
 	case err != nil:
 		return "", address, err.Error()

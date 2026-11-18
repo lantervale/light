@@ -28,6 +28,7 @@ import (
 
 	"github.com/lantervale/light/internal/app"
 	"github.com/lantervale/light/internal/shell"
+	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -112,7 +113,8 @@ func (c CLI) dir() string {
 func (c CLI) options() app.Options {
 	return app.Options{
 		Dir: c.dir(), Downloads: c.Downloads, DefaultDownloads: systemDownloads(),
-		Files: shell.System{},
+		Files: shell.System{}, Version: version,
+		Languages: identity.System(), Driven: identity.Driven(os.Environ()),
 	}
 }
 

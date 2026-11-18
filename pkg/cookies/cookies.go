@@ -75,6 +75,9 @@ type Request struct {
 	// From is the page a navigation began on, a link's or a script's;
 	// nil for one the player asked for.
 	From *url.URL
+	// Unsafe is a request that changes something, a form's POST: one
+	// from another site carries no Lax cookie.
+	Unsafe bool
 }
 
 // navigation reports whether the request shows a page of its own.
@@ -235,7 +238,7 @@ func (j *Jar) matching(q Request, scripted, sent bool) []Cookie {
 		switch {
 		case !domainMatches(host, c.Domain, c.HostOnly), !pathMatches(path, c.Path), c.expired(now),
 			c.Secure && !secure, c.HTTPOnly && scripted,
-			!same && c.SameSite != None && (!navigation || c.SameSite != Lax):
+			!same && c.SameSite != None && (!navigation || q.Unsafe || c.SameSite != Lax):
 			continue
 		}
 		if sent {

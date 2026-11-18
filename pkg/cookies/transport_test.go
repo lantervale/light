@@ -235,3 +235,95 @@ func TestWithNoJarTheTransportIsItsBase(t *testing.T) {
 		}
 	}
 }
+
+func TestAFormPostedFromAnotherSiteCarriesNoLaxCookieUntilItIsRedirected(t *testing.T) {
+	n := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set":
+			w.Header().Add("Set-Cookie", "lax=1; Path=/")
+			w.Header().Add("Set-Cookie", "none=1; Path=/; SameSite=None; Secure")
+		case "/save":
+			w.Header().Add("Set-Cookie", "saved=1; Path=/; Secure")
+			http.Redirect(w, r, "/after", http.StatusSeeOther)
+		}
+	})
+	n.get(t.Context(), "https://example.com/set")
+	post := func(from string) {
+		t.Helper()
+		ctx := netlog.With(cookies.From(t.Context(), at(t, from)), n.log, "test", netlog.Document)
+		stream, err := n.client.Post(ctx, "https://example.com/save", "*/*", fetch.Form{Type: "text/plain"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = stream.Close()
+	}
+	post("https://other.test/form")
+	if save, after := n.sent("https://example.com/save"), n.sent("https://example.com/after"); save != 1 || after != 3 {
+		t.Errorf("from another site the form came with %d cookies and its redirect with %d, want 1 and 3", save, after)
+	}
+	post("https://example.com/form")
+	if save := n.sent("https://example.com/save"); save != 3 {
+		t.Errorf("from its own site the form came with %d cookies, want 3", save)
+	}
+}
+
+func TestARequestWithoutCookiesCarriesNoneAndKeepsNone(t *testing.T) {
+	n := serve(t, set("answered=1"))
+	n.get(t.Context(), "http://site.test/set")
+	if n.jar.Len() != 1 {
+		t.Fatalf("the jar holds %d cookies", n.jar.Len())
+	}
+	n.jar.Clear()
+	n.jar.Store(cookies.Request{URL: at(t, "http://site.test/")}, []string{"session=1"})
+	n.get(cookies.Without(cookies.Within(t.Context(), at(t, "http://site.test/"))), "http://site.test/set")
+	if got := n.sent("http://site.test/set"); got != 0 {
+		t.Errorf("a request without cookies came with %d", got)
+	}
+	if n.jar.Len() != 1 {
+		t.Errorf("the jar holds %d cookies after an answer that sets one to a request without cookies", n.jar.Len())
+	}
+	n.get(cookies.Within(t.Context(), at(t, "http://site.test/")), "http://site.test/set")
+	if got := n.sent("http://site.test/set"); got != 1 || n.jar.Len() != 2 {
+		t.Errorf("a request with cookies came with %d, and the jar holds %d", got, n.jar.Len())
+	}
+}
+
+func TestAScriptsPostToAnotherSiteCarriesNoLaxAndNoStrictCookie(t *testing.T) {
+	n := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Add("Set-Cookie", "lax=2")
+		w.Header().Add("Set-Cookie", "back=1; SameSite=None; Secure")
+	})
+	const api = "https://example.com/api"
+	post := func(page string, credentials fetch.Credentials) {
+		t.Helper()
+		ctx := cookies.Within(netlog.With(t.Context(), n.log, "test", netlog.XHR), at(t, page))
+		if _, err := n.client.Script(ctx, fetch.Call{Method: http.MethodPost, Address: api, Page: at(t, page),
+			Credentials: credentials, Body: []byte("b")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held := func() int { return len(n.jar.For(at(t, api))) }
+	n.jar.Store(cookies.Request{URL: at(t, api)}, []string{"lax=1", "strict=1; SameSite=Strict",
+		"none=1; SameSite=None; Secure"})
+
+	post("http://site.test/", fetch.CredentialsInclude)
+	if got := n.sent(api); got != 0 || held() != 3 {
+		t.Errorf("with third parties blocked the POST came with %d cookies, and the jar holds %d", got, held())
+	}
+	n.jar.SetThirdParty(true)
+	post("http://site.test/", fetch.CredentialsInclude)
+	if got := n.sent(api); got != 1 || held() != 4 {
+		t.Errorf("from another site the POST came with %d cookies, want the one that is SameSite=None; the jar holds %d, "+
+			"want the one that is SameSite=None more", got, held())
+	}
+	post("http://site.test/", fetch.CredentialsSameOrigin)
+	if got := n.sent(api); got != 0 || held() != 4 {
+		t.Errorf("without credentials the POST came with %d cookies, and the jar holds %d", got, held())
+	}
+	post("https://www.example.com/", fetch.CredentialsInclude)
+	if got := n.sent(api); got != 4 {
+		t.Errorf("from its own site the POST came with %d cookies, want 4", got)
+	}
+}

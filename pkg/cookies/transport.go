@@ -26,10 +26,19 @@ func From(ctx context.Context, from *url.URL) context.Context {
 	return context.WithValue(ctx, key{}, asked{from: from})
 }
 
+type withoutKey struct{}
+
+// Without is ctx for a request that carries no cookie and whose answer
+// sets none: a script's that asks for none, or asks another origin
+// without saying it wants them.
+func Without(ctx context.Context) context.Context {
+	return context.WithValue(ctx, withoutKey{}, true)
+}
+
 // Transport makes requests through Base, http.DefaultTransport when
 // nil, each sent with the cookies Jar holds for it, and takes those its
-// answer sets: every hop of a redirect on its own. With no Jar it is
-// Base.
+// answer sets: every hop of a redirect on its own. With no Jar, and for
+// a request Without cookies, it is Base.
 type Transport struct {
 	Jar  *Jar
 	Base http.RoundTripper
@@ -43,11 +52,11 @@ func (t *Transport) base() http.RoundTripper {
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.Jar == nil {
+	if t.Jar == nil || req.Context().Value(withoutKey{}) != nil {
 		return t.base().RoundTrip(req)
 	}
 	a, _ := req.Context().Value(key{}).(asked)
-	q := Request{URL: req.URL, Top: a.top, From: a.from}
+	q := Request{URL: req.URL, Top: a.top, From: a.from, Unsafe: unsafe(req.Method)}
 	if header := t.Jar.Header(q); header != "" {
 		req = req.Clone(req.Context())
 		req.Header.Set("Cookie", header)
@@ -60,6 +69,15 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		t.Jar.Store(q, lines)
 	}
 	return resp, nil
+}
+
+// unsafe reports a method that is not one of those that only read.
+func unsafe(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+		return false
+	}
+	return true
 }
 
 // Page is the jar as the scripts of one page see it, through

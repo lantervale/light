@@ -57,7 +57,7 @@ func newNetwork(p *Panel) Tool {
 			p.state.Selected = 0
 			n.list()
 		}))
-	bar := ui.Div(ui.Class("dt-bar"), wipe, ui.Label(ui.Class("dt-field"), p.Icon("filter"), n.filter),
+	bar := ui.Div(ui.Class("dt-bar"), wipe, n.export(), ui.Label(ui.Class("dt-field"), p.Icon("filter"), n.filter),
 		ui.Div(ui.Class("dt-rule")))
 	for _, chip := range kinds {
 		id := "dt-chip-" + string(chip.kind)

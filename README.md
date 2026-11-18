@@ -40,7 +40,7 @@ It is a demo, not a browser to live in: see [what it does not do](#what-it-does-
 - 🖱️ **Right click**: a menu for what is under the pointer — a link, a picture, selected text, a text field, the
   page, a tab, a request.
 - 📄 **View source**: `view-source:<address>`, with line numbers.
-- ⚡ **JavaScript**, in a build with the `v8` tag: a page's classic scripts run in V8 against a DOM of light's own:
+- ⚡ **JavaScript**, in a build with the `v8` tag: a page's scripts, classic and modules, run in V8 against a DOM of light's own:
   the page as its parser made it, of which ember draws what it has an element for. Elements, events, timers, `fetch`, `localStorage`, `history`. `light://scripts` shows it.
 - 🍪 **Cookies**: one jar for every request, by the rules browsers apply (`Secure`, `HttpOnly`, `SameSite`, the
   public suffixes), kept between runs; those of other sites than the page's are blocked unless the settings say
@@ -123,6 +123,14 @@ Cmd is Command on macOS and Control elsewhere.
 | F12, or Cmd+Alt+I on macOS, Ctrl+Shift+I elsewhere | The developer tools |
 | Alt+Up and Alt+Down, or Ctrl+P and Ctrl+N, in the console's line | What was typed before, and after |
 | Right click | The menu of what is under the pointer; arrows, Enter and Escape work in it |
+| Cmd+click or a middle click on a link | The link in a new tab, behind the shown one |
+| Cmd+Shift+click or Shift with a middle click on a link | The link in a new tab, shown |
+| Middle click on a tab | Close the tab |
+
+A tab opened by such a click stands after the shown one and those it opened already, and a page of the web loads in
+it at once. The links of light's own pages (the start page's tiles, the rows of the history) open the same way. A
+page's scripts hear a Cmd+click as a click with its keys (`metaKey`, `ctrlKey`, `shiftKey`), and may prevent it; they
+hear nothing of a middle click.
 
 ## The developer tools
 
@@ -160,14 +168,38 @@ and declarations ember's ui refused (those are in Warnings). A page of light's o
   domain (a padlock for `https`), its file, who asked (the navigation, the document, a picture, or the script and
   the line of a `fetch` or an `XMLHttpRequest`), its type in a word (`html`, `css`, `js`, `json`, `png`…), the bytes
   the server sent, those read once a gzip encoding is undone, and how long it took.
-- A request light refuses to send (a script's `POST`) is a blocked row, with its sign, and a failed one is tinted.
-- The chips keep one kind: All, HTML, CSS, JS, XHR (what scripts asked for through `fetch` or `XMLHttpRequest`,
-  whatever was answered), Fonts, Images, Media, Other. There is none for WebSockets: light opens none. The field
+- A script's request light does not send (an `http` address asked by an `https` page, another origin asked in
+  `same-origin` mode) and one whose answer is kept from the script (CORS) are blocked rows, with their sign and the
+  reason in their details; a failed one is tinted. The preflight of a script's request is a row of its own, an
+  `OPTIONS` of type `preflight`, before the request it asks leave for.
+- The chips keep one kind: All, HTML, CSS, JS, XHR (what scripts asked for through `fetch`, `XMLHttpRequest` or
+  `sendBeacon`, whatever was answered, and their preflights), Fonts, Images, Media, Other. There is none for WebSockets: light opens none. The field
   filters by address.
 - A click on a column's name sorts by it, a second the other way, a third no more.
 - A click on a row shows its headers and its response beside the table, the `Cookie` header it was sent with and
   the `Set-Cookie` headers it was answered among them; the pointer over a row names its address
   in the status bubble. The bin empties the list; a new page does too, unless Preserve log is checked.
+- The arrow beside the bin saves the requests as a HAR 1.2 file, the one Chrome's and Firefox's Network panels
+  import, to hand a whole exchange to someone else: those the filters list, as Firefox does, in the order they were
+  asked. It goes to the downloads folder as `<host>-<date>-<time>.har`, never over another file, is listed among the
+  downloads, and the status bubble says where it is. A right click on a row copies or saves that request alone
+  (Copy as HAR, Save as HAR), or saves them all; a right click on the arrow or the table saves them all.
+- A HAR file holds a page for each navigation and an entry for each request, each hop of a redirect, the requests
+  light refused to send and those that failed (status 0, the reason in `_blocked` or `_error`) included: the
+  headers as they were sent and answered, the `Cookie` and `Set-Cookie` among them, the query and the cookies
+  parsed, what a POST carried with a form's fields, the body of the answer as text by its charset or in base64,
+  its size read and its size sent, the server's address, and how long it waited for a connection, looked the host
+  up, connected, did the TLS handshake, sent, waited and received. `_kind` is the request's kind, `_initiator` who
+  asked.
+- A tab keeps the bodies for it from its first request, tools open or not, so the request that went wrong is in
+  the file: up to 4 MB of a body and 32 MB a tab, the oldest going first down to the 256 kB the Response view
+  shows. A body that is not whole says so (`_truncated` and a `comment`), and its sizes are still the real ones.
+  The bodies go when the list does.
+- **A HAR file holds secrets.** Every entry is there twice in the menus: *sanitized*, which the arrow saves, and
+  *with sensitive data*. Sanitized, as Chrome's export is, the values of the `Cookie`, `Set-Cookie`,
+  `Authorization` and `Proxy-Authorization` headers and of the cookies read `[redacted]`. Nothing else is taken
+  out: the addresses with their queries and the bodies are as they were sent, so a password typed in a form, a
+  token in an address and whatever a page answered are in the file. Read it before you hand it on.
 
 ### Console
 
@@ -180,7 +212,8 @@ unless you scrolled up:
   the calls that led there), `group`/`groupEnd` (indented), `table` (as plain text) and `clear` work too.
 - The exceptions nothing caught and the promises rejected with no handler, as errors whose calls unfold at a click
   on their triangle; the scripts
-  that did not load or were skipped; the requests of scripts that failed or were refused.
+  that did not load or were skipped; the requests of scripts that failed or were blocked, in a browser's words
+  (`Access to fetch at '…' from origin '…' has been blocked by CORS policy: …`, `Mixed Content: …`).
 - On the right of a line, the script and the line it is from: a click shows that script's source in a new tab (at
   its top: the source view does not scroll to a line). An inline script's lines count from its own first. An
   address in a line is a link that opens it in a new tab.
@@ -217,14 +250,51 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 | Follow a page that refreshes elsewhere at once | On | |
 | Keep the cookies sites set, and send them back | On | |
 | Those of other sites than the page's too (third-party cookies) | Off | |
+| Let pages reach this machine and the local network | Off | |
 | Request timeout (1 to 300 s) | 30 s | |
 | Redirects followed (0 to 20) | 10 | |
-| User-Agent | `light/1.0 (ember)` | |
+| User-Agent | light's own (see [What light tells a site](#what-light-tells-a-site)) | |
+| Languages (as `fr-FR, en`) | The system's | |
 | Preserve the Network log in new tabs | Off | |
 | Requests kept in each tab's Network panel (100 to 10,000) | 1,000 | |
 
 Pictures, JavaScript and refreshes apply to pages loaded afterwards. The page also clears the history, clears the cookies and resets every setting.
 `--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line.
+
+## What light tells a site
+
+Every value light sends a server or shows a page's scripts is true of light, of the machine or of the request. None
+names another browser's engine or brand (no `AppleWebKit`, `Chrome`, `Safari` or `Gecko` token in the User-Agent),
+and nothing is said to exist that does not work. light sends no client hints (`Sec-CH-UA`) and has no
+`navigator.userAgentData`. One function decides the headers of every request (`pkg/identity`).
+
+| Header | What it says |
+|--------|--------------|
+| `User-Agent` | `Mozilla/5.0 (<platform>) light/<version>`: the platform as browsers froze it (`Macintosh; Intel Mac OS X 10_15_7`, `Windows NT 10.0; Win64; x64`, `X11; Linux x86_64`), the version of the build, `0.1.0-alpha` for one made by hand. The settings can replace it. |
+| `Accept` | By what is asked for: a page `text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8`, a picture `image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5` (no AVIF, which light does not read), a sheet `text/css,*/*;q=0.1`, the rest `*/*`. A script's `fetch` says its own. |
+| `Accept-Language` | The system's languages (macOS: the user's preferred languages; elsewhere `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`), as browsers list them: `fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7`. `en-US,en;q=0.9` when the system names none. The settings can replace them; a script's `fetch` says its own. |
+| `Accept-Encoding` | `gzip, deflate`: the encodings light undoes. No `br`, no `zstd`. |
+| `Sec-Fetch-Dest`, `-Mode`, `-Site`, `-User` | What the request is for (`document`, `style`, `script`, `image`, `font`, `empty`), how it is made (`navigate`, `no-cors`, `cors`, `same-origin`), and from where: `none` for an address typed, a bookmark, a reload or a link of light's own pages, else `same-origin`, `same-site` or `cross-site` to the page that asks, worked out again at each redirect. `Sec-Fetch-User: ?1` only on a navigation an act of the user began: an address typed, a link clicked, a form submitted, a script's move while it hears a click. Sent to https addresses and to this machine only. |
+| `Upgrade-Insecure-Requests` | `1` on navigations. |
+| `Referer` | On every request a page makes, by the policy browsers have by default (`strict-origin-when-cross-origin`): the page's whole address within its origin, its origin alone to another, nothing from https to http. A font names its sheet. An address typed and a link of light's own pages send none. `<meta name="referrer">`, the `Referrer-Policy` header and `referrerpolicy` attributes are not read. |
+| `Origin` | On a form's POST, and on a script's request where the standard asks for it. |
+
+A link opened in a tab of its own (the command key, the middle button) is the player's own navigation: it says
+`Sec-Fetch-Site: none` and no `Referer`. A font is asked for as a picture is (`no-cors`, no `Origin`).
+
+Scripts read the same: `navigator.userAgent`, `appVersion` (the User-Agent after `Mozilla/`), `language` and
+`languages` (those of `Accept-Language`), `platform` (`MacIntel`, `Win32`, `Linux x86_64`), `hardwareConcurrency`
+(the machine's logical cores), `cookieEnabled` (the setting), and the constants every browser answers (`appName`
+`Netscape`, `appCodeName` `Mozilla`, `product` `Gecko`, `vendor` empty). `plugins` and `mimeTypes` are empty,
+`pdfViewerEnabled` and `javaEnabled()` false, `maxTouchPoints` 0, `doNotTrack` null, `onLine` always true. There is no
+`deviceMemory`. `navigator.webdriver` is true when light is driven by something else than a person at its window:
+ember's automation server (`EMBER_AUTOMATION`), a capture with its scripted input (`EMBER_CAPTURE…`) or a hidden
+window (`EMBER_HIDDEN`).
+
+light is not told its monitor's size, so `screen.width`, `height`, `availWidth` and `availHeight` are the window's,
+as `outerWidth` and `outerHeight`; `screenX` and `screenY` are where the window is, `innerWidth` and `innerHeight`
+the page's view, and `devicePixelRatio` the pixels a pixel of the page is drawn with (the display's scale times the
+zoom). `Date` and `Intl` use the system's time zone.
 
 ## Downloads
 
@@ -260,9 +330,21 @@ not given one keeps them in memory.
   not read, and an icon font that writes its icons as words (ligatures, as Material Icons) shows the words. A font
   of another site is used whatever its `Access-Control-Allow-Origin`, where a browser refuses it without one.
   The fonts of a sheet reached by `@import` are not fetched, as the sheet is not. light keeps its own
-  `User-Agent`: Google Fonts answers it with TrueType files of whole families, where it gives browsers WOFF2 cut
+  `User-Agent`, which names no other browser: Google Fonts answers it with TrueType files of whole families, where it gives browsers WOFF2 cut
   by `unicode-range`.
-- It sends a form with a GET only, and no credentials: a page that asks to sign in (401, 407) says so and stops.
+- It sends a form with a GET or a POST, as `application/x-www-form-urlencoded` or `text/plain`, in the page's
+  encoding: the controls of the form in the page's order (those its `form` attribute gives it included), the
+  button that was pressed and no other, no disabled control and no unchecked box, with the `formaction`,
+  `formmethod` and `formenctype` of that button. A POST says its `Origin` and its `Referer` (the whole address
+  within an origin, the origin alone to another, nothing from `https` to `http`), carries no `SameSite=Lax` cookie
+  to another site, and is a row of the Network panel. A redirect that answers it is followed with a GET after a
+  301, a 302 or a 303 and with the form again after a 307 or a 308, of the origin `null` to another origin. A form
+  is sent once: Reload, Back and Forward fetch the page a POST gave with a GET, and never send the form again. A
+  POST always goes in the tab of its page. What is not sent is a warning in the Console: a `multipart/form-data`
+  form, and so a file (a file field sends an empty name otherwise), and a form of a dialog (`method="dialog"`). An
+  `accept-charset`, a `_charset_` field and the place an `<input type="image">` was clicked at are not read, and
+  the Network panel does not show what a POST carried: a HAR file saved from it does.
+- It sends no credentials: a page that asks to sign in (401, 407) says so and stops.
 - Its cookies follow the rules of RFC 6265bis, with these limits: no partitioned cookies (CHIPS), no Cookie Store
   API, no `Set-Cookie` from a `<meta http-equiv>`, no cookie without a name. A cookie holds 4,096 bytes, a site
   180 cookies, the jar 3,000, and none lasts over 400 days; the least lately sent go first. A `Secure` cookie
@@ -281,37 +363,115 @@ not given one keeps them in memory.
   that fills the slot `sizes` gives in the view, at one pixel a point (`img.currentSrc` reads it). It is chosen as
   the page is built and when a script changes the `img`, not again on a resize; a `media` other than `min-width`
   and `max-width` does not hold, and a `<source>` a script changes is not looked at again.
+- **Local network**: a page asks only addresses as public as the one it came from. One that came from the
+  Internet reaches neither the network around this machine (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
+  `169.254.0.0/16`, `100.64.0.0/10`, `fc00::/7`, `fe80::/10` and the other addresses the Internet does not route)
+  nor this machine (`127.0.0.0/8`, `::1`, `0.0.0.0/8`); one that came from the local network does not reach this
+  machine; one of this machine, a file and a page of light's reach everything. It holds for all a page asks for by
+  itself: its pictures, sheets, fonts and scripts, what its scripts fetch, a redirect of any of these, a refresh,
+  and a move or a form its scripts begin with no click of yours. It is checked on the address a name resolves
+  to, as the connection opens, so a public name that turns to `127.0.0.1` is refused too, and a page's requests
+  never share a connection opened for you. What is refused is a blocked row of the Network panel, and for a
+  script's request a line of the Console. Where you go yourself is not held back: an address typed, a bookmark,
+  a link or a button you click, and the redirects of these (a public page you open may so redirect you to your
+  router). There is no prompt and no `Access-Control-Allow-Private-Network`: the setting "Let pages reach this
+  machine and the local network" turns the whole protection off. Through a proxy (`HTTP_PROXY`, `HTTPS_PROXY`)
+  the address that answers is the proxy's, so only an address written in numbers, or `localhost`, is refused, a
+  name that resolves to a private address is not, and every page counts as one of the Internet.
 - It does not scan what it downloads, and neither pauses nor resumes a download.
 - It zooms web pages only, not its own pages. The keys zoom one tab; the setting is the zoom of the others.
 - It colours no syntax in a source, and completes no address from the history.
 - A Control+click is not a right click on macOS.
+- A link with `target="_blank"` opens in the tab it is in, as any other; Cmd+click opens it in a new one. A
+  Shift+click opens no window.
 - It draws what ember's ui draws. What is missing is listed in ember's guide:
   [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
 
 ## Limits of its JavaScript
 
-What runs: classic scripts, inline and `src`, in document order, with `defer` and `async`; `on…` attributes; the
+What runs: classic scripts, inline and `src`, in document order, with `defer` and `async`; modules (below);
+`on…` attributes; the
 DOM (the tree as the parser made it: comments, the doctype, text, `svg`, `noscript`, `template` and its content,
 `script` and `style` where the page has them, every attribute as written; classes, `style`, `dataset`, `innerHTML`
 and `outerHTML` written as browsers write them, selectors, forms' values), which a framework hydrates (tested with
 React 18); events with
 capture, bubbling and `preventDefault`; `DOMContentLoaded` and `load`; timers, microtasks,
-`requestAnimationFrame`; `fetch` and `XMLHttpRequest`; `getBoundingClientRect` and the `offset…` and `client…`
+`requestAnimationFrame`; `fetch`, `XMLHttpRequest` and `navigator.sendBeacon` (below); `getBoundingClientRect` and the `offset…` and `client…`
 sizes; stylesheets (a `<style>` or a `<link rel="stylesheet">` added, edited, moved or removed by a script, its
 `sheet` with `cssRules`, `insertRule` and `deleteRule`, a rule's `selectorText` and `style`, `document.styleSheets`,
 `new CSSStyleSheet()` with `adoptedStyleSheets`, `CSS.supports`), applied once a frame; `document.fonts` (`ready`, `status`, `check()`, `load()`, `loading` and `loadingdone`; it lists no `FontFace` and takes none); `getComputedStyle`; `localStorage` and `sessionStorage`; `history.pushState` and `popstate`; `MutationObserver`,
-`CustomEvent`, `URL`, `TextEncoder`, `atob`. One context a page, closed when the tab leaves it.
+`CustomEvent`, `URL`, `TextEncoder`, `atob`; messages (`MessageChannel` and its ports, a port sent through a port,
+`window.postMessage` with its `targetOrigin`, `BroadcastChannel`, `structuredClone` with `transfer`). One context a
+page, closed when the tab leaves it.
+
+What scripts send, by the Fetch Standard: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` and methods
+of their own (`CONNECT`, `TRACE` and `TRACK` throw), with a body that is a string, a `URLSearchParams`, a `FormData`
+(as `multipart/form-data`, its `Blob` and `File` values as files), a `Blob`, an `ArrayBuffer` or a typed array,
+each with the `Content-Type` it implies unless the script names one, and the headers the script sets but those
+that are the browser's (`Cookie`, `Host`, `Origin`, `Referer`, `Content-Length`, `Sec-…`, `Proxy-…`…), which are
+dropped. light says the `Origin` and the `Referer` itself. A request to the page's own origin goes straight. To
+another origin (`mode: "cors"`, the default) a simple request is sent and its answer given to the script only if
+its `Access-Control-Allow-Origin` allows the page, with `Access-Control-Allow-Credentials: true` and no wildcard
+when the request has credentials; any other request is first asked for with a preflight `OPTIONS`, and sent only
+if the answer allows its method and its headers (the answer is remembered for its `Access-Control-Max-Age`, 5
+seconds unsaid, 10 minutes at most). Of another origin's answer a script reads the body and the headers every
+answer may show, with those `Access-Control-Expose-Headers` names. `mode: "no-cors"` sends a simple request and
+gives an opaque answer (status 0, nothing to read); `mode: "same-origin"` sends nothing to another origin.
+`credentials` (`withCredentials` for an `XMLHttpRequest`) says whether the request carries cookies and keeps
+those its answer sets: `same-origin` (the default) for the page's own origin only, `include` for any, `omit` for
+none; the jar's own rules hold over it (no cookie to a third party unless the setting allows them, and then no
+`SameSite=Lax` or `Strict` one). `redirect` is `follow`, `error` or `manual`; each hop of a redirect is checked
+as a request of its own, and one that goes from another origin to a third is sent as of the origin `null`. An
+`https` page sends nothing to an `http` address but this machine's (`localhost`, `127.0.0.1`). `sendBeacon` is a
+`POST` with credentials that goes on once the page is left, as a `fetch` with `keepalive` does, up to 64 KiB. An
+`AbortSignal` stops a request, an `XMLHttpRequest`'s `timeout` too. What is blocked is a network error for the
+script (`TypeError: Failed to fetch`, an `error` event), told in the Console and listed in the Network panel.
+
+Modules, by the HTML Standard: `<script type="module">`, inline and `src`, run once the page is read, in the
+order of the page among the `defer` scripts, an `async` one when it is ready; a `nomodule` script is not run.
+`import` and `export` are the engine's own: the whole graph is fetched first, each address once a page whoever
+imports it, then linked and run in order, with cycles, live bindings and an `await` at the top holding the
+modules that import it. A specifier is an address (`./`, `../`, `/` or a whole one, read from the module's own
+address after its redirects) or a name of the page's import maps (`<script type="importmap">`, `imports` and
+`scopes`); any other is a `TypeError`. `import()` works in modules and in classic scripts, `import.meta.url` and
+`import.meta.resolve()` too, and so does a JSON module (`with { type: "json" }`). A `<link rel="modulepreload">`
+fetches its module ahead. A module is asked for as a `fetch` in `cors` mode is, with the page's cookies for its
+own origin alone unless `crossorigin="use-credentials"`: another origin's is run only if it shares it with the
+page, and only an answer of a JavaScript type is (a JSON one for a JSON module). What stops a module (it was not
+found, is not shared, is of another type, does not read, imports what nothing exports, throws) is said once in
+the Console with its address and its line, fires `error` on its script element when it was not fetched, and
+stops no other script. Modules are rows of the Network panel, as scripts.
 
 What does not:
 
-- **Modules** (`type="module"`, `import()`), workers, service workers, WebSockets, iframes,
-  shadow trees, custom elements, canvas contexts, WebGL, media, IndexedDB, XPath. A module is skipped and the
-  Console says so; the others are absent or answer with nothing. An `svg` is in the tree and scripts change it:
+- **Modules**: the engine's binding tells light neither where a module's syntax error is when the text is one
+  only a module may be (the Console then names the address, no line), nor of an `import()`: light finds the
+  `import(` of a script by asking the engine's own parser about each, so one written in an `on…` attribute, in
+  `eval`, in `new Function` or at the Console's line is rejected, as is one of a classic script that is not
+  strict code or is over what light checks (128 MB of parsing). `import.meta` is filled by the module's first
+  statement, so a function of a module in a cycle called before its module ran reads none. No CSS module, no
+  `integrity`, no `referrerpolicy` (a module says the page as its referrer), no import map with a `src`, and an
+  import map counts whenever it comes, the first to name a specifier kept. A `modulepreload` fetches its module,
+  not what it imports. The page's address, not its `<base>`, is what an inline module's specifiers are read from.
+- Workers, service workers, WebSockets, iframes,
+  shadow trees, custom elements, canvas contexts, WebGL, media, IndexedDB, XPath: absent, or answering with
+  nothing. An `svg` is in the tree and scripts change it:
   it is drawn as one picture, again the frame after a change, with `currentColor` the colour of its text, but the
   page's rules do not reach the shapes inside it (`svg path { fill: … }`), and `<use>`, text, clipping, masks and
   filters are not drawn; scripts run once the whole page is read, so `document.write` writes nothing.
-- **Requests** other than GET and HEAD: a script's POST is refused, with a warning in the Console. The headers a
-  script sets are not sent. Another origin's answer is readable only with a matching `Access-Control-Allow-Origin`.
+- **Requests**: an answer's bytes reach a script as they came (`arrayBuffer()`, `bytes()`, `blob()`, an
+  `XMLHttpRequest` of type `arraybuffer` or `blob`), and are decoded where it asks for text: as UTF-8 by `text()`
+  and `json()` whatever the answer says of its encoding, by the answer's charset (or `overrideMimeType`'s) for
+  `responseText`. It comes whole, with no stream (`body` is `null`) and no progress events while it comes or
+  while a body is sent; a request's body is no stream either. `formData()` reads an
+  `application/x-www-form-urlencoded` body only, a `blob:` address of `URL.createObjectURL` is fetched by
+  nothing, and a `TextDecoder` decodes UTF-8 only. No synchronous `XMLHttpRequest`, no
+  `responseXML`, no `cache` modes and no HTTP cache, no `integrity`, no `referrerPolicy` (the default policy is
+  the only one), no `priority`. A page of no origin (`light://`, a file) may read only what is shared with all
+  (`Access-Control-Allow-Origin: *`), not what names the origin `null`. A `Blob` or a `FormData` is sent whole from
+  memory, and a `FormData` made from a form has no file of a file field. A `no-cors` answer is not checked against `Cross-Origin-Resource-Policy`, and the
+  redirect a `manual` request stopped at cannot be followed by a navigation. No Service Worker, WebSocket or
+  EventSource.
 - **Cookies**: `document.cookie` reads and sets the browser's cookies for the page, those marked `HttpOnly` kept
   from it, and `navigator.cookieEnabled` says whether the setting is on. A script reads no `Set-Cookie` header of
   what it fetched.
@@ -321,6 +481,12 @@ What does not:
   hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element added since
   the last frame answers little until the next. A rule's `style` is its text read again: no `CSSKeyframeRule`,
   no `CSSStyleSheet` of an `@import`, no `ownerRule`.
+- **Messages** stay in their page: with no iframe, worker or other window to post to, `window.postMessage` reaches
+  the window itself, and a `BroadcastChannel` the other channels of the same page, not another tab's. A message is
+  copied by light's own structured clone, written in JavaScript (V8's is not within reach): primitives, plain
+  objects and arrays, `Date`, `RegExp`, `Map`, `Set`, `ArrayBuffer` and its views, errors, `Blob`, with their cycles;
+  an `ArrayBuffer` transferred is copied, then detached. Each message is a task of its own among the timers, so it
+  waits for the next frame, and the promises its handler settles run once the frame's tasks have (as for a timer).
 - **Scrolling** from a script (`scrollTo`, `scrollX`…), `blur()`, `IntersectionObserver` and `ResizeObserver`
   (each tells once, as if everything were in view), and the observers of performance.
 - **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys.
@@ -346,7 +512,9 @@ at `light://about`.
 Every request goes through one `http.RoundTripper` (`pkg/netlog`), which is how the developer tools see them all,
 wrapped in another (`pkg/cookies`) that adds the cookies of the one jar and takes those each answer sets, a redirect's
 hops each on their own. A request's context says which page it is for (`cookies.Within`), or which page a
-navigation began on (`cookies.From`): that is how a third party and a cross-site request are known.
+navigation began on (`cookies.From`): that is how a third party and a cross-site request are known. Under them
+all, `pkg/localnet` opens the connections of a page's requests (`localnet.From`) only to addresses the page may
+reach.
 
 | Package | What it holds |
 |---------|---------------|
@@ -365,10 +533,12 @@ navigation began on (`cookies.From`): that is how a third party and a cross-site
 | `pkg/content` | Plain Go: which kind of answer a media type is (one table), file names for saving. |
 | `pkg/fetch` | Plain Go: one GET with redirects, limits, charset and the Refresh header, read whole or as a stream. |
 | `pkg/netlog` | Plain Go: the record of a tab's requests, and the transport that fills it. |
+| `pkg/har` | Plain Go: a tab's requests as a HAR 1.2 file, sanitized or not, and the check that a file is one. |
 | `pkg/script` | The JavaScript engine's boundary: V8 with the `v8` tag, nothing without. No ember. |
 | `pkg/console` | Plain Go: what a tab's scripts said, capped, a line said again counted, filtered by level and text. |
 | `pkg/storage` | Plain Go: what pages keep by origin, and its file. |
 | `pkg/cookies` | Plain Go: the cookie jar, its rules, the transport that applies them, and its file. |
+| `pkg/localnet` | Plain Go: the space of an address (public, local, loopback), and the transport that keeps pages from more private ones. |
 
 Dependencies go one way: `cmd` → `internal` → `pkg`.
 

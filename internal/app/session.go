@@ -28,8 +28,11 @@ type load struct{ cancel context.CancelFunc }
 // while they run, what sites keep for as long as the tab, and its
 // developer tools.
 type session struct {
-	pages   map[string]*web.Page
-	loads   map[string]*load
+	pages map[string]*web.Page
+	loads map[string]*load
+	// posts are the forms on their way to an address with a POST, each
+	// sent by the load of its address that follows, once.
+	posts   map[string]web.Submission
 	log     *netlog.Log
 	said    *console.Lines
 	scripts *running
@@ -48,10 +51,12 @@ func (s *Screen) session() *session { return s.sessionOf(s.browser.Tab()) }
 func (s *Screen) sessionOf(tab *tabs.Tab) *session {
 	if s.sessions[tab] == nil {
 		s.sessions[tab] = &session{
-			pages: map[string]*web.Page{}, loads: map[string]*load{}, log: netlog.New(s.config.Requests),
+			pages: map[string]*web.Page{}, loads: map[string]*load{}, posts: map[string]web.Submission{},
+			log:  netlog.New(s.config.Requests),
 			said: console.New(consoleLines), kept: map[string]dom.Storage{},
 			tools: devtools.State{Preserve: s.config.PreserveLog},
 		}
+		s.keepBodies(s.sessions[tab])
 	}
 	return s.sessions[tab]
 }
@@ -76,8 +81,11 @@ func (s *Screen) forget() {
 
 // fetched is the page the shown tab has for an address of the web, nil
 // until it landed: it starts its load the first time it is asked for.
-func (s *Screen) fetched(address string) *web.Page {
-	tab, session := s.browser.Tab(), s.session()
+func (s *Screen) fetched(address string) *web.Page { return s.fetch(s.browser.Tab(), address) }
+
+// fetch is fetched for a tab, shown or not.
+func (s *Screen) fetch(tab *tabs.Tab, address string) *web.Page {
+	session := s.sessionOf(tab)
 	page := session.pages[address]
 	if page != nil || session.loads[address] != nil {
 		return page
@@ -89,11 +97,18 @@ func (s *Screen) fetched(address string) *web.Page {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
 	l := &load{cancel}
 	session.loads[address] = l
-	links := web.Links{Open: s.linked, Over: s.point, Save: s.download}
-	loader, ctx := s.current(), s.began(ctx)
+	links := web.Links{Open: s.followed, Over: s.point, Save: s.download, Post: s.posted, Unsent: session.unsent}
+	loader, ctx := s.current(), netlog.With(s.began(ctx), session.log, "navigation", netlog.Document)
+	sent, posting := session.posts[address]
+	delete(session.posts, address)
 	go func() {
 		defer cancel()
-		loaded := loader.Load(netlog.With(ctx, session.log, "navigation", netlog.Document), address, links)
+		var loaded *web.Page
+		if posting {
+			loaded = loader.Post(ctx, sent, links)
+		} else {
+			loaded = loader.Load(ctx, address, links)
+		}
 		s.landed <- func() { s.land(tab, address, l, loaded) }
 	}()
 	return nil
@@ -116,7 +131,7 @@ func (s *Screen) land(tab *tabs.Tab, address string, l *load, page *web.Page) {
 		return
 	}
 	if page.Kind == content.Download && page.Err == nil {
-		s.download(page.Address, "")
+		s.save(page.Address, "", "")
 		if tab.Current() == address && tab.CanBack() {
 			tab.Drop()
 			s.show()
@@ -134,6 +149,10 @@ func (s *Screen) land(tab *tabs.Tab, address string, l *load, page *web.Page) {
 	}
 	if page.Err == nil && tab.Current() == page.Address {
 		s.record(page.Address, page.Title)
+	}
+	if tab != s.browser.Tab() {
+		s.showTabs()
+		return
 	}
 	s.show()
 }

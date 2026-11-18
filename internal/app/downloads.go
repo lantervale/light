@@ -43,7 +43,7 @@ type Files interface {
 // run before.
 func (s *Screen) restoreDownloads() {
 	s.saves = downloads.New(s.downloadsDir(), opener(s.open))
-	s.announced = map[int]downloads.State{}
+	s.announced, s.archived = map[int]downloads.State{}, map[int]bool{}
 	s.saved = &store{name: downloadsFile, write: func(path string) error {
 		return downloads.Save(path, s.saves.Items())
 	}}
@@ -62,7 +62,13 @@ func (s *Screen) restoreDownloads() {
 // download saves what address gives, under name when one is given, as
 // a request of the shown tab.
 func (s *Screen) download(address, name string) {
-	s.saves.Start(netlog.With(context.Background(), s.session().log, "download", netlog.Other), address, name)
+	s.save(address, name, shownBy(s.browser.Tab().Current()))
+}
+
+// save is download for what the page at from led to, "" for none.
+func (s *Screen) save(address, name, from string) {
+	ctx := s.saving(netlog.With(context.Background(), s.session().log, "download", netlog.Other), from)
+	s.saves.Start(ctx, address, name)
 }
 
 // sourceShown is the shown tab's page when it has a text to save: an
@@ -149,7 +155,7 @@ func (s *Screen) announce(items []downloads.Item) {
 			continue
 		}
 		s.announced[item.ID] = item.State
-		s.session().note = said(item)
+		s.session().note = s.said(item)
 	}
 	s.say()
 }
@@ -319,7 +325,8 @@ func (s *Screen) actions(item downloads.Item) *ui.Node {
 	case downloads.Failed, downloads.Cancelled:
 		if onTheWeb(item.Address) {
 			act("retry", "Retry", func() {
-				s.saves.Retry(netlog.With(context.Background(), s.session().log, "download", netlog.Other), item.ID)
+				s.saves.Retry(s.saving(netlog.With(context.Background(), s.session().log, "download", netlog.Other), ""),
+					item.ID)
 			})
 		}
 		fallthrough
