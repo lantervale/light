@@ -10,6 +10,7 @@ import (
 	_ "image/jpeg"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	_ "golang.org/x/image/webp" // and WebP
@@ -18,6 +19,7 @@ import (
 	"github.com/lantervale/light/pkg/content"
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
+	"github.com/lantervale/light/pkg/frames"
 	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/localnet"
 	"github.com/lantervale/light/pkg/netlog"
@@ -27,6 +29,7 @@ import (
 const (
 	byRefresh  = "refresh"
 	byDocument = "document"
+	byFrame    = "frame"
 	byPicture  = "picture"
 )
 
@@ -59,6 +62,53 @@ type Loader struct {
 	// Viewport is the size of the view pages show in, which an img's
 	// srcset is chosen for; a common one without it.
 	Viewport func() (width, height float32)
+	// Frame is the frame the pages are loaded for, nil for a tab's own.
+	Frame *Frame
+}
+
+// Inline is the document of a frame's srcdoc, built as a page of the
+// web is: what it links to is read from base, the address of the
+// document that holds the frame, whose space it shares.
+func (l *Loader) Inline(ctx context.Context, base *url.URL, space localnet.Space, source string, links Links) *Page {
+	page := &Page{Address: "about:srcdoc", Status: http.StatusOK, Kind: content.Page, Media: "text/html",
+		Space: space}
+	l.build(ctx, page, &fetch.Answer{Address: page.Address, URL: base, Body: []byte(source), Space: space}, links)
+	return page
+}
+
+// by is who asks for what the documents the Loader loads need.
+func (l *Loader) by() string { return l.named(byDocument) }
+
+// named is who asks for something of a page, own for a tab's: what a
+// frame's document needs is asked by the frame.
+func (l *Loader) named(own string) string {
+	if l.Frame != nil {
+		return byFrame
+	}
+	return own
+}
+
+// destination is what the documents the Loader loads are for.
+func (l *Loader) destination() identity.Destination {
+	if l.Frame != nil {
+		return identity.Iframe
+	}
+	return identity.Document
+}
+
+// within is ctx for the requests the document at page makes: a third
+// party's by the tab's page.
+func (l *Loader) within(ctx context.Context, page *url.URL) context.Context {
+	switch f := l.Frame; {
+	case f == nil || f.Top == nil:
+		return cookies.Within(ctx, page)
+	case f.Opaque:
+		return cookies.Without(ctx)
+	case frames.Partition(f.Top, append(slices.Clip(f.Chain), page)) != "":
+		return cookies.Framed(ctx, f.Top, true)
+	default:
+		return cookies.Within(ctx, f.Top)
+	}
 }
 
 // Local is the page of light's own at address, built from its HTML as
@@ -104,6 +154,12 @@ func (l *Loader) load(ctx context.Context, address string, form *fetch.Form, lin
 			return &Page{Address: address, Err: err}
 		}
 		form = nil
+		if l.Frame != nil && l.Frame.Admit != nil {
+			if err = l.Frame.Admit(stream.Header, stream.URL); err != nil {
+				_ = stream.Close()
+				return &Page{Address: stream.Address, Status: stream.Status, Err: err}
+			}
+		}
 		if file := saved(stream); file != nil {
 			return file
 		}
@@ -123,15 +179,18 @@ func (l *Loader) load(ctx context.Context, address string, form *fetch.Form, lin
 			return &Page{Address: answer.Address,
 				Err: fmt.Errorf("it refreshes to %s, and only http and https addresses are opened", to)}
 		}
-		ctx = localnet.From(cookies.From(netlog.As(ctx, byRefresh, netlog.Document), answer.URL), answer.Space)
-		address, ctx = to, refreshing(ctx, answer.URL)
+		ctx = localnet.From(netlog.As(ctx, byRefresh, netlog.Document), answer.Space)
+		if l.Frame == nil {
+			ctx = cookies.From(ctx, answer.URL)
+		}
+		address, ctx = to, l.refreshing(ctx, answer.URL)
 	}
 }
 
 // refreshing is ctx for the navigation a page's refresh begins: the
 // page's doing, not the user's, and from the page.
-func refreshing(ctx context.Context, page *url.URL) context.Context {
-	return fetch.Asking(fetch.Referring(ctx, ""), identity.Request{Destination: identity.Document, Initiator: page})
+func (l *Loader) refreshing(ctx context.Context, page *url.URL) context.Context {
+	return fetch.Asking(fetch.Referring(ctx, ""), identity.Request{Destination: l.destination(), Initiator: page})
 }
 
 // accepted is what a navigation says it accepts.
@@ -203,7 +262,7 @@ func (l *Loader) read(ctx context.Context, answer *fetch.Answer, links Links) *P
 }
 
 // build reads an HTML answer and builds its Document, its sheets and its
-// icon fetched meanwhile.
+// icon fetched meanwhile: a frame's document has no icon.
 func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, links Links) {
 	page.Source = answer.Text()
 	root, err := html.ParseWithOptions(strings.NewReader(cut(page.Source)), html.ParseOptionEnableScripting(l.Scripts))
@@ -216,13 +275,17 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	}
 	b := newBuilder(l, answer.URL, links)
 	b.encode = encoderOf(answer.Body, answer.Header.Get("Content-Type"))
-	ctx = fetch.By(cookies.Within(netlog.As(ctx, byDocument, netlog.Other), answer.URL), answer.URL)
+	ctx = fetch.By(l.within(netlog.As(ctx, l.by(), netlog.Other), answer.URL), answer.URL)
 	ctx = localnet.From(ctx, answer.Space)
 	icon := make(chan []byte, 1)
-	go func() { icon <- b.icon(ctx, root) }()
+	if l.Frame != nil {
+		icon <- nil
+	} else {
+		go func() { icon <- b.icon(ctx, root) }()
+	}
 	b.load(ctx, root)
 	page.Title, page.Doc, page.Icon = titleOf(root), b.document(ctx, root), <-icon
-	page.Scripts, page.Tree = b.ordered(), b.tree
+	page.Scripts, page.Tree, page.Frames, page.Base = b.ordered(), b.tree, b.frames, b.base
 	if err = ctx.Err(); err != nil {
 		page.Err = err
 	}
@@ -244,7 +307,7 @@ func refresh(answer *fetch.Answer, scripts bool) (string, bool) {
 // Picture gets the picture at address for a page to draw or the player
 // to save.
 func (l *Loader) Picture(ctx context.Context, address string) ([]byte, error) {
-	answer, err := l.Client.Get(asking(netlog.As(ctx, byPicture, netlog.Image), identity.Image), address,
+	answer, err := l.Client.Get(asking(netlog.As(ctx, l.named(byPicture), netlog.Image), identity.Image), address,
 		identity.Accept(identity.Image))
 	switch {
 	case err != nil:

@@ -14,10 +14,12 @@ type Destination string
 
 const (
 	Document Destination = "document"
-	Style    Destination = "style"
-	Script   Destination = "script"
-	Image    Destination = "image"
-	Font     Destination = "font"
+	// Iframe is the document of a frame of a page.
+	Iframe Destination = "iframe"
+	Style  Destination = "style"
+	Script Destination = "script"
+	Image  Destination = "image"
+	Font   Destination = "font"
 	// Empty is a script's fetch or XMLHttpRequest, and a download.
 	Empty Destination = "empty"
 )
@@ -56,7 +58,7 @@ func (q Request) mode() Mode {
 	switch {
 	case q.Mode != "":
 		return q.Mode
-	case q.Destination == Document:
+	case q.Destination == Document || q.Destination == Iframe:
 		return Navigate
 	case q.Destination == Empty:
 		return CORS
@@ -68,7 +70,7 @@ func (q Request) mode() Mode {
 // reads, as browsers list theirs.
 func Accept(dest Destination) string {
 	switch dest {
-	case Document:
+	case Document, Iframe:
 		return "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 	case Image:
 		return "image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"

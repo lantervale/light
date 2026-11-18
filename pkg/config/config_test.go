@@ -15,7 +15,7 @@ func TestTheDefaultsAreWhatLightDidBeforeItHadSettings(t *testing.T) {
 	want := config.Config{
 		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
 		Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
-		JavaScript: true, Cookies: true,
+		JavaScript: true, Frames: true, Cookies: true,
 	}
 	if c != want {
 		t.Fatalf("the defaults are %+v, want %+v", c, want)

@@ -106,8 +106,8 @@ func TestBodiesAreKeptAsTheConsumerReadsThem(t *testing.T) {
 	if want := int64(len(big) + len(post.Sent) + len(post.Body)); l.Held() != want {
 		t.Fatalf("the log holds %d bytes, want %d", l.Held(), want)
 	}
-	if got := post.Request.Get("Accept-Encoding"); got != netlog.Encodings {
-		t.Fatalf("the row says the request accepted %q, and %s was asked for", got, netlog.Encodings)
+	if got := post.Request.Get("Accept-Encoding"); got != netlog.Encodings("http") {
+		t.Fatalf("the row says the request accepted %q, and %s was asked for", got, netlog.Encodings("http"))
 	}
 }
 

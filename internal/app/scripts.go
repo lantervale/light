@@ -163,12 +163,14 @@ func (s *Screen) click(live *running) {
 	if !pressed && !released {
 		return
 	}
-	at, over := s.doc.PointerOn(s.host)
+	at, over := s.onPage()
 	over = over && !s.overlaid()
 	var target *ui.Node
 	if over {
 		s.picked++
-		target = live.page.Doc.ElementAt(at)
+		if target = live.page.Doc.ElementAt(at); live.page.Doc.Frame(target) != nil {
+			target = nil
+		}
 	}
 	switch {
 	case pressed:

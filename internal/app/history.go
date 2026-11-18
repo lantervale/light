@@ -18,17 +18,32 @@ func (s *Screen) visit(address string) {
 	}
 }
 
-func (s *Screen) record(address, title string) {
-	if !s.config.KeepHistory {
+func (p *Profile) record(address, title string) {
+	if !p.config.KeepHistory {
 		return
 	}
-	s.visits.Add(address, title, s.opts.Now())
-	s.history.touch()
+	p.visits.Add(address, title, p.opts.Now())
+	p.rewrite()
 }
 
-func (s *Screen) clearHistory() {
-	s.visits.Clear()
-	s.history.touch()
+func (p *Profile) clearHistory() {
+	p.visits.Clear()
+	p.rewrite()
+}
+
+// rewrite has the history that changed written, and listed again in
+// the windows that show it.
+func (p *Profile) rewrite() {
+	p.recorded++
+	p.history.touch()
+}
+
+// watchHistory lists the history again on the page that shows it, once
+// it changed, in this window or another.
+func (s *Screen) watchHistory() {
+	if s.relist != nil && s.visitsSeen != s.recorded {
+		s.relist()
+	}
 }
 
 // historyBody is the history page: a field that filters it, a button
@@ -47,6 +62,7 @@ func historyBody(s *Screen) []*ui.Node {
 		body = append(body, ui.P(ui.ID("history-problem"), ui.Text("The history's file is not in use: "+
 			s.unreadable.Error()+".")))
 	}
+	s.relist = func() { s.listVisits(list, s.doc.Value(filter)) }
 	s.listVisits(list, "")
 	return append(body, list)
 }
@@ -55,6 +71,7 @@ func historyBody(s *Screen) []*ui.Node {
 // then each visit's time, icon, title and address, and a button that
 // removes it.
 func (s *Screen) listVisits(list *ui.Node, filter string) {
+	s.visitsSeen = s.recorded
 	empty(list)
 	days := s.visits.Days(filter)
 	if len(days) == 0 {
@@ -65,7 +82,7 @@ func (s *Screen) listVisits(list *ui.Node, filter string) {
 		for _, v := range day.Visits {
 			list.Append(s.visitRow(v, func() {
 				s.visits.Remove(v)
-				s.history.touch()
+				s.rewrite()
 				s.listVisits(list, filter)
 			}))
 		}

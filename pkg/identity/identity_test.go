@@ -121,6 +121,7 @@ func TestLanguagesAreReadFromWhatTheSystemSays(t *testing.T) {
 func TestWhatEachDestinationAccepts(t *testing.T) {
 	for dest, want := range map[identity.Destination]string{
 		identity.Document: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+		identity.Iframe:   "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
 		identity.Image:    "image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5",
 		identity.Style:    "text/css,*/*;q=0.1",
 		identity.Script:   "*/*",
@@ -260,6 +261,23 @@ Referer: https://site.test/page
 Sec-Fetch-Dest: document
 Sec-Fetch-Mode: navigate
 Sec-Fetch-Site: same-origin
+Upgrade-Insecure-Requests: 1`},
+		{"a frame of another site", nil, &identity.Request{Destination: identity.Iframe,
+			Initiator: at(t, "https://site.test/page?q=1")}, "https://video.test/embed/1", `
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+Referer: https://site.test/
+Sec-Fetch-Dest: iframe
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: cross-site
+Upgrade-Insecure-Requests: 1`},
+		{"a link clicked in a frame", nil, &identity.Request{Destination: identity.Iframe, User: true,
+			Initiator: at(t, "https://video.test/embed/1")}, "https://video.test/embed/2", `
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+Referer: https://video.test/embed/1
+Sec-Fetch-Dest: iframe
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
 Upgrade-Insecure-Requests: 1`},
 		{"a navigation redirected to the clear", http.Header{"Referer": {"https://site.test/page"},
 			"Sec-Fetch-Site": {"same-origin"}, "Sec-Fetch-User": {"?1"}, "Sec-Fetch-Mode": {"navigate"},

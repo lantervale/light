@@ -305,3 +305,32 @@ func TestAClientFollowsAsManyRedirectsAsItIsSetUpTo(t *testing.T) {
 		t.Errorf("a client follows %d redirects unless told", got)
 	}
 }
+
+func TestEveryAddressOfACheckedRequestIsAskedBeforeItIsSent(t *testing.T) {
+	srv := site(t)
+	c := fetch.New(nil)
+	var asked []string
+	refuse := errors.New("not there")
+	check := func(stop string) func(*url.URL) error {
+		return func(to *url.URL) error {
+			asked = append(asked, to.Path)
+			if to.Path == stop {
+				return refuse
+			}
+			return nil
+		}
+	}
+	a, err := c.Get(fetch.Checked(t.Context(), check("")), srv.URL+"/found", "*/*")
+	if err != nil || a.URL.Path != "/pages/landing" || strings.Join(asked, " ") != "/found /pages/landing" {
+		t.Fatalf("checked and let through: %v %v, asked %v", a, err, asked)
+	}
+	asked = nil
+	if _, err = c.Get(fetch.Checked(t.Context(), check("/found")), srv.URL+"/found", "*/*"); !errors.Is(err, refuse) {
+		t.Fatalf("refused at its first address: %v", err)
+	}
+	asked = nil
+	_, err = c.Get(fetch.Checked(t.Context(), check("/pages/landing")), srv.URL+"/found", "*/*")
+	if !errors.Is(err, refuse) || len(asked) != 2 {
+		t.Fatalf("refused at the address it is redirected to: %v, asked %v", err, asked)
+	}
+}

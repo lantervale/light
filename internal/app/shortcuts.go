@@ -39,6 +39,7 @@ func (s *Screen) shortcuts() *ui.Node {
 		do         func()
 	}{
 		{"New tab", "Cmd+T", s.newTab},
+		{"New window", "Cmd+N", func() { s.newWindow(s.config.StartPage) }},
 		{"Close tab", "Cmd+W", func() { s.closeTab(s.browser.Active) }},
 		{"Address", "Cmd+L", func() { s.doc.Focus(s.address) }},
 		{reloads, "Cmd+R", s.reloadOrStop},
@@ -52,6 +53,7 @@ func (s *Screen) shortcuts() *ui.Node {
 		{"Zoom in", "Cmd+Plus", func() { s.zoom(1) }},
 		{"Zoom out", "Cmd+-", func() { s.zoom(-1) }},
 		{"Actual size", "Cmd+0", func() { s.zoom(0) }},
+		{"Quit", "Cmd+Q", func() { s.quitting = true }},
 	} {
 		menu.Append(ui.Div(ui.Attr("role", "menuitem"), ui.Attr("aria-keyshortcuts", item.keys), ui.Text(item.name),
 			ui.OnClick(item.do)))

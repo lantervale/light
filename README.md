@@ -23,8 +23,13 @@ It is a demo, not a browser to live in: see [what it does not do](#what-it-does-
 ## Highlights
 
 - 🗂️ **Tabs in the title bar**: the header sits where the system's title bar is, as a browser's does (macOS).
+- 🪟 **Windows**: Shift+click on a link or Cmd+N opens another window, with its own tabs; they share the settings,
+  the history, the cookies and the downloads, and light ends with the last one.
 - 🧭 **Navigation**: back, forward, reload and stop, an address field, a list of the open tabs, favicons.
 - 🌐 **Real pages**: an `http` or `https` address is fetched with its stylesheets, pictures and fonts, through its redirects.
+- 🪟 **Frames**: an `iframe` shows its document, another site's included, in the page: its `src` or its `srcdoc`,
+  its own sheets, pictures, links and forms. A document that refuses to be framed is not shown, and a frame gets
+  the cookies of its tab's site alone ([below](#frames)).
 - 🧾 **Other kinds of answer**: a picture alone on a dark page (PNG, JPEG, GIF, WebP, SVG, an ICO holding a PNG; a
   click switches between fitted and its own size), text kinds (CSS, JavaScript, JSON, XML, plain text…) as they were sent.
   The rest (PDF, archives, audio, video, fonts, AVIF…) is downloaded.
@@ -111,7 +116,9 @@ Cmd is Command on macOS and Control elsewhere.
 
 | Keys | What they do |
 |------|--------------|
-| Cmd+T, Cmd+W | A new tab, close the tab |
+| Cmd+T, Cmd+W | A new tab, close the tab (a window's last tab starts again on the start page) |
+| Cmd+N | A new window, on the start page |
+| Cmd+Q | Quit, whatever the windows open |
 | Cmd+L | The address field |
 | Cmd+R | Reload, or stop a page that is loading |
 | Cmd+[ and Cmd+] (Alt+Left and Alt+Right off macOS) | Back, forward |
@@ -125,12 +132,24 @@ Cmd is Command on macOS and Control elsewhere.
 | Right click | The menu of what is under the pointer; arrows, Enter and Escape work in it |
 | Cmd+click or a middle click on a link | The link in a new tab, behind the shown one |
 | Cmd+Shift+click or Shift with a middle click on a link | The link in a new tab, shown |
+| Shift+click on a link | The link in a new window |
 | Middle click on a tab | Close the tab |
 
 A tab opened by such a click stands after the shown one and those it opened already, and a page of the web loads in
 it at once. The links of light's own pages (the start page's tiles, the rows of the history) open the same way. A
 page's scripts hear a Cmd+click as a click with its keys (`metaKey`, `ctrlKey`, `shiftKey`), and may prevent it; they
 hear nothing of a middle click.
+
+## Windows
+
+Shift+click on a link, "Open link in new window" in the menu of a right click and Cmd+N open a window: the size of
+the one it comes from, a little down and right of it, with tabs of its own. The windows share one profile: the
+settings, the history, the cookies, what sites store and the downloads, so a setting changed in one window holds in
+the others at once, and the history and the downloads pages list the same in each. The tabs, the developer tools,
+the Network log and the Console are each window's own.
+
+Closing a window stops what its tabs were loading and running, and leaves the other windows; light ends with the
+last one, or at Cmd+Q, and writes its files then, once.
 
 ## The developer tools
 
@@ -165,7 +184,7 @@ and declarations ember's ui refused (those are in Warnings). A page of light's o
 ### Network
 
 - A row for each request, each hop of a redirect its own: its status on the colour of its kind, its method, its
-  domain (a padlock for `https`), its file, who asked (the navigation, the document, a picture, or the script and
+  domain (a padlock for `https`), its file, who asked (the navigation, the document, a picture, an `iframe` or its frame, or the script and
   the line of a `fetch` or an `XMLHttpRequest`), its type in a word (`html`, `css`, `js`, `json`, `png`…), the bytes
   the server sent, those read once a gzip encoding is undone, and how long it took.
 - A script's request light does not send (an `http` address asked by an `https` page, another origin asked in
@@ -246,6 +265,7 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 | Visits kept (100 to 100,000) | 2,000 | |
 | Zoom of web pages (80 to 200 %) | 100 % | |
 | Load pictures | On | |
+| Load frames (the pages other pages show inside them) | On | |
 | Run JavaScript (in a build with the `v8` tag; none runs otherwise) | On | |
 | Follow a page that refreshes elsewhere at once | On | |
 | Keep the cookies sites set, and send them back | On | |
@@ -258,7 +278,7 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 | Preserve the Network log in new tabs | Off | |
 | Requests kept in each tab's Network panel (100 to 10,000) | 1,000 | |
 
-Pictures, JavaScript and refreshes apply to pages loaded afterwards. The page also clears the history, clears the cookies and resets every setting.
+Pictures, JavaScript and refreshes apply to pages loaded afterwards; frames are loaded, or emptied, at once. The page also clears the history, clears the cookies and resets every setting.
 `--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line.
 
 ## What light tells a site
@@ -273,7 +293,7 @@ and nothing is said to exist that does not work. light sends no client hints (`S
 | `User-Agent` | `Mozilla/5.0 (<platform>) light/<version>`: the platform as browsers froze it (`Macintosh; Intel Mac OS X 10_15_7`, `Windows NT 10.0; Win64; x64`, `X11; Linux x86_64`), the version of the build, `0.1.0-alpha` for one made by hand. The settings can replace it. |
 | `Accept` | By what is asked for: a page `text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8`, a picture `image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5` (no AVIF, which light does not read), a sheet `text/css,*/*;q=0.1`, the rest `*/*`. A script's `fetch` says its own. |
 | `Accept-Language` | The system's languages (macOS: the user's preferred languages; elsewhere `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`), as browsers list them: `fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7`. `en-US,en;q=0.9` when the system names none. The settings can replace them; a script's `fetch` says its own. |
-| `Accept-Encoding` | `gzip, deflate`: the encodings light undoes. No `br`, no `zstd`. |
+| `Accept-Encoding` | `gzip, deflate`, and `br` over https: the encodings light undoes. No `zstd`. |
 | `Sec-Fetch-Dest`, `-Mode`, `-Site`, `-User` | What the request is for (`document`, `style`, `script`, `image`, `font`, `empty`), how it is made (`navigate`, `no-cors`, `cors`, `same-origin`), and from where: `none` for an address typed, a bookmark, a reload or a link of light's own pages, else `same-origin`, `same-site` or `cross-site` to the page that asks, worked out again at each redirect. `Sec-Fetch-User: ?1` only on a navigation an act of the user began: an address typed, a link clicked, a form submitted, a script's move while it hears a click. Sent to https addresses and to this machine only. |
 | `Upgrade-Insecure-Requests` | `1` on navigations. |
 | `Referer` | On every request a page makes, by the policy browsers have by default (`strict-origin-when-cross-origin`): the page's whole address within its origin, its origin alone to another, nothing from https to http. A font names its sheet. An address typed and a link of light's own pages send none. `<meta name="referrer">`, the `Referrer-Policy` header and `referrerpolicy` attributes are not read. |
@@ -295,6 +315,55 @@ light is not told its monitor's size, so `screen.width`, `height`, `availWidth` 
 as `outerWidth` and `outerHeight`; `screenX` and `screenY` are where the window is, `innerWidth` and `innerHeight`
 the page's view, and `devicePixelRatio` the pixels a pixel of the page is drawn with (the display's scale times the
 zoom). `Date` and `Intl` use the system's time zone.
+
+## Frames
+
+A page's `iframe` shows a document of its own, in ember's `iframe` element: light gives each one its own Document,
+loaded as a page is, so its sheets style nothing around it. A frame's documents are part of its tab: their requests
+are rows of the tab's Network panel, asked by `iframe` for the document and by `frame` for what it needs, and they
+are in its HAR file.
+
+- **What it shows**: its `srcdoc` when it has one, else the address of its `src`, read from the page that holds
+  it; nothing for no `src`, `about:blank`, and any address that is not `http` or `https` (a `javascript:` or
+  `data:` one runs and shows nothing, and the Console says so). A page is shown with its sheets, pictures and
+  fonts, a text as it was sent; a picture alone, a file to download and the other kinds are not, and nothing is
+  saved from a frame's address. A script that sets `src` or `srcdoc`, or adds or removes the element, is followed.
+- **No script runs in a frame** yet: its document is shown as with JavaScript off, what its `noscript` holds
+  included. The page around it keeps its own.
+- **Links and forms** of a frame open in it, with no entry in the tab's history: Back leaves the page, not the
+  frame's last document, and a reload starts every frame again from its attributes. `target="_top"` opens in the
+  tab, `_parent` in the frame around, a name in the frame of the tab that has it; `_blank` and a name no frame
+  has open in the frame itself. Cmd+click, a middle click and the menu of a right click open a frame's link in a
+  tab as they do the page's. A form is sent, with a GET or a POST, where its target says.
+- **Limits**: a tab's page holds 64 frames, 8 deep; one more stays empty, and so does a frame asked for the
+  address of a page it is itself in. The Console says which.
+- **Refusals**: a document answered with `X-Frame-Options: DENY`, or `SAMEORIGIN` when any page above it is of
+  another origin, is not shown; nor is one whose `Content-Security-Policy` has a `frame-ancestors` that does not
+  name every page above it (`'none'`, `'self'`, hosts with `*.` and ports, schemes). `frame-ancestors` decides
+  alone when it is there, `ALLOW-FROM` is read as nothing, two `X-Frame-Options` that disagree refuse. It is
+  checked on the answer's headers, after its redirects, before anything of it is read: none of its sheets or
+  pictures is asked for. The frame shows a small notice, the Console says it as Chrome does, and the request is a
+  blocked row of the Network panel.
+- **Requests**: a frame's document is asked for as browsers ask (`Sec-Fetch-Dest: iframe`, `Sec-Fetch-Site`
+  against the page that holds it, that page as `Referer`, `Sec-Fetch-User` only for a link you clicked in it). It
+  is a page's request, not yours: a public page frames neither your router nor this machine
+  ([Local network](#what-it-does-not-do)), at every hop of a redirect. Under a page that came over `https`, a frame
+  at an `http` address is not asked for, nor a redirect to one (this machine's own addresses aside).
+- **Cookies**: a frame of the page's own site, in pages of that site only, has the site's cookies. Any other is a
+  third party: it gets none unless the settings let third-party cookies in, and then only those it was set as a
+  frame under the same top-level site, kept apart (and written to `cookies.json` with that site). The same
+  widget in two sites' pages has two jars, and neither is the one of a visit to the widget's own site.
+- **Sandbox**: a frame with a `sandbox` attribute that does not say `allow-same-origin` has no origin: it and what
+  it asks for carry no cookie and keep none, and its forms say they come from `null`. Its forms are not sent
+  without `allow-forms`, its links do not leave the tab without `allow-top-navigation` (or
+  `allow-top-navigation-by-user-activation`), a `_blank` link goes nowhere without `allow-popups`, a `download`
+  link saves nothing without `allow-downloads`, and a named target reaches only frames inside it. A frame in a
+  sandboxed one is left what both allow.
+- **Not honoured**: the `frame-src` and `child-src` of the page's own Content-Security-Policy, `allow`
+  (Permissions Policy), `loading="lazy"`, `referrerpolicy`, `csp`, `credentialless` and `scrolling`. A
+  `frame-ancestors` in a `<meta>` is not read, as in browsers. The Inspector shows the `iframe`
+  element, not the document in it, and "Inspect element" in a frame selects that element. The Warnings tab lists
+  the page's, not its frames'. A menu or a dialog of a frame's document is clipped to the frame.
 
 ## Downloads
 
@@ -382,8 +451,9 @@ not given one keeps them in memory.
 - It zooms web pages only, not its own pages. The keys zoom one tab; the setting is the zoom of the others.
 - It colours no syntax in a source, and completes no address from the history.
 - A Control+click is not a right click on macOS.
-- A link with `target="_blank"` opens in the tab it is in, as any other; Cmd+click opens it in a new one. A
-  Shift+click opens no window.
+- A link with `target="_blank"` opens in the tab it is in, as any other; Cmd+click opens it in a new tab,
+  Shift+click in a new window.
+- With no window left light ends, on macOS too; a tab is not dragged from a window to another.
 - It draws what ember's ui draws. What is missing is listed in ember's guide:
   [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
 
@@ -453,7 +523,12 @@ What does not:
   `integrity`, no `referrerpolicy` (a module says the page as its referrer), no import map with a `src`, and an
   import map counts whenever it comes, the first to name a specifier kept. A `modulepreload` fetches its module,
   not what it imports. The page's address, not its `<base>`, is what an inline module's specifiers are read from.
-- Workers, service workers, WebSockets, iframes,
+- An `iframe` shows its document but runs none of its scripts yet, so it has no window: `contentWindow` and
+  `contentDocument` are `null`, `window.frames.length` is 0, and `parent` and `top` are the window itself. Its `src`,
+  `srcdoc`, `name`, `width`, `height` and `sandbox` reflect, a `src` or a `srcdoc` a script sets is followed, and
+  the element hears `load` when a document, or light's notice in place of one, shows in it, and `error` when light
+  left it empty (see [Frames](#frames)); a browser says `load` there too.
+- Workers, service workers, WebSockets,
   shadow trees, custom elements, canvas contexts, WebGL, media, IndexedDB, XPath: absent, or answering with
   nothing. An `svg` is in the tree and scripts change it:
   it is drawn as one picture, again the frame after a change, with `currentColor` the colour of its text, but the
@@ -481,7 +556,7 @@ What does not:
   hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element added since
   the last frame answers little until the next. A rule's `style` is its text read again: no `CSSKeyframeRule`,
   no `CSSStyleSheet` of an `@import`, no `ownerRule`.
-- **Messages** stay in their page: with no iframe, worker or other window to post to, `window.postMessage` reaches
+- **Messages** stay in their page: with no frame that runs scripts, worker or other window to post to, `window.postMessage` reaches
   the window itself, and a `BroadcastChannel` the other channels of the same page, not another tab's. A message is
   copied by light's own structured clone, written in JavaScript (V8's is not within reach): primitives, plain
   objects and arrays, `Date`, `RegExp`, `Map`, `Set`, `ArrayBuffer` and its views, errors, `Blob`, with their cycles;
@@ -518,9 +593,9 @@ reach.
 
 | Package | What it holds |
 |---------|---------------|
-| `cmd/light` | The entry: the window, the folders and their overrides, the World. |
+| `cmd/light` | The entry: the profile, the first window, the folders and their overrides, the World. |
 | `light` (the root) | The logo, embedded. |
-| `internal/app` | The screen: header, navigation, status bubble, light's own pages, the pages of the other kinds, the history, downloads and settings pages, the context menu, shortcuts. |
+| `internal/app` | The profile the windows share (settings, history, cookies, downloads, the files kept) and each window's screen: header, navigation, status bubble, light's own pages, the pages of the other kinds, the history, downloads and settings pages, the context menu, shortcuts. |
 | `internal/web` | An address turned into a page: the answer read by its kind, HTML built as a ui Document, and every adaptation made to it. |
 | `internal/menu` | The context menu as a ui element. |
 | `internal/dom` | The DOM a page's scripts see: a JavaScript prelude over one Go function that reads and changes the parser's tree, the ui Document following what it shows of it. |
@@ -539,6 +614,7 @@ reach.
 | `pkg/storage` | Plain Go: what pages keep by origin, and its file. |
 | `pkg/cookies` | Plain Go: the cookie jar, its rules, the transport that applies them, and its file. |
 | `pkg/localnet` | Plain Go: the space of an address (public, local, loopback), and the transport that keeps pages from more private ones. |
+| `pkg/frames` | Plain Go: the rules of frames: how many and how deep, what an `iframe` shows, its sandbox, whether a document lets itself be framed, where a target leads, which site its cookies are kept under. |
 
 Dependencies go one way: `cmd` → `internal` → `pkg`.
 

@@ -39,26 +39,6 @@ type Files interface {
 	Reveal(path string) error
 }
 
-// restoreDownloads makes the downloads' manager, with the list of the
-// run before.
-func (s *Screen) restoreDownloads() {
-	s.saves = downloads.New(s.downloadsDir(), opener(s.open))
-	s.announced, s.archived = map[int]downloads.State{}, map[int]bool{}
-	s.saved = &store{name: downloadsFile, write: func(path string) error {
-		return downloads.Save(path, s.saves.Items())
-	}}
-	if s.opts.Dir == "" {
-		return
-	}
-	items, err := downloads.Load(s.saved.path(s.opts.Dir), maxDownloads)
-	s.unreadable = errors.Join(s.unreadable, err)
-	s.saves.Restore(items)
-	for _, item := range items {
-		s.announced[item.ID] = item.State
-	}
-	s.savesSeen = s.saves.Version()
-}
-
 // download saves what address gives, under name when one is given, as
 // a request of the shown tab.
 func (s *Screen) download(address, name string) {

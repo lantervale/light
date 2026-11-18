@@ -300,7 +300,8 @@ func hidden(n *html.Node) bool {
 // holds reports whether ui shows the children of n under what it has
 // of n.
 func (t *Tree) holds(n *html.Node) bool {
-	return n.Type == html.ElementNode && !pictured(n) && (t.drawn(n) || t.shown[n] == t.doc.Body())
+	return n.Type == html.ElementNode && !pictured(n) && n.DataAtom != atom.Iframe &&
+		(t.drawn(n) || t.shown[n] == t.doc.Body())
 }
 
 // Make is what ui has of n, made with what n holds the first time: nil
@@ -596,7 +597,8 @@ func (b *builder) live(a *ui.Node) {
 			b.links.Save(to, name)
 			return
 		}
-		b.links.Open(to)
+		target, _ := a.Attr("target")
+		b.open(to, target)
 	}
 	ui.OnClick(func() {
 		if b.tree.Activate != nil {

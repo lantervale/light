@@ -13,20 +13,20 @@ import (
 
 // agent is the User-Agent light says it is: the settings', else its
 // own.
-func (s *Screen) agent() string {
-	if s.config.UserAgent != "" {
-		return s.config.UserAgent
+func (p *Profile) agent() string {
+	if p.config.UserAgent != "" {
+		return p.config.UserAgent
 	}
-	return identity.Default(s.opts.Version)
+	return identity.Default(p.opts.Version)
 }
 
 // languages are the languages a site is asked for and a page's scripts
 // are told, as browsers list them: the settings', else the system's.
-func (s *Screen) languages() []string {
-	if set := identity.Tags(s.config.Languages); len(set) > 0 {
+func (p *Profile) languages() []string {
+	if set := identity.Tags(p.config.Languages); len(set) > 0 {
 		return identity.Languages(set)
 	}
-	return identity.Languages(s.opts.Languages)
+	return identity.Languages(p.opts.Languages)
 }
 
 // navigator is what a page's scripts read of light and of its machine,

@@ -25,6 +25,14 @@ func (s *Screen) byPage(do func()) {
 	do()
 }
 
+// fromPage is byPage for what the document at address, one of a frame
+// of the shown tab's page, asked for.
+func (s *Screen) fromPage(address string, do func()) {
+	s.from = address
+	defer func() { s.from = "" }()
+	do()
+}
+
 // linked opens address as the shown tab's page asked for it.
 func (s *Screen) linked(address string) { s.byPage(func() { s.Open(address) }) }
 

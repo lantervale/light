@@ -3,6 +3,7 @@ package cookies_test
 import (
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -468,4 +469,84 @@ func TestANilJarIsNone(t *testing.T) {
 		j.For(at(t, "https://site.test/")) != nil {
 		t.Error("no jar gives cookies")
 	}
+}
+
+func framed(t *testing.T, top, address string) cookies.Request {
+	t.Helper()
+	q := within(t, top, address)
+	q.Partition = "https://" + q.Top.Hostname()
+	return q
+}
+
+func TestTheCookiesOfAFrameAreKeptUnderItsTopLevelSite(t *testing.T) {
+	const news, shop, widget = "https://news.test/", "https://shop.test/", "https://widget.test/box"
+	set := []string{"seen=news; SameSite=None; Secure; Max-Age=600", "lax=1"}
+
+	t.Run("blocked by default", func(t *testing.T) {
+		j, _ := jar()
+		j.Store(framed(t, news, widget), set)
+		if j.Len() != 0 || j.Header(framed(t, news, widget)) != "" {
+			t.Error("a frame of another site kept or carried a cookie with third parties blocked")
+		}
+	})
+	t.Run("one jar a top-level site", func(t *testing.T) {
+		j, _ := jar()
+		j.SetThirdParty(true)
+		j.Store(framed(t, news, widget), set)
+		if got := j.Header(framed(t, news, widget)); got != "seen=news" {
+			t.Errorf("under the site it was set in the frame carries %q, want its SameSite=None cookie", got)
+		}
+		if got := j.Header(framed(t, shop, widget)); got != "" {
+			t.Errorf("under another site the frame carries %q", got)
+		}
+		j.Store(framed(t, shop, widget), []string{"seen=shop; SameSite=None; Secure"})
+		if a, b := j.Header(framed(t, news, widget)), j.Header(framed(t, shop, widget)); a != "seen=news" ||
+			b != "seen=shop" {
+			t.Errorf("the two sites' frames carry %q and %q, want each its own", a, b)
+		}
+		if got := j.Header(visit(t, widget)); got != "" {
+			t.Errorf("the widget's own page carries %q of what its frames kept", got)
+		}
+		if got := j.Script(at(t, widget)); got != "" {
+			t.Errorf("the scripts of the widget's own page read %q", got)
+		}
+	})
+	t.Run("a first-party visit is its own", func(t *testing.T) {
+		j, _ := jar()
+		j.SetThirdParty(true)
+		j.Store(visit(t, widget), []string{"own=1; SameSite=None; Secure", "plain=1"})
+		if got := j.Header(framed(t, news, widget)); got != "" {
+			t.Errorf("a frame carries %q, the cookies of its site's own pages", got)
+		}
+		j.Store(framed(t, news, widget), []string{"own=2; SameSite=None; Secure"})
+		if got := j.Header(visit(t, widget)); got != "own=1; plain=1" {
+			t.Errorf("the widget's own page carries %q after its frame set a cookie of the same name", got)
+		}
+	})
+	t.Run("the page's own site in another's frame is a third party", func(t *testing.T) {
+		j, _ := jar()
+		j.Store(visit(t, news), []string{"session=1"})
+		if got := j.Header(framed(t, news, news+"inner")); got != "" {
+			t.Errorf("the page's site, framed in another's frame, carries %q", got)
+		}
+	})
+	t.Run("kept in the file with its site", func(t *testing.T) {
+		j, _ := jar()
+		j.SetThirdParty(true)
+		j.Store(framed(t, news, widget), set)
+		j.Store(visit(t, widget), []string{"seen=own; Max-Age=600"})
+		path := filepath.Join(t.TempDir(), "cookies.json")
+		if err := j.Save(path); err != nil {
+			t.Fatal(err)
+		}
+		back, err := cookies.Load(path, cookies.Clock(start))
+		if err != nil {
+			t.Fatal(err)
+		}
+		back.SetThirdParty(true)
+		if a, b := back.Header(framed(t, news, widget)), back.Header(visit(t, widget)); a != "seen=news" ||
+			b != "seen=own" {
+			t.Errorf("read back, the frame carries %q and the page %q", a, b)
+		}
+	})
 }

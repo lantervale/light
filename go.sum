@@ -1,5 +1,7 @@
 github.com/alecthomas/kong v1.17.0 h1:f52BVWChYMDkMkCoqkEWRuFOk/K4B5LO7xIijeLJRdk=
 github.com/alecthomas/kong v1.17.0/go.mod h1:wrlbXem1CWqUV5Vbmss5ISYhsVPkBb1Yo7YKJghju2I=
+github.com/andybalholm/brotli v1.3.0 h1:IdkhjSe/+34U+fP7FSR2Q6Poj1hnHUa2GoWmzXJd6qY=
+github.com/andybalholm/brotli v1.3.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/gost-dom/v8go v0.0.0-20261115230326-a9da67bbb4d0 h1:ZdqCOG4gLuSygsqKjsNvzz39+atF39KFgtDuiioWqVY=
 github.com/gost-dom/v8go v0.0.0-20261115230326-a9da67bbb4d0/go.mod h1:P47YiDxZIvzP3leeox7sZhbt4bdpOZfdUbF8JYvVg0o=
 github.com/lantervale/ember v0.0.0-20261117011654-51c5ddbbf4ec/go.mod h1:D5nDjxzUPZrKO7vW5mz8jDNA53DakEJLku5yIOV5ldw=

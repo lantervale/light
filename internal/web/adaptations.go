@@ -195,7 +195,7 @@ func linked(n *html.Node) bool {
 //nolint:gochecknoglobals,exhaustive // the elements left out, not every element there is
 var dropped = map[atom.Atom]bool{
 	atom.Head: true, atom.Script: true, atom.Style: true, atom.Link: true, atom.Meta: true,
-	atom.Template: true, atom.Iframe: true, atom.Object: true,
+	atom.Template: true, atom.Object: true,
 	atom.Embed: true, atom.Video: true, atom.Audio: true, atom.Canvas: true, atom.Dialog: true,
 	atom.Source: true, atom.Picture: false,
 }
@@ -251,7 +251,7 @@ func (b *builder) link(a *ui.Node, n *html.Node) {
 	if address == "" || strings.HasPrefix(href, "#") {
 		return
 	}
-	follow := func() { b.links.Open(address) }
+	follow := func() { b.open(address, attr(n, "target")) }
 	if name, saved := lookup(n, "download"); saved {
 		follow = func() { b.links.Save(address, name) }
 	}

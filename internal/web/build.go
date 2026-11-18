@@ -47,7 +47,7 @@ func (b *builder) icon(ctx context.Context, root *html.Node) []byte {
 		if address == "" {
 			continue
 		}
-		answer, err := b.loader.Client.Get(asking(netlog.As(ctx, byDocument, netlog.Image), identity.Image), address,
+		answer, err := b.loader.Client.Get(asking(netlog.As(ctx, b.loader.by(), netlog.Image), identity.Image), address,
 			identity.Accept(identity.Image))
 		if err != nil || !answer.OK() {
 			continue
@@ -128,10 +128,12 @@ type builder struct {
 	// encoding, which its forms are sent in.
 	doc    *ui.Document
 	encode func(text string) string
+	// frames are the iframe elements built.
+	frames *Frames
 }
 
 func newBuilder(l *Loader, base *url.URL, links Links) *builder {
-	b := &builder{loader: l, base: base, links: links}
+	b := &builder{loader: l, base: base, links: links, frames: &Frames{}}
 	if l.Scripts {
 		b.tree = &Tree{b: b, shown: map[*html.Node]*ui.Node{}, of: map[*ui.Node]*html.Node{},
 			contents: map[*html.Node]*html.Node{}, head: ui.Div()}
@@ -171,7 +173,7 @@ func (b *builder) load(ctx context.Context, root *html.Node) {
 						defer wg.Done()
 						limit <- struct{}{}
 						defer func() { <-limit }()
-						b.sheet(netlog.As(ctx, byDocument, netlog.Stylesheet), address, into)
+						b.sheet(netlog.As(ctx, b.loader.by(), netlog.Stylesheet), address, into)
 					}()
 				}
 			}
@@ -227,7 +229,7 @@ func (b *builder) script(ctx context.Context, n *html.Node, wg *sync.WaitGroup, 
 		defer wg.Done()
 		limit <- struct{}{}
 		defer func() { <-limit }()
-		s.Source, s.Address, s.Skipped = b.loader.Script(netlog.As(ctx, byDocument, netlog.Script), address)
+		s.Source, s.Address, s.Skipped = b.loader.Script(netlog.As(ctx, b.loader.by(), netlog.Script), address)
 	}()
 }
 
@@ -358,6 +360,9 @@ func (b *builder) element(n *html.Node) *ui.Node {
 		b.attributes(n, e)
 		return e
 	}
+	if n.DataAtom == atom.Iframe && n.Namespace == "" {
+		return b.frame(n)
+	}
 	e := b.make(n.Data)
 	if b.tree != nil {
 		b.count++
@@ -369,6 +374,29 @@ func (b *builder) element(n *html.Node) *ui.Node {
 	}
 	b.children(n, e)
 	return e
+}
+
+// frame is the iframe element of n, empty until whoever shows the page
+// gives it a document: what n holds is for browsers that show none. A
+// document that panics in it empties it, for whoever shows it to say.
+func (b *builder) frame(n *html.Node) *ui.Node {
+	e := ui.Iframe(nil, ui.Guarded())
+	if b.tree != nil {
+		b.count++
+		b.tree.keep(n, e)
+	}
+	b.attributes(n, e)
+	b.frames.add(e)
+	return e
+}
+
+// open opens address where target says, in the page's own tab or frame
+// when it says nothing.
+func (b *builder) open(address, target string) {
+	if target != "" && b.links.Aimed != nil && b.links.Aimed(address, target) {
+		return
+	}
+	b.links.Open(address)
 }
 
 func (b *builder) attributes(n *html.Node, e *ui.Node) {

@@ -61,6 +61,10 @@ type Cookie struct {
 	Expires time.Time
 	// Created is when it was first set, Used when it was last sent.
 	Created, Used time.Time
+	// Partition is the top-level site a cookie set in a frame of
+	// another site is kept under, "" for a site's own: it goes with the
+	// requests of frames under that site alone.
+	Partition string
 }
 
 // Persistent reports whether the cookie outlives the run.
@@ -78,6 +82,11 @@ type Request struct {
 	// Unsafe is a request that changes something, a form's POST: one
 	// from another site carries no Lax cookie.
 	Unsafe bool
+	// Partition is the top-level site of a request made in a frame that
+	// is, or is in, a document of another site than its tab's page: a
+	// third party's whatever it asks for, with the cookies kept under
+	// that site alone. Top is then the tab's page.
+	Partition string
 }
 
 // navigation reports whether the request shows a page of its own.
@@ -85,6 +94,9 @@ func (q Request) navigation() bool { return q.Top == nil }
 
 // sameSite reports whether the request stays in the site that asks.
 func (q Request) sameSite() bool {
+	if q.Partition != "" {
+		return false
+	}
 	from := q.Top
 	if q.navigation() {
 		if from = q.From; from == nil || !web(from) {
@@ -236,7 +248,8 @@ func (j *Jar) matching(q Request, scripted, sent bool) []Cookie {
 	var out []Cookie
 	for _, c := range j.sites[registrable(host)] {
 		switch {
-		case !domainMatches(host, c.Domain, c.HostOnly), !pathMatches(path, c.Path), c.expired(now),
+		case c.Partition != q.Partition, !domainMatches(host, c.Domain, c.HostOnly), !pathMatches(path, c.Path),
+			c.expired(now),
 			c.Secure && !secure, c.HTTPOnly && scripted,
 			!same && c.SameSite != None && (!navigation || q.Unsafe || c.SameSite != Lax):
 			continue
@@ -288,12 +301,15 @@ func (j *Jar) set(q Request, line string, scripted bool) {
 	if !ok || !c.allowed(host, pathOf(q.URL), secure, scripted) || (!navigation && !same && c.SameSite != None) {
 		return
 	}
+	c.Partition = q.Partition
 	key := registrable(c.Domain)
 	site := j.sites[key]
 	at := slices.IndexFunc(site, func(kept *Cookie) bool {
-		return kept.Name == c.Name && kept.Domain == c.Domain && kept.Path == c.Path
+		return kept.Name == c.Name && kept.Domain == c.Domain && kept.Path == c.Path && kept.Partition == c.Partition
 	})
-	if !secure && slices.ContainsFunc(site, func(kept *Cookie) bool { return kept.shadows(c, now) }) {
+	if !secure && slices.ContainsFunc(site, func(kept *Cookie) bool {
+		return kept.Partition == c.Partition && kept.shadows(c, now)
+	}) {
 		return
 	}
 	if at >= 0 {

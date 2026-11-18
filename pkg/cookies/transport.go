@@ -9,7 +9,11 @@ import (
 type key struct{}
 
 // asked is what a context carries for the Transport.
-type asked struct{ top, from *url.URL }
+type asked struct {
+	top, from *url.URL
+	partition string
+	framed    bool
+}
 
 // Within is ctx for the requests the page at top makes: its sheets, its
 // pictures, its scripts and what they fetch. A request to another site
@@ -24,6 +28,21 @@ func Within(ctx context.Context, top *url.URL) context.Context {
 // asked for.
 func From(ctx context.Context, from *url.URL) context.Context {
 	return context.WithValue(ctx, key{}, asked{from: from})
+}
+
+// Framed is ctx for the document of a frame of the tab whose page is
+// at top, and for what a frame's document asks for when crossed. A
+// frame that is, or is in, a document of another site than top's is
+// crossed: each of its requests is a third party's, and the cookies it
+// carries and sets are kept under top's site alone. One that is not is
+// so from the hop that leaves top's site. What a frame that is not
+// crossed asks for, it asks Within top.
+func Framed(ctx context.Context, top *url.URL, crossed bool) context.Context {
+	a := asked{top: top, framed: true}
+	if crossed {
+		a.partition = siteOf(top)
+	}
+	return context.WithValue(ctx, key{}, a)
 }
 
 type withoutKey struct{}
@@ -56,7 +75,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return t.base().RoundTrip(req)
 	}
 	a, _ := req.Context().Value(key{}).(asked)
-	q := Request{URL: req.URL, Top: a.top, From: a.from, Unsafe: unsafe(req.Method)}
+	q := Request{URL: req.URL, Top: a.top, From: a.from, Unsafe: unsafe(req.Method), Partition: a.partition}
+	if a.framed && q.Partition == "" && siteOf(req.URL) != siteOf(a.top) {
+		q.Partition = siteOf(a.top)
+	}
 	if header := t.Jar.Header(q); header != "" {
 		req = req.Clone(req.Context())
 		req.Header.Set("Cookie", header)

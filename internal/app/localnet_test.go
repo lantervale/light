@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/localnet"
 )
 
@@ -229,8 +230,7 @@ func TestTheUserGoesWhereAPageMayNotAndASettingLetsPagesToo(t *testing.T) {
 		t.Errorf("a page of light's, of the %s network, asked the local one for %q", local.Space, l.got(router))
 	}
 
-	s.config.LocalNetwork = true
-	s.apply()
+	s.configure(func(c *config.Config) { c.LocalNetwork = true })
 	s.session().log.Clear()
 	l.show(site+"/again", `<title>Public</title><img src="`+router+`/pic.png">`)
 	s.visit(site + "/again")

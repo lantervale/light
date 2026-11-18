@@ -31,6 +31,18 @@ var (
 	ErrNoAddress = errors.New("its action is no http or https address")
 )
 
+// SandboxedError is a form of a frame whose sandbox allows no form.
+type SandboxedError struct {
+	// Address is where the form would have gone.
+	Address string
+}
+
+// Error is the refusal as Chrome's console words it.
+func (e *SandboxedError) Error() string {
+	return "Blocked form submission to '" + e.Address + "' because the form's frame is sandboxed and the " +
+		"'allow-forms' permission is not set."
+}
+
 // The types a form's fields are written in.
 const (
 	urlencoded = "application/x-www-form-urlencoded"
@@ -47,6 +59,9 @@ type Submission struct {
 	Form *fetch.Form
 	// Referrer is the address a POST says it comes from.
 	Referrer string
+	// Target is where the form says its answer shows, "" for where the
+	// form is.
+	Target string
 }
 
 // encoderOf writes text in the encoding a page's came in, which its
@@ -125,13 +140,15 @@ func Submitter(form *ui.Node) *ui.Node {
 
 func (b *builder) send(form, submitter *ui.Node) error {
 	sent, err := b.submission(form, submitter)
-	switch {
+	switch f := b.framed(); {
 	case err != nil:
 		return err
+	case f != nil && f.NoForms:
+		return &SandboxedError{Address: sent.Address}
 	case sent.Form != nil && b.links.Post != nil:
 		b.links.Post(sent)
 	case sent.Form == nil:
-		b.links.Open(sent.Address)
+		b.open(sent.Address, sent.Target)
 	}
 	return nil
 }
@@ -221,12 +238,18 @@ func (b *builder) submission(form, submitter *ui.Node) (Submission, error) {
 	if err != nil || to.Host == "" {
 		return Submission{}, ErrNoAddress
 	}
+	target, _ := form.Attr("target")
+	if submitter != nil {
+		if own, says := submitter.Attr("formtarget"); says {
+			target = own
+		}
+	}
 	entries := b.entries(form, submitter)
 	if method != "post" {
 		to.RawQuery = b.query(entries)
-		return Submission{Address: to.String()}, nil
+		return Submission{Address: to.String(), Target: target}, nil
 	}
-	sent := &fetch.Form{Type: urlencoded, Body: []byte(b.query(entries)), Origin: b.base.Scheme + "://" + b.base.Host}
+	sent := &fetch.Form{Type: urlencoded, Body: []byte(b.query(entries)), Origin: b.origin()}
 	if kind == plainText {
 		var lines strings.Builder
 		for _, pair := range entries {
@@ -234,7 +257,23 @@ func (b *builder) submission(form, submitter *ui.Node) (Submission, error) {
 		}
 		sent.Type, sent.Body = plainText, []byte(lines.String())
 	}
-	return Submission{Address: to.String(), Form: sent, Referrer: identity.Referrer(b.base, to)}, nil
+	return Submission{Address: to.String(), Form: sent, Referrer: identity.Referrer(b.base, to), Target: target}, nil
+}
+
+// origin is the origin a form of the page says it is sent from.
+func (b *builder) origin() string {
+	if f := b.framed(); f != nil && f.Opaque {
+		return "null"
+	}
+	return b.base.Scheme + "://" + b.base.Host
+}
+
+// framed is the frame the page is built for, nil for a tab's own.
+func (b *builder) framed() *Frame {
+	if b.loader == nil {
+		return nil
+	}
+	return b.loader.Frame
 }
 
 // query is the names and values of a form as a query writes them.

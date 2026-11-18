@@ -57,7 +57,7 @@ func TestARightClickOnALinkOpensItInANewTabOrCopiesIt(t *testing.T) {
 	s.visit(srv.URL + "/")
 	s.rightClickAt(s.inPage("vault"))
 	if got, want := labels(s.entries()),
-		"[Open link in new tab Save link as… Copy link address - Inspect element]"; got != want {
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Inspect element]"; got != want {
 		t.Fatalf("a link's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy link address")
@@ -67,10 +67,16 @@ func TestARightClickOnALinkOpensItInANewTabOrCopiesIt(t *testing.T) {
 	s.at(srv.URL + "/")
 	s.rightClickAt(s.inPage("vault"))
 	s.choose("Open link in new tab")
-	if len(s.browser.Tabs) != 2 || s.browser.Active != 1 {
-		t.Fatalf("%d tabs, tab %d shown", len(s.browser.Tabs), s.browser.Active)
+	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/vaults"; got != want {
+		t.Fatalf("the tabs are %s, want %s", got, want)
 	}
-	s.at(srv.URL + "/vaults")
+	s.at(srv.URL + "/")
+	s.rightClickAt(s.inPage("vault"))
+	s.choose("Open link in new window")
+	s.frame()
+	if len(s.screens) != 2 || s.window(1).opened() != "["+srv.URL+"/vaults]" || len(s.browser.Tabs) != 2 {
+		t.Fatalf("%d windows, the first's tabs are %s", len(s.screens), s.opened())
+	}
 }
 
 func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
@@ -95,8 +101,8 @@ func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
 	s.until("the door is drawn", func() bool { return box(t, doc, "door").W == 30 })
 	s.rightClickAt(s.inPage("door"))
 	if got, want := labels(s.entries()),
-		"[Open link in new tab Save link as… Copy link address - Open image in new tab Save image as… "+
-			"Copy image address - Inspect element]"; got != want {
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Open image in new tab "+
+			"Save image as… Copy image address - Inspect element]"; got != want {
 		t.Fatalf("a picture in a link offers %s, want %s", got, want)
 	}
 	s.choose("Open image in new tab")
@@ -119,7 +125,8 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 	}
 	s.rightClickAt(s.inPage("vault"))
 	if got, want := labels(s.entries()),
-		"[Open link in new tab Save link as… Copy link address - Copy - Inspect element]"; got != want {
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Copy - "+
+			"Inspect element]"; got != want {
 		t.Fatalf("a link with text selected offers %s, want %s", got, want)
 	}
 }
@@ -219,7 +226,8 @@ func TestALinkOfLightsOwnPagesHasALinksMenu(t *testing.T) {
 	r, _ := s.doc.BoxOf(link)
 	s.rightClickAt(r.Center())
 	if got, want := labels(s.entries()),
-		"[Open link in new tab Save link as… (off) Copy link address - Inspect element]"; got != want {
+		"[Open link in new tab Open link in new window Save link as… (off) Copy link address - "+
+			"Inspect element]"; got != want {
 		t.Fatalf("the menu is %s, want %s", got, want)
 	}
 	s.choose("Copy link address")

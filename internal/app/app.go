@@ -7,12 +7,9 @@ package app
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/netip"
-	"runtime"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,18 +18,13 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui"
 	_ "github.com/lantervale/ember/ui/svg" // the glyphs, the logo and the web's SVG pictures
-	"github.com/lantervale/ember/world"
 
 	"github.com/lantervale/light/internal/devtools"
 	"github.com/lantervale/light/internal/devtools/inspector"
 	"github.com/lantervale/light/internal/menu"
 	"github.com/lantervale/light/internal/web"
-	"github.com/lantervale/light/pkg/config"
-	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/downloads"
-	"github.com/lantervale/light/pkg/history"
 	"github.com/lantervale/light/pkg/localnet"
-	"github.com/lantervale/light/pkg/storage"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -78,23 +70,24 @@ type Options struct {
 	Driven    bool
 }
 
-// Screen is the window's screen, redrawn from the browser after each
-// move.
+// Screen is a window's screen, redrawn from the browser after each
+// move. What it shares with the other windows' is its Profile's.
 type Screen struct {
+	*Profile
+
 	doc     *ui.Document
 	win     *platform.Window
 	browser *tabs.Browser
 	loader  atomic.Pointer[web.Loader]
 	viewed  atomic.Uint64
-	opts    Options
 
-	// config is the settings, misread why their file could not be read,
-	// settings their file, and fields what shows each on the shown page
-	// again after a change.
-	config   config.Config
-	misread  error
-	settings *store
-	fields   []func()
+	// fields are what shows each setting on the shown page again after
+	// a change, and relist what lists the history again on the page
+	// that shows it, which listed it when it had changed visitsSeen
+	// times.
+	fields     []func()
+	relist     func()
+	visitsSeen uint64
 
 	tabs, back, forward, reload, lock, field, address, view, status, list *ui.Node
 	strip                                                                 []stripTab
@@ -104,40 +97,21 @@ type Screen struct {
 
 	// sessions is what each open tab holds beside its addresses.
 	sessions map[*tabs.Tab]*session
-	// landed brings what ended off the frame to Update, which runs it.
+	// landed brings what ended off the frame to the screen's frame,
+	// which runs it.
 	landed chan func()
-	// pictures are what the Document's img elements draw that no file
-	// holds, by name: ui asks for them off the frame.
-	pictures sync.Map
 
-	visits *history.Log
-	// unreadable is why the history's file could not be read.
-	unreadable error
-	// history and saved are the files the visits and the downloads are
-	// kept in.
-	history, saved *store
-
-	// sites is what sites store through their scripts, stored its file,
-	// and later what scripts asked of the tab, done once they returned.
-	sites  *storage.Store
-	stored *store
-	later  []func()
-	// jar is the cookies every request shares, jarFile its file, and
-	// from the page a navigation is being opened by, "" for the
+	// later is what scripts asked of the tab, done once they returned,
+	// and from the page a navigation is being opened by, "" for the
 	// player's own.
-	jar *cookies.Jar
-	// guard keeps the pages of the Internet from this machine and from
-	// the network around it.
-	guard   *localnet.Guard
-	jarFile *store
-	from    string
+	later []func()
+	from  string
 	// unasked is whether that navigation is a script's doing, not an
 	// act of the player's.
 	unasked bool
 
-	// saves runs the downloads; savesSeen is its version last shown, and
-	// announced the state each download was last said to be in.
-	saves     *downloads.Manager
+	// savesSeen is the downloads' version last shown, and announced the
+	// state each download was last said to be in.
 	savesSeen uint64
 	announced map[int]downloads.State
 	// archived are the downloads that are HAR files of the developer
@@ -165,72 +139,45 @@ type Screen struct {
 	size    geom.Vec2
 	editing bool
 	over    string
-	// system is the system light runs on, as runtime.GOOS names it, and
-	// aimed the link the middle button went down on.
-	system string
-	aimed  string
+	// aimed is the link the middle button went down on.
+	aimed string
 	// picked counts the times a page was asked what is under the pointer
 	// for its scripts, for tests.
 	picked int
 }
 
-// New is the screen of win, on the start page.
-func New(win *platform.Window, opts Options) *Screen {
-	if opts.Now == nil {
-		opts.Now = time.Now
+// New is the screen of win, on the start page, with a Profile of its
+// own: light with one window.
+func New(win *platform.Window, opts Options) *Screen { return NewProfile(opts).Screen(win) }
+
+// screen is the screen of win, a window of light's, on address.
+func (p *Profile) screen(win *platform.Window, address string) *Screen {
+	s := &Screen{Profile: p, win: win, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64),
+		announced: map[int]downloads.State{}, archived: map[int]bool{}}
+	s.browser = tabs.NewBrowser(address)
+	for _, item := range p.saves.Items() {
+		s.announced[item.ID] = item.State
 	}
-	s := &Screen{win: win, opts: opts, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64),
-		system: runtime.GOOS}
-	s.restore()
-	s.browser = tabs.NewBrowser(s.config.StartPage)
-	s.restoreDownloads()
+	s.savesSeen = p.saves.Version()
 	s.apply()
 	s.doc = ui.NewDocument(ui.CSS(sheet), ui.CSS(menu.Sheet), ui.CSS(devtools.Sheet), ui.Images(icons()),
 		ui.FetchImages(s.picture))
 	s.build()
 	s.header()
+	s.visit(address)
 	s.show()
+	s.showProgress(p.saves.Items())
+	p.screens = append(p.screens, s)
 	return s
 }
 
-// restore reads the settings and the history from the folder light was
-// given; with none, they are the defaults and empty.
-func (s *Screen) restore() {
-	s.config, s.visits = config.Default(), history.New(config.Default().HistoryLimit)
-	s.settings = &store{name: configFile, write: func(path string) error { return config.Save(path, s.config) }}
-	s.history = &store{name: historyFile, write: func(path string) error { return history.Save(path, s.visits) }}
-	s.sites = storage.New()
-	s.stored = &store{name: storageFile, write: func(path string) error { return s.sites.Save(path) }}
-	s.jar = cookies.New()
-	s.guard = &localnet.Guard{Base: s.opts.Transport, Space: s.opts.Space}
-	s.jarFile = &store{name: cookiesFile, write: func(path string) error { return s.jar.Save(path) }}
-	if s.opts.Dir == "" {
-		return
-	}
-	s.config, s.misread = config.Load(s.settings.path(s.opts.Dir))
-	s.visits, s.unreadable = history.Load(s.history.path(s.opts.Dir), s.config.HistoryLimit)
-	var unread error
-	if s.sites, unread = storage.Load(s.stored.path(s.opts.Dir)); s.unreadable == nil {
-		s.unreadable = unread
-	}
-	if s.jar, unread = cookies.Load(s.jarFile.path(s.opts.Dir)); s.unreadable == nil {
-		s.unreadable = unread
-	}
-}
-
-// keep writes the files that changed and were not written lately.
-func (s *Screen) keep() {
-	if s.sites.Changed() {
-		s.stored.touch()
-	}
-	if s.jar.Changed() {
-		s.jarFile.touch()
-	}
-	for _, file := range []*store{s.settings, s.history, s.saved, s.stored, s.jarFile} {
-		if err := file.keep(s.opts.Dir); err != nil {
-			s.unreadable = err
-		}
-	}
+// shut ends what the screen's tabs hold, as its window closes: their
+// loads, their scripts and the frames of their pages.
+func (s *Screen) shut() {
+	s.menu.Close()
+	s.doc.SetFrame(s.host, nil)
+	s.browser.Tabs = nil
+	s.forget()
 }
 
 // Document is the screen's Document, for its window.
@@ -297,10 +244,10 @@ func (s *Screen) move(step func(*tabs.Tab)) {
 	s.show()
 }
 
-// Update runs what ended off the frame since the last one, has the shown
-// web page drawn again (its Document lives by being drawn), and follows
-// the window, the pointer and the requests.
-func (s *Screen) Update(world.Frame) {
+// tick runs what ended off the frame since the last one, and follows
+// the window, the pointer, the requests and the frames of the shown
+// page.
+func (s *Screen) tick() {
 	s.header()
 	s.closeUnderMiddle()
 	s.followUnderMiddle()
@@ -309,17 +256,17 @@ func (s *Screen) Update(world.Frame) {
 	s.sizePicture()
 	s.tools.Update()
 	s.watchDownloads()
-	s.keep()
+	s.watchHistory()
 	s.measure()
 	s.runScripts()
 	if s.host != nil {
-		if page := s.session().pages[s.browser.Tab().Current()]; page != nil && page.Err != nil {
+		page := s.session().pages[s.browser.Tab().Current()]
+		s.broken(page)
+		if page != nil && page.Err != nil {
 			s.show()
 			return
 		}
-		if !s.overlaid() {
-			s.doc.Invalidate(s.host)
-		}
+		s.frames()
 	}
 	for {
 		select {
@@ -332,30 +279,9 @@ func (s *Screen) Update(world.Frame) {
 }
 
 // overlaid reports whether a menu or a list of light's is open over the
-// page. The page's Document is then left as last drawn: drawing it is
-// what gives it the pointer, and a press on what is over it is not the
-// page's.
+// page: a press or a key is then not the page's scripts' to hear.
 func (s *Screen) overlaid() bool {
 	return s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking()
-}
-
-// Close ends the downloads in progress, whose files are removed, and
-// the pages' scripts, and writes what is not yet written, as the window
-// closes.
-func (s *Screen) Close() error {
-	s.saves.Close()
-	s.saved.touch()
-	for _, session := range s.sessions {
-		s.end(session)
-	}
-	if s.sites.Changed() {
-		s.stored.touch()
-	}
-	if s.jar.Changed() {
-		s.jarFile.touch()
-	}
-	return errors.Join(s.settings.flush(s.opts.Dir), s.history.flush(s.opts.Dir), s.saved.flush(s.opts.Dir),
-		s.stored.flush(s.opts.Dir), s.jarFile.flush(s.opts.Dir))
 }
 
 // show redraws the screen from the browser: the tabs, the shown tab's
@@ -367,9 +293,10 @@ func (s *Screen) show() {
 	s.showTabs()
 	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
-	s.host, s.alone, s.listed, s.fields = nil, nil, nil, nil
+	s.host, s.alone, s.listed, s.fields, s.relist = nil, nil, nil, nil, nil
 	s.view.Append(s.page(tab.Current()))
 	s.leave(tab, session)
+	s.quitFrames(tab, session)
 	s.showNavigation()
 	s.tools.SetDark(s.config.DarkMode)
 	s.keepBodies(session)

@@ -111,7 +111,7 @@ func TestAGzippedAnswerIsCountedAsSentAndAsRead(t *testing.T) {
 			t.Fatalf("%s is read as %d bytes (%v), encoded %q", path, len(got), err, resp.Header.Get("Content-Encoding"))
 		}
 	}
-	if encoding != netlog.Encodings {
+	if encoding != netlog.Encodings("http") {
 		t.Errorf("the server was asked for %q", encoding)
 	}
 	rows := l.Rows()

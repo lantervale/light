@@ -69,6 +69,9 @@ type Config struct {
 	// JavaScript is whether a page's scripts run, in a build that has an
 	// engine for them.
 	JavaScript bool `json:"javascript"`
+	// Frames is whether the documents a page shows in its iframes are
+	// loaded.
+	Frames bool `json:"frames"`
 	// Cookies is whether sites' cookies are kept and sent, and
 	// ThirdPartyCookies whether those of another site than the page's
 	// are too.
@@ -95,7 +98,7 @@ func Default() Config {
 	return Config{
 		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
 		Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
-		JavaScript: true, Cookies: true,
+		JavaScript: true, Frames: true, Cookies: true,
 	}
 }
 

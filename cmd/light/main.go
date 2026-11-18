@@ -23,8 +23,6 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/lantervale/ember"
-	"github.com/lantervale/ember/color"
-	"github.com/lantervale/ember/platform"
 
 	"github.com/lantervale/light/internal/app"
 	"github.com/lantervale/light/internal/shell"
@@ -59,20 +57,15 @@ func main() {
 	cmd := parser(&cli)
 	_, err := cmd.Parse(os.Args[1:])
 	cmd.FatalIfErrorf(err)
-	win := platform.NewWindow(
-		platform.Title("light"),
-		platform.Size(1024, 680),
-		platform.MinSize(760, 480),
-		platform.OwnTitleBar(),
-		platform.Background(color.Hex("#2a2530")),
-	)
-	screen := app.New(win, cli.options())
+	profile := app.NewProfile(cli.options())
+	win := app.Window(nil)
+	screen := profile.Screen(win)
 	if cli.Address != "" {
 		screen.Open(tabs.Resolve(cli.Address))
 	}
 	win.Add(screen.Document())
-	ember.New().AddEntities(win).AddSystems(screen).MustRun()
-	if err = screen.Close(); err != nil {
+	ember.New().AddEntities(win).AddSystems(profile).MustRun()
+	if err = profile.Close(); err != nil {
 		log.Print(err)
 	}
 }

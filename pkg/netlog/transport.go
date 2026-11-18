@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/andybalholm/brotli"
 )
 
 type key struct{}
@@ -111,7 +113,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	unzip := req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != http.MethodHead
 	if unzip {
 		sent.Header = req.Header.Clone()
-		sent.Header.Set("Accept-Encoding", Encodings)
+		sent.Header.Set("Accept-Encoding", Encodings(req.URL.Scheme))
 		a.log.change(row, func(r *Row) { r.Request = sent.Header.Clone() })
 	}
 	resp, err := t.base().RoundTrip(sent)
@@ -164,18 +166,26 @@ func (c *counted) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Encodings is the Accept-Encoding of a request that names none: the
-// encodings the Transport undoes.
-const Encodings = "gzip, deflate"
+// Encodings is the Accept-Encoding of a request of scheme that names
+// none: the encodings the Transport undoes, Brotli only over TLS, as
+// browsers ask, since a proxy in the clear may spoil it.
+func Encodings(scheme string) string {
+	if scheme == "https" {
+		return "gzip, deflate, br"
+	}
+	return "gzip, deflate"
+}
 
 // decoder is what undoes an answer's Content-Encoding, nil for one that
-// is none of Encodings.
+// is none of those.
 func decoder(encoding string) func(io.Reader) (io.Reader, error) {
 	switch strings.ToLower(strings.TrimSpace(encoding)) {
 	case "gzip", "x-gzip":
 		return func(r io.Reader) (io.Reader, error) { return gzip.NewReader(r) }
 	case "deflate":
 		return inflated
+	case "br":
+		return func(r io.Reader) (io.Reader, error) { return brotli.NewReader(r), nil }
 	}
 	return nil
 }

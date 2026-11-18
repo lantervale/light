@@ -6,14 +6,16 @@ import (
 	"github.com/lantervale/light/internal/dom"
 )
 
-// opening is where a click on a link opens it: in the shown tab, or in a
-// tab of its own beside it, behind it or shown ahead of it.
+// opening is where a click on a link opens it: in the shown tab, in a
+// tab of its own beside it, behind it or shown ahead of it, or in a
+// window of its own, apart.
 type opening int
 
 const (
 	inTab opening = iota
 	behind
 	ahead
+	apart
 )
 
 // command is the key shortcuts are made with: Command on macOS, Control
@@ -27,35 +29,61 @@ func command(system string) input.Key {
 
 // openingBy is where a click opens a link by the keys held with it, as
 // Chrome and Firefox have them: the command key or the middle button a
-// tab behind the shown one, Shift with either that tab shown.
+// tab behind the shown one, Shift with either that tab shown, and Shift
+// alone a window.
 func openingBy(system string, in *input.State, middle bool) opening {
+	shift := in.Down(input.KeyShift)
 	switch {
-	case !middle && !in.Down(command(system)):
-		return inTab
-	case in.Down(input.KeyShift):
+	case (middle || in.Down(command(system))) && shift:
 		return ahead
+	case middle || in.Down(command(system)):
+		return behind
+	case shift:
+		return apart
 	}
-	return behind
+	return inTab
 }
 
 // activate opens the address of a link of light's that was clicked,
 // where the keys held say.
 func (s *Screen) activate(address string) {
-	if where := openingBy(s.system, s.win.Input(), false); where != inTab {
-		s.openBeside(address, where)
-		return
+	if !s.elsewhere(address, openingBy(s.system, s.win.Input(), false)) {
+		s.Open(address)
 	}
-	s.Open(address)
 }
 
 // followed is activate for a link of the shown tab's page: in that tab,
-// the page asked for the address; in a tab of its own, the player did.
+// the page asked for the address; anywhere else, the player did.
 func (s *Screen) followed(address string) {
-	if where := openingBy(s.system, s.win.Input(), false); where != inTab {
-		s.openBeside(address, where)
-		return
+	if !s.elsewhere(address, openingBy(s.system, s.win.Input(), false)) {
+		s.linked(address)
 	}
-	s.linked(address)
+}
+
+// elsewhere opens address where it is asked to but in the shown tab,
+// and reports whether it did.
+func (s *Screen) elsewhere(address string, where opening) bool {
+	switch where {
+	case inTab:
+		return false
+	case apart:
+		s.openWindow(address)
+	case behind, ahead:
+		s.openBeside(address, where)
+	}
+	return true
+}
+
+// openWindow opens address in a window of its own.
+func (s *Screen) openWindow(address string) {
+	s.visit(address)
+	s.newWindow(address)
+}
+
+// newWindow asks for a window on address, opened at the next frame as
+// this one is, a little down and right of it.
+func (s *Screen) newWindow(address string) {
+	s.windows = append(s.windows, ask{address: address, from: s})
 }
 
 // openBeside opens address in a tab of its own beside the shown one. A
@@ -88,9 +116,20 @@ func (s *Screen) followUnderMiddle() {
 	}
 	switch {
 	case pressed:
-		s.aimed = link
+		if s.aimed = link; link != "" {
+			s.blur()
+		}
 	case link != "" && link == s.aimed:
 		s.openBeside(link, openingBy(s.system, in, true))
+	}
+}
+
+// blur takes the keyboard from the field that has it, as a press on
+// what is no field does: the keys held are hidden while one has it.
+func (s *Screen) blur() {
+	s.doc.Focus(nil)
+	if page := s.session().pages[s.browser.Tab().Current()]; page != nil && page.Doc != nil {
+		page.Doc.Focus(nil)
 	}
 }
 

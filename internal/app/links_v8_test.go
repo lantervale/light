@@ -72,3 +72,39 @@ func TestAScriptHearsACommandClickAndMayPreventIt(t *testing.T) {
 	}
 	s.at(srv.URL + "/")
 }
+
+func TestAScriptHearsAShiftClickAndTheWindowItOpensRunsItsOwnScripts(t *testing.T) {
+	srv, _ := scripted(t)
+	s := show(t)
+	s.visit(srv.URL + "/")
+	s.until("its scripts ran", func() bool { return s.pageText("count") == "0 clicks" })
+	s.clickHolding(s.inPage("held"), input.KeyLeftShift)
+	if len(s.screens) != 1 {
+		t.Fatalf("a prevented Shift click opened a window: light has %d", len(s.screens))
+	}
+	s.clickHolding(s.inPage("next"), input.KeyLeftShift)
+	if len(s.screens) != 2 {
+		t.Fatalf("light has %d windows after a Shift click", len(s.screens))
+	}
+	s.at(srv.URL + "/")
+	second := s.window(1)
+	second.until("the new window's scripts ran", func() bool {
+		return second.session().scripts != nil && second.pageText("visits") == "1 visits"
+	})
+	s.clickAt(s.inPage("more"))
+	if got := s.pageText("count"); got != "1 clicks" || second.pageText("visits") != "1 visits" {
+		t.Fatalf("after a click in the first window it reads %q and the second %q", got, second.pageText("visits"))
+	}
+	live, sessions := second.session().scripts, second.sessions
+	second.closeWindow()
+	if len(sessions) != 0 || len(s.screens) != 1 {
+		t.Fatalf("the closed window holds %d sessions, light %d windows", len(sessions), len(s.screens))
+	}
+	if _, err := live.rt.Evaluate("1 + 1"); err == nil {
+		t.Error("the closed window's scripts still run")
+	}
+	s.clickAt(s.inPage("more"))
+	if got := s.pageText("count"); got != "2 clicks" {
+		t.Fatalf("after the other window closed the first reads %q", got)
+	}
+}

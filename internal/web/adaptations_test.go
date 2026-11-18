@@ -390,7 +390,7 @@ func scriptsAndTheLikeBuildNothing(t *testing.T) {
 		}
 	}
 	doc, _ := built(t, page+`<picture><source srcset="a.webp"><img id="shown" alt="shown"></picture>`, nil)
-	if len(droppedNames()) != 14 {
+	if len(droppedNames()) != 13 {
 		t.Errorf("%d elements are left out: %v", len(droppedNames()), droppedNames())
 	}
 	for _, tag := range droppedNames() {

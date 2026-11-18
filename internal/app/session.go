@@ -37,7 +37,9 @@ type session struct {
 	said    *console.Lines
 	scripts *running
 	kept    map[string]dom.Storage
-	tools   devtools.State
+	// frames are the frames of the pages the tab holds, by their page.
+	frames map[*web.Page]*framed
+	tools  devtools.State
 	// zoom is the tab's own zoom in percent, 0 for the settings'.
 	zoom int
 	// note is what the status bubble says of the tab's last move when it
@@ -53,7 +55,7 @@ func (s *Screen) sessionOf(tab *tabs.Tab) *session {
 		s.sessions[tab] = &session{
 			pages: map[string]*web.Page{}, loads: map[string]*load{}, posts: map[string]web.Submission{},
 			log:  netlog.New(s.config.Requests),
-			said: console.New(consoleLines), kept: map[string]dom.Storage{},
+			said: console.New(consoleLines), kept: map[string]dom.Storage{}, frames: map[*web.Page]*framed{},
 			tools: devtools.State{Preserve: s.config.PreserveLog},
 		}
 		s.keepBodies(s.sessions[tab])
@@ -75,6 +77,9 @@ func (s *Screen) forget() {
 			l.cancel()
 		}
 		s.end(session)
+		for _, set := range session.frames {
+			set.release()
+		}
 		delete(s.sessions, tab)
 	}
 }
@@ -97,7 +102,13 @@ func (s *Screen) fetch(tab *tabs.Tab, address string) *web.Page {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
 	l := &load{cancel}
 	session.loads[address] = l
-	links := web.Links{Open: s.followed, Over: s.point, Save: s.download, Post: s.posted, Unsent: session.unsent}
+	links := web.Links{Open: s.followed, Over: s.point, Save: s.download, Unsent: session.unsent,
+		Aimed: func(address, target string) bool { return s.aimedFromTop(tab, address, target, nil) },
+		Post: func(sent web.Submission) {
+			if !s.aimedFromTop(tab, sent.Address, sent.Target, &sent) {
+				s.posted(sent)
+			}
+		}}
 	loader, ctx := s.current(), netlog.With(s.began(ctx), session.log, "navigation", netlog.Document)
 	sent, posting := session.posts[address]
 	delete(session.posts, address)

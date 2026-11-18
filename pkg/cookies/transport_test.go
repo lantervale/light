@@ -327,3 +327,47 @@ func TestAScriptsPostToAnotherSiteCarriesNoLaxAndNoStrictCookie(t *testing.T) {
 		t.Errorf("from its own site the POST came with %d cookies, want 4", got)
 	}
 }
+
+func TestAFramesCookiesFollowItsHops(t *testing.T) {
+	n := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set":
+			w.Header().Add("Set-Cookie", "kept=1; SameSite=None; Secure")
+			w.Header().Add("Set-Cookie", "plain=1")
+		case "/leave":
+			http.Redirect(w, r, "https://example.com/landed", http.StatusFound)
+		}
+	})
+	n.jar.SetThirdParty(true)
+	top := at(t, "http://news.test/")
+	n.get(t.Context(), "http://news.test/set")
+	n.get(t.Context(), "https://example.com/set")
+
+	n.get(cookies.Framed(t.Context(), top, false), "http://news.test/leave")
+	if own, crossed := n.sent("http://news.test/leave"), n.sent("https://example.com/landed"); own != 1 ||
+		crossed != 0 {
+		t.Errorf("a frame of the page's site sent %d cookies, then %d to the site it was redirected to: want its "+
+			"own, and none of the other site's own", own, crossed)
+	}
+	n.get(cookies.Framed(t.Context(), top, false), "https://example.com/set")
+	n.get(cookies.Framed(t.Context(), top, false), "https://example.com/again")
+	if got := n.sent("https://example.com/again"); got != 1 {
+		t.Errorf("a frame of another site sent %d cookies, want the one it set under the page's site", got)
+	}
+	n.get(cookies.Framed(t.Context(), at(t, "http://shop.test/"), false), "https://example.com/elsewhere")
+	if got := n.sent("https://example.com/elsewhere"); got != 0 {
+		t.Errorf("under another page's site the frame sent %d cookies", got)
+	}
+	n.get(cookies.Framed(t.Context(), top, true), "http://news.test/inner")
+	if got := n.sent("http://news.test/inner"); got != 0 {
+		t.Errorf("the page's site in another site's frame sent %d cookies", got)
+	}
+	n.get(cookies.Without(cookies.Framed(t.Context(), top, false)), "http://news.test/sandboxed")
+	if got := n.sent("http://news.test/sandboxed"); got != 0 {
+		t.Errorf("a frame with no origin sent %d cookies", got)
+	}
+	n.get(t.Context(), "https://example.com/own")
+	if got := n.sent("https://example.com/own"); got != 2 {
+		t.Errorf("the other site's own page sent %d cookies, want its 2", got)
+	}
+}

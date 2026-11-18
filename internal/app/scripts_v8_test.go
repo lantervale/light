@@ -13,6 +13,7 @@ import (
 
 	"github.com/lantervale/ember/input"
 
+	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/tabs"
 )
@@ -403,8 +404,7 @@ func TestTheConsoleEvaluatesInAPageWithoutAScript(t *testing.T) {
 func TestTheConsoleSaysJavaScriptIsOff(t *testing.T) {
 	srv := consoled(t)
 	s := show(t)
-	s.config.JavaScript = false
-	s.apply()
+	s.configure(func(c *config.Config) { c.JavaScript = false })
 	s.visit(srv.URL + "/")
 	s.toolsKeys()
 	s.click("dt-tab-console")

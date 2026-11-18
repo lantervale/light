@@ -51,17 +51,24 @@ func (s *Screen) closeMenuWhenMoved() {
 }
 
 // targetOf is what n, the element a right click is on, is part of. On
-// the canvas of a page of the web, it is what that page has under the
-// pointer.
+// the frame of a page of the web, it is what that page has under the
+// pointer, in the innermost of its own frames: the Inspector is shown
+// the page's iframe for what is in one.
 func (s *Screen) targetOf(n *ui.Node) target {
 	t := target{tab: -1, selection: s.doc.Selection().Text}
 	base := s.browser.Tab().Current()
-	if n == s.host {
-		page := s.session().pages[base]
-		at, _ := s.doc.PointerOn(s.host)
-		n, base, t.selection = page.Doc.ElementAt(at), page.Address, page.Doc.Selection().Text
+	var frame *ui.Node
+	if page := s.session().pages[base]; n == s.host && page != nil && page.Doc != nil {
+		at, _ := s.doc.FramePoint(s.host, s.win.Input().Mouse())
+		var doc *ui.Document
+		n, doc, base, frame = s.innermost(page, at)
+		if t.selection = doc.Selection().Text; t.selection == "" {
+			t.selection = page.Doc.Selection().Text
+		}
 	}
-	t.node = s.ofPage(n)
+	if t.node = s.ofPage(n); frame != nil {
+		t.node = frame
+	}
 	for ; n != nil; n = n.Parent() {
 		if row, ok := s.tools.RowAt(n); ok && t.request == nil {
 			t.request = &row
@@ -118,7 +125,7 @@ func (s *Screen) entries(t target) []menu.Entry {
 	}
 	var groups [][]menu.Entry
 	if t.link != "" {
-		groups = append(groups, s.savedEntries("Open link in new tab", "Save link as…", "Copy link address", t.link))
+		groups = append(groups, s.linkEntries(t.link))
 	}
 	if t.picture != "" {
 		groups = append(groups,
@@ -141,6 +148,17 @@ func (s *Screen) entries(t target) []menu.Entry {
 		entries = append(entries, group...)
 	}
 	return entries
+}
+
+// linkEntries open a link as the keys held at a click on it do: in a
+// tab behind the shown one, or in a window.
+func (s *Screen) linkEntries(link string) []menu.Entry {
+	return []menu.Entry{
+		{Label: "Open link in new tab", Do: func() { s.openBeside(link, behind) }},
+		{Label: "Open link in new window", Do: func() { s.openWindow(link) }},
+		{Label: "Save link as…", Do: func() { s.download(link, "") }, Disabled: !onTheWeb(link)},
+		{Label: "Copy link address", Do: func() { s.win.SetClipboard(link) }},
+	}
 }
 
 func (s *Screen) addressEntries(opens, copies, address string) []menu.Entry {

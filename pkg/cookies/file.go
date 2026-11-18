@@ -34,6 +34,8 @@ type saved struct {
 	Expires  time.Time `json:"expires"`
 	Created  time.Time `json:"created"`
 	Used     time.Time `json:"used"`
+	// Partition is left out of the file for a site's own cookie.
+	Partition string `json:"partition,omitempty"`
 }
 
 // Save writes the jar at path, making its folder, the file whole or not
@@ -52,7 +54,8 @@ func (j *Jar) Save(path string) error {
 		}
 	}
 	slices.SortFunc(out.Cookies, func(a, b saved) int {
-		return cmp.Or(cmp.Compare(a.Domain, b.Domain), cmp.Compare(a.Path, b.Path), cmp.Compare(a.Name, b.Name))
+		return cmp.Or(cmp.Compare(a.Domain, b.Domain), cmp.Compare(a.Path, b.Path), cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Partition, b.Partition))
 	})
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

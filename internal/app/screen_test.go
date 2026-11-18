@@ -10,6 +10,7 @@ import (
 	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui/align"
+	"github.com/lantervale/ember/world"
 
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/tabs"
@@ -21,6 +22,7 @@ type shown struct {
 	win   *platform.Window
 	in    *input.State
 	frame func()
+	world *world.World
 }
 
 // show is a window showing light with no network, its history in memory
@@ -32,12 +34,12 @@ func show(t *testing.T) *shown {
 
 func showWith(t *testing.T, opts Options) *shown {
 	t.Helper()
-	win := platform.NewWindow(platform.Size(1024, 680))
+	win := Window(nil)
 	screen := New(win, opts)
 	win.Add(screen.Document())
 	w := ember.New().AddEntities(win).AddSystems(screen)
 	t.Cleanup(func() { _ = screen.Close() })
-	s := &shown{Screen: screen, t: t, win: win, in: win.Input(), frame: func() { w.RunFrames(1) }}
+	s := &shown{Screen: screen, t: t, win: win, in: win.Input(), frame: func() { w.RunFrames(1) }, world: w}
 	s.frame()
 	return s
 }

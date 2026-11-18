@@ -11,10 +11,8 @@ import (
 
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/config"
-	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
 	"github.com/lantervale/light/pkg/identity"
-	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/script"
 	"github.com/lantervale/light/pkg/tabs"
 )
@@ -34,12 +32,6 @@ const (
 // one it began with.
 func (s *Screen) current() *web.Loader { return s.loader.Load() }
 
-// Open asks through the client of the settings as they stand, so a
-// download is sent as a page is.
-func (s *Screen) open(ctx context.Context, address, accept string) (*fetch.Stream, error) {
-	return s.current().Client.Open(ctx, address, accept)
-}
-
 // opener is a function as the downloads' fetch.
 type opener func(ctx context.Context, address, accept string) (*fetch.Stream, error)
 
@@ -48,24 +40,27 @@ func (o opener) Open(ctx context.Context, address, accept string) (*fetch.Stream
 }
 
 // configure changes the settings: what is out of bounds falls back to
-// its default, and what changed is applied at once and written.
-func (s *Screen) configure(change func(c *config.Config)) {
-	c := s.config
+// its default, and what changed is applied at once, in every window,
+// and written.
+func (p *Profile) configure(change func(c *config.Config)) {
+	c := p.config
 	change(&c)
-	if c = c.Valid(); c != s.config {
-		s.config = c
-		s.settings.touch()
-		s.apply()
-		s.shade()
+	if c = c.Valid(); c != p.config {
+		p.config = c
+		p.settings.touch()
+		p.hold()
+		for _, s := range p.screens {
+			s.apply()
+			s.shade()
+		}
 	}
-	for _, refresh := range s.fields {
-		refresh()
+	for _, s := range p.screens {
+		for _, refresh := range s.fields {
+			refresh()
+		}
 	}
 }
 
-// apply has the settings hold: the requests and the pages loaded from
-// now on, the pages already loaded where they can, the downloads'
-// folder, the history's and the requests' caps.
 // viewport is the size of the view pages show in as the last frame saw
 // it, in the pixels of a page at the zoom they are built at: read by
 // the loader off the frame. It is nothing before the view shows.
@@ -84,21 +79,17 @@ func (s *Screen) measure() {
 	s.viewed.Store(uint64(max(box.W/zoom, 0))<<32 | uint64(uint32(max(box.H/zoom, 0))))
 }
 
+// apply has the settings hold in the screen's window: the pages loaded
+// from now on, those already loaded where they can, the page a new tab
+// starts on and the requests' cap.
 func (s *Screen) apply() {
 	c := s.config
 	s.loader.Store(&web.Loader{
-		Client: fetch.New(&cookies.Transport{Jar: s.jar, Base: &netlog.Transport{Base: s.guard}},
-			fetch.Agent(s.agent()), fetch.Languages(identity.AcceptLanguage(s.languages())),
-			fetch.Redirects(c.Redirects)),
+		Client:     s.client.Load(),
 		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100, Scripts: s.scripting(),
 		Viewport: s.viewport,
 	})
-	s.jar.SetEnabled(c.Cookies)
-	s.jar.SetThirdParty(c.ThirdPartyCookies)
-	s.guard.Open(c.LocalNetwork)
 	s.browser.Start = c.StartPage
-	s.visits.SetLimit(c.HistoryLimit)
-	s.saves.SetDir(s.downloadsDir())
 	for _, session := range s.sessions {
 		session.log.SetLimit(c.Requests)
 		s.zoomPages(session)
@@ -123,14 +114,14 @@ func (s *Screen) logo() string {
 
 // downloadsDir is the folder downloads are saved to: the one the run was
 // given, else the settings', else the system's.
-func (s *Screen) downloadsDir() string {
+func (p *Profile) downloadsDir() string {
 	switch {
-	case s.opts.Downloads != "":
-		return s.opts.Downloads
-	case s.config.Downloads != "":
-		return s.config.Downloads
+	case p.opts.Downloads != "":
+		return p.opts.Downloads
+	case p.config.Downloads != "":
+		return p.config.Downloads
 	}
-	return s.opts.DefaultDownloads
+	return p.opts.DefaultDownloads
 }
 
 // timeout is how long a page and its sheets may take.
@@ -203,6 +194,8 @@ func configBody(s *Screen) []*ui.Node {
 		s.zoomSetting(),
 		s.checkSetting("set-pictures", "Load pictures (pages loaded from now on)",
 			func(c *config.Config) *bool { return &c.Pictures }),
+		s.checkSetting("set-frames", "Load frames (the pages other pages show inside them)",
+			func(c *config.Config) *bool { return &c.Frames }),
 		s.checkSetting("set-meta-refresh", "Follow a page that refreshes elsewhere at once (from now on)",
 			func(c *config.Config) *bool { return &c.MetaRefresh }),
 		s.checkSetting("set-javascript", "Run JavaScript (pages loaded from now on)",

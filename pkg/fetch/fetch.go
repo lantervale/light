@@ -140,6 +140,22 @@ type (
 	hopsKey   struct{}
 )
 
+type checkedKey struct{}
+
+// Checked is ctx for a request every address of which, the first and
+// those it is redirected to, is asked of check before anything is sent
+// there: its error ends the request.
+func Checked(ctx context.Context, check func(to *url.URL) error) context.Context {
+	return context.WithValue(ctx, checkedKey{}, check)
+}
+
+func checked(ctx context.Context, to *url.URL) error {
+	if check, _ := ctx.Value(checkedKey{}).(func(*url.URL) error); check != nil {
+		return check(to)
+	}
+	return nil
+}
+
 // hops counts the redirects of one Get, from those before it.
 type hops struct{ before, followed int }
 
@@ -156,6 +172,9 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	h, _ := req.Context().Value(hopsKey{}).(*hops)
 	if h.before+h.followed >= c.redirects {
 		return ErrTooManyRedirects
+	}
+	if err := checked(req.Context(), req.URL); err != nil {
+		return err
 	}
 	h.followed++
 	elsewhere(req, via[len(via)-1].URL)
@@ -272,6 +291,9 @@ func (c *Client) send(ctx context.Context, method, address, accept string, form 
 	req, err := http.NewRequestWithContext(context.WithValue(ctx, hopsKey{}, count), method, address, body)
 	if err != nil {
 		return nil, plain(err)
+	}
+	if err = checked(ctx, req.URL); err != nil {
+		return nil, err
 	}
 	if form != nil {
 		req.Header.Set("Content-Type", form.Type)

@@ -303,11 +303,19 @@ class HTMLCanvasElement extends HTMLElement {
   toDataURL() { return "data:,"; }
 }
 reflect(HTMLCanvasElement.prototype, { width: ["width", 300], height: ["height", 150] });
+// light shows an iframe's document but runs no script in it yet: it
+// has no window for the page to reach.
 class HTMLIFrameElement extends HTMLElement {
   get contentWindow() { return null; }
   get contentDocument() { return null; }
+  get sandbox() {
+    if (!this._sandbox) define(this, { _sandbox: new DOMTokenList(this, "sandbox") });
+    return this._sandbox;
+  }
+  set sandbox(value) { this.setAttribute("sandbox", value); }
 }
 located(HTMLIFrameElement.prototype, { src: "src" });
+reflect(HTMLIFrameElement.prototype, { srcdoc: "srcdoc", name: "name", width: "width", height: "height" });
 class HTMLMediaElement extends HTMLElement {
   play() { return Promise.reject(new DOMException("light plays no media.", "NotSupportedError")); }
   pause() {}
