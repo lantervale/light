@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -65,6 +66,20 @@ func (a *Answer) Text() string {
 		return string(a.Body)
 	}
 	return string(text)
+}
+
+// Code is the body of a script or a sheet decoded to UTF-8: by the
+// charset its Content-Type names, else as the UTF-8 it is taken for,
+// whatever its first bytes show, without its byte order mark.
+func (a *Answer) Code() string {
+	if _, params, err := mime.ParseMediaType(a.Header.Get("Content-Type")); err == nil && params["charset"] != "" {
+		if e, _ := charset.Lookup(params["charset"]); e != nil {
+			if text, undecoded := e.NewDecoder().Bytes(a.Body); undecoded == nil {
+				return string(text)
+			}
+		}
+	}
+	return string(bytes.TrimPrefix(a.Body, []byte("\xef\xbb\xbf")))
 }
 
 // Client makes the requests.
@@ -197,6 +212,9 @@ func (c *Client) Open(ctx context.Context, address, accept string) (*Stream, err
 		req.Header.Set("User-Agent", c.agent)
 	}
 	req.Header.Set("Accept", accept)
+	if from, _ := ctx.Value(referrerKey{}).(string); from != "" {
+		req.Header.Set("Referer", from)
+	}
 	resp, err := c.http.Do(req) //nolint:bodyclose // the Stream returned holds the body, and its Close closes it
 	if err != nil {
 		return nil, plain(err)

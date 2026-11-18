@@ -175,6 +175,26 @@ func TestTextIsDecodedByItsCharset(t *testing.T) {
 	}
 }
 
+func TestCodeIsUTF8UnlessItsTypeNamesACharset(t *testing.T) {
+	late := strings.Repeat(" ", 2048) + "var r = {À: 'A'}"
+	for name, c := range map[string]struct {
+		header, body, want string
+	}{
+		"no charset, the first bytes plain": {"text/javascript", late, late},
+		"a charset":                         {"text/javascript; charset=iso-8859-1", "var \xe9 = 1", "var é = 1"},
+		"a byte order mark":                 {"text/css", "\xef\xbb\xbfa { content: 'é' }", "a { content: 'é' }"},
+		"a charset no one knows":            {"text/css; charset=klingon", "a { content: 'é' }", "a { content: 'é' }"},
+	} {
+		a := &fetch.Answer{Header: http.Header{"Content-Type": {c.header}}, Body: []byte(c.body)}
+		if got := a.Code(); got != c.want {
+			t.Errorf("%s reads %q, want %q", name, got, c.want)
+		}
+	}
+	if a := (&fetch.Answer{Header: http.Header{"Content-Type": {"text/html"}}, Body: []byte(late)}); a.Text() == late {
+		t.Error("a page with no charset and plain first bytes is no longer sniffed")
+	}
+}
+
 func TestAStoppedOrSlowRequestEndsAlsoBehindARedirect(t *testing.T) {
 	srv := site(t)
 	c := fetch.New(nil)

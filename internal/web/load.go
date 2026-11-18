@@ -12,9 +12,11 @@ import (
 	"net/url"
 	"strings"
 
+	_ "golang.org/x/image/webp" // and WebP
 	"golang.org/x/net/html"
 
 	"github.com/lantervale/light/pkg/content"
+	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
 	"github.com/lantervale/light/pkg/netlog"
 )
@@ -26,6 +28,16 @@ const (
 	byPicture  = "picture"
 )
 
+// The schemes of the addresses light opens.
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+)
+
+// drawn are the pictures light draws, as it asks for them: no type it
+// would be sent and could not read.
+const drawn = "image/png, image/jpeg, image/gif, image/webp, image/svg+xml"
+
 // Loader loads pages through its client.
 type Loader struct {
 	Client *fetch.Client
@@ -34,6 +46,24 @@ type Loader struct {
 	NoPictures, NoRefresh bool
 	// Zoom is the zoom pages are built at, 1 when 0.
 	Zoom float32
+	// Scripts keeps a page's scripts, fetched with it, and builds it as
+	// they need it (tree.go).
+	Scripts bool
+	// Viewport is the size of the view pages show in, which an img's
+	// srcset is chosen for; a common one without it.
+	Viewport func() (width, height float32)
+}
+
+// Local is the page of light's own at address, built from its HTML as
+// one of the web is; what it links to is fetched.
+func (l *Loader) Local(address, source string, links Links) *Page {
+	at, err := url.Parse(address)
+	if err != nil {
+		return &Page{Address: address, Err: err}
+	}
+	page := &Page{Address: address, Status: http.StatusOK, Kind: content.Page, Media: "text/html"}
+	l.build(context.Background(), page, &fetch.Answer{Address: address, URL: at, Body: []byte(source)}, links)
+	return page
 }
 
 // Load gets the page at address and what it needs, following its
@@ -61,7 +91,7 @@ func (l *Loader) Load(ctx context.Context, address string, links Links) (page *P
 			return &Page{Address: address, Err: err}
 		}
 		hops += answer.Hops
-		to, refreshed := refresh(answer)
+		to, refreshed := refresh(answer, l.Scripts)
 		if !refreshed || l.NoRefresh {
 			return l.read(ctx, answer, links)
 		}
@@ -72,13 +102,13 @@ func (l *Loader) Load(ctx context.Context, address string, links Links) (page *P
 			return &Page{Address: answer.Address,
 				Err: fmt.Errorf("it refreshes to %s, and only http and https addresses are opened", to)}
 		}
-		address, ctx = to, netlog.As(ctx, byRefresh, netlog.Document)
+		address, ctx = to, cookies.From(netlog.As(ctx, byRefresh, netlog.Document), answer.URL)
 	}
 }
 
 func opened(address string) bool {
 	u, err := url.Parse(address)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https")
+	return err == nil && (u.Scheme == schemeHTTP || u.Scheme == schemeHTTPS)
 }
 
 // sniffed is how much of an answer says what it is.
@@ -138,29 +168,35 @@ func (l *Loader) read(ctx context.Context, answer *fetch.Answer, links Links) *P
 // icon fetched meanwhile.
 func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, links Links) {
 	page.Source = answer.Text()
-	root, err := html.Parse(strings.NewReader(cut(page.Source)))
+	root, err := html.ParseWithOptions(strings.NewReader(cut(page.Source)), html.ParseOptionEnableScripting(l.Scripts))
 	if err != nil {
 		page.Err = fmt.Errorf("reading its HTML: %w", err)
 		return
 	}
-	b := &builder{loader: l, base: answer.URL, links: links}
-	ctx = netlog.As(ctx, byDocument, netlog.Other)
+	if l.Scripts {
+		writtenIn(cut(page.Source)).restore(root)
+	}
+	b := newBuilder(l, answer.URL, links)
+	b.encode = encoderOf(answer.Body, answer.Header.Get("Content-Type"))
+	ctx = cookies.Within(netlog.As(ctx, byDocument, netlog.Other), answer.URL)
 	icon := make(chan []byte, 1)
 	go func() { icon <- b.icon(ctx, root) }()
 	b.load(ctx, root)
 	page.Title, page.Doc, page.Icon = titleOf(root), b.document(ctx, root), <-icon
+	page.Scripts, page.Tree = b.ordered(), b.tree
 	if err = ctx.Err(); err != nil {
 		page.Err = err
 	}
 }
 
 // refresh is where an answer says to go at once, in a Refresh header or,
-// for HTML, a meta refresh: one that waits is left alone.
-func refresh(answer *fetch.Answer) (string, bool) {
+// for HTML, a meta refresh: one that waits is left alone, and so is one
+// in a noscript when the page's scripts run.
+func refresh(answer *fetch.Answer, scripts bool) (string, bool) {
 	value := answer.Header.Get("Refresh")
 	if kind, _ := content.Of(answer.Header.Get("Content-Type"), answer.Body, answer.Address); value == "" &&
 		kind == content.Page {
-		value = metaRefresh(answer.Text())
+		value = metaRefresh(answer.Text(), scripts)
 	}
 	seconds, to, ok := fetch.Refresh(value, answer.URL)
 	return to, ok && seconds == 0
@@ -170,7 +206,7 @@ func refresh(answer *fetch.Answer) (string, bool) {
 // to save.
 func (l *Loader) Picture(ctx context.Context, address string) ([]byte, error) {
 	answer, err := l.Client.Get(netlog.As(ctx, byPicture, netlog.Image), address,
-		"image/png, image/jpeg, image/gif, image/svg+xml, image/*")
+		drawn)
 	switch {
 	case err != nil:
 		return nil, err

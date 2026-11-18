@@ -1,12 +1,14 @@
 package netlog
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
 	"mime"
 	"net/http"
 	"net/http/httptrace"
+	"strings"
 	"time"
 )
 
@@ -62,7 +64,16 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		remote := info.Conn.RemoteAddr().String()
 		a.log.change(row, func(r *Row) { r.Remote = remote })
 	}}
-	resp, err := t.base().RoundTrip(req.WithContext(httptrace.WithClientTrace(req.Context(), trace)))
+	sent := req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	// As http.Transport does, gzip is asked for and undone here when the
+	// request asks for no encoding of its own, so that the bytes sent
+	// are counted beside those read.
+	unzip := req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != http.MethodHead
+	if unzip {
+		sent.Header = req.Header.Clone()
+		sent.Header.Set("Accept-Encoding", "gzip")
+	}
+	resp, err := t.base().RoundTrip(sent)
 	if err != nil {
 		a.log.change(row, func(r *Row) { r.Err, r.Done, r.Took = reason(err), true, time.Since(start) })
 		return nil, err
@@ -79,9 +90,49 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if resp.Header.Get("Location") != "" {
 		a.log.redirected(row, resp)
 	}
-	resp.Body = &body{ReadCloser: resp.Body, log: a.log, row: row, start: start}
+	wire := &counted{ReadCloser: resp.Body}
+	resp.Body = wire
+	if unzip && strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.ContentLength, resp.Uncompressed = -1, true
+		resp.Body = &unzipped{zipped: wire}
+	}
+	resp.Body = &body{ReadCloser: resp.Body, wire: wire, log: a.log, row: row, start: start}
 	return resp, nil
 }
+
+// counted counts the bytes read through it: an answer's as the server
+// sent them.
+type counted struct {
+	io.ReadCloser
+	n int64
+}
+
+func (c *counted) Read(p []byte) (int, error) {
+	n, err := c.ReadCloser.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// unzipped is a gzipped body as it was before, read from its first Read.
+type unzipped struct {
+	zipped io.ReadCloser
+	plain  *gzip.Reader
+	err    error
+}
+
+func (u *unzipped) Read(p []byte) (int, error) {
+	if u.plain == nil && u.err == nil {
+		u.plain, u.err = gzip.NewReader(u.zipped)
+	}
+	if u.err != nil {
+		return 0, u.err
+	}
+	return u.plain.Read(p)
+}
+
+func (u *unzipped) Close() error { return u.zipped.Close() }
 
 func reason(err error) string {
 	if errors.Is(err, context.Canceled) {
@@ -94,6 +145,8 @@ func reason(err error) string {
 // first of them, and ends the row with it.
 type body struct {
 	io.ReadCloser
+	// wire counts the bytes as the server sent them.
+	wire  *counted
 	log   *Log
 	row   *Row
 	start time.Time
@@ -104,6 +157,7 @@ func (b *body) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
 	b.log.change(b.row, func(r *Row) {
 		r.Size += int64(n)
+		r.Transferred = b.wire.n
 		keep := min(n, PreviewCap-len(r.Preview))
 		r.Preview = append(r.Preview, p[:keep]...)
 		r.Truncated = r.Truncated || keep < n

@@ -8,7 +8,10 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -150,6 +153,8 @@ func TestAStatusIsShownAsABrowserShowsIt(t *testing.T) {
 func TestAnAnswerIsReadByItsKind(t *testing.T) {
 	pic := picture(t, 30, 20)
 	srv, _ := answers(t, map[string]answer{
+		"/photo.webp":  typed("image/webp", string(testdata(t, "lossy.webp"))),
+		"/shot":        typed("application/octet-stream", string(testdata(t, "lossless-alpha.webp"))),
 		"/art/map.png": typed("image/png", string(pic)),
 		"/favicon.ico": typed("image/x-icon", string(ico(pic))),
 		"/logo.svg":    typed("image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"/>`),
@@ -160,7 +165,7 @@ func TestAnAnswerIsReadByItsKind(t *testing.T) {
 		"/feed":        typed("application/atom+xml", "<feed/>"),
 		"/blob":        typed("application/octet-stream", "\x00\x01\x02"),
 		"/paper.pdf":   typed("application/pdf", "%PDF-1.7"),
-		"/photo.webp":  typed("image/webp", "RIFF....WEBP"),
+		"/photo.avif":  typed("image/avif", "\x00\x00\x00\x1cftypavif"),
 		"/report": {header: map[string]string{"Content-Type": "text/html",
 			"Content-Disposition": `attachment; filename="../q3 report.html"`}, body: "<p>saved, not shown</p>"},
 	})
@@ -168,15 +173,18 @@ func TestAnAnswerIsReadByItsKind(t *testing.T) {
 		"/art/map.png": {Kind: content.Picture, Media: "image/png", Title: "map.png (30×20)", Size: image.Pt(30, 20)},
 		"/favicon.ico": {Kind: content.Picture, Media: "image/x-icon", Title: "favicon.ico (30×20)",
 			Size: image.Pt(30, 20)},
-		"/logo.svg":   {Kind: content.Picture, Media: "image/svg+xml", Title: "logo.svg"},
-		"/site.css":   {Kind: content.Text, Media: "text/css", Title: "site.css", Source: "a { color: red }"},
-		"/app.js":     {Kind: content.Text, Media: "application/javascript", Title: "app.js", Source: "let a = 1"},
-		"/data.json":  {Kind: content.Text, Media: "application/json", Title: "data.json", Source: `{"a": 1}`},
-		"/latin.txt":  {Kind: content.Text, Media: "text/plain", Title: "latin.txt", Source: "clé"},
-		"/feed":       {Kind: content.Text, Media: "application/atom+xml", Title: "feed", Source: "<feed/>"},
-		"/blob":       {Kind: content.Download, Media: "application/octet-stream", Title: "blob"},
-		"/paper.pdf":  {Kind: content.Download, Media: "application/pdf", Title: "paper.pdf"},
-		"/photo.webp": {Kind: content.Download, Media: "image/webp", Title: "photo.webp"},
+		"/logo.svg":  {Kind: content.Picture, Media: "image/svg+xml", Title: "logo.svg"},
+		"/site.css":  {Kind: content.Text, Media: "text/css", Title: "site.css", Source: "a { color: red }"},
+		"/app.js":    {Kind: content.Text, Media: "application/javascript", Title: "app.js", Source: "let a = 1"},
+		"/data.json": {Kind: content.Text, Media: "application/json", Title: "data.json", Source: `{"a": 1}`},
+		"/latin.txt": {Kind: content.Text, Media: "text/plain", Title: "latin.txt", Source: "clé"},
+		"/feed":      {Kind: content.Text, Media: "application/atom+xml", Title: "feed", Source: "<feed/>"},
+		"/blob":      {Kind: content.Download, Media: "application/octet-stream", Title: "blob"},
+		"/paper.pdf": {Kind: content.Download, Media: "application/pdf", Title: "paper.pdf"},
+		"/photo.webp": {Kind: content.Picture, Media: "image/webp", Title: "photo.webp (30×20)",
+			Size: image.Pt(30, 20)},
+		"/shot":       {Kind: content.Picture, Media: "image/webp", Title: "shot (30×20)", Size: image.Pt(30, 20)},
+		"/photo.avif": {Kind: content.Download, Media: "image/avif", Title: "photo.avif"},
 		"/report":     {Kind: content.Download, Media: "text/html", Title: "q3 report.html"},
 	} {
 		page := load(t, srv.URL+path)
@@ -296,6 +304,7 @@ func TestASitesIconIsWhatLightCanDraw(t *testing.T) {
 		data, want  []byte
 	}{
 		"a png":                       {"/i.png", "image/png", small, small},
+		"a webp":                      {"/i", "", testdata(t, "lossy.webp"), testdata(t, "lossy.webp")},
 		"an svg by its name":          {"/i.svg?v=2", "", svg, svg},
 		"an svg by its type":          {"/icon", "image/svg+xml", svg, svg},
 		"an ico's largest png":        {"/favicon.ico", "image/x-icon", ico(small, large), large},
@@ -308,6 +317,46 @@ func TestASitesIconIsWhatLightCanDraw(t *testing.T) {
 			t.Errorf("%s: %d bytes, want %d", name, len(got), len(c.want))
 		}
 	}
+}
+
+func TestPicturesAreAskedForInTheFormatsLightDraws(t *testing.T) {
+	var accepts sync.Map
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accepts.Store(r.URL.Path, r.Header.Get("Accept"))
+		switch r.URL.Path {
+		case "/":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte(`<link rel="icon" href="/icon"><img id="door" src="/door">`))
+		default:
+			_, _ = w.Write(testdata(t, "lossless-alpha.webp"))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	s := show(t)
+	doc := s.visit(srv.URL + "/")
+	s.until("the WebP picture took its size", func() bool { return box(t, doc, "door").W == 30 })
+	if warns := doc.Warnings(); len(warns) > 0 {
+		t.Errorf("a WebP picture warns: %v", warns)
+	}
+	if !bytes.Equal(s.page.Icon, testdata(t, "lossless-alpha.webp")) {
+		t.Error("a WebP icon is not the site's")
+	}
+	for _, path := range []string{"/icon", "/door"} {
+		accept, _ := accepts.Load(path)
+		if got, _ := accept.(string); !strings.Contains(got, "image/webp") || strings.Contains(got, "avif") ||
+			strings.Contains(got, "*") {
+			t.Errorf("%s was asked for with Accept: %s", path, got)
+		}
+	}
+}
+
+func testdata(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func TestALoaderIsSetUpToLeaveOutPicturesAndRefreshesAndToZoom(t *testing.T) {

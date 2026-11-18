@@ -18,6 +18,7 @@ const (
 	historyName   = "history"
 	downloadsName = "downloads"
 	configName    = "config"
+	scriptsName   = "scripts"
 )
 
 // own is what the address of a page of light's begins with.
@@ -48,6 +49,7 @@ func pages() []site {
 		{downloadsName, saves, "The files saved from the web, in progress and done.", downloadsBody},
 		{configName, settings, "The start page, the downloads' folder, the history, the zoom, the network.",
 			configBody},
+		{scriptsName, "Scripts", "What light runs of a page's JavaScript: a counter, a list, tabs, a fetch.", nil},
 	}
 }
 
@@ -137,10 +139,11 @@ func examplesPage(s *Screen) []*ui.Node {
 func aboutPage(s *Screen) []*ui.Node {
 	return []*ui.Node{
 		ui.H1(ui.Text("About light")),
-		ui.P(ui.Text("light is a small web browser made as a demo of ember: tabs, an address bar and a " +
-			"history over pages built in Go, and over the web. An http or https address is fetched with its " +
-			"stylesheets and pictures and built as a Document of its own; a picture, a text or a file is " +
-			"shown or saved by its type. No script runs, and the CSS is the subset ui knows.")),
+		ui.P(ui.Text("light is a small web browser made as a demo of ember: tabs, an address bar and a "+
+			"history over pages built in Go, and over the web. An http or https address is fetched with its "+
+			"stylesheets and pictures and built as a Document of its own; a picture, a text or a file is "+
+			"shown or saved by its type. The CSS is the subset ui knows; a page's scripts run in a build that "+
+			"has an engine for them, as far as "), s.link(scriptsPage, scriptsPage), ui.Text(" shows.")),
 		ui.P(ui.Text("The tabs are the window's title bar (platform.OwnTitleBar): the empty part of " +
 			"the strip drags the window, and a double click there zooms it. The address of a link " +
 			"under the pointer, and the site a page is waited for, show in a bubble at the bottom-left.")),

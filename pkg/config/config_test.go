@@ -15,6 +15,7 @@ func TestTheDefaultsAreWhatLightDidBeforeItHadSettings(t *testing.T) {
 	want := config.Config{
 		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
 		Timeout: 30, Redirects: 10, UserAgent: "light/1.0 (ember)", MetaRefresh: true, Requests: 1000,
+		JavaScript: true, Cookies: true,
 	}
 	if c != want {
 		t.Fatalf("the defaults are %+v, want %+v", c, want)
@@ -28,12 +29,14 @@ func TestAValueOutOfItsBoundsFallsBackToItsDefault(t *testing.T) {
 	c := config.Default()
 	c.StartPage, c.UserAgent = "  ", "light\nX-Injected: 1"
 	c.HistoryLimit, c.Zoom, c.Timeout, c.Redirects, c.Requests = 3, 500, 0, -1, 1<<30
+	c.ToolsHeight = 40
 	if got := c.Valid(); got != config.Default() {
 		t.Fatalf("the bad values became %+v", got)
 	}
 	c = config.Default()
 	c.StartPage, c.Downloads, c.UserAgent = " https://example.com ", " /tmp/files ", " Mozilla/5.0 "
 	c.HistoryLimit, c.Zoom, c.Timeout, c.Redirects, c.Requests = 100, 200, 300, 0, 100
+	c.ToolsHeight = 120
 	want := c
 	want.StartPage, want.Downloads, want.UserAgent = "https://example.com", "/tmp/files", "Mozilla/5.0"
 	if got := c.Valid(); got != want {
@@ -45,6 +48,7 @@ func TestWhatIsWrittenIsReadBack(t *testing.T) {
 	c := config.Default()
 	c.StartPage, c.Downloads, c.KeepHistory, c.Zoom, c.MetaRefresh, c.PreserveLog = "https://example.com", "/d", false,
 		150, false, true
+	c.JavaScript = false
 	data, err := c.Encode()
 	if err != nil || !strings.Contains(string(data), `"version": 1`) {
 		t.Fatalf("%s, %v", data, err)
@@ -57,7 +61,7 @@ func TestWhatIsWrittenIsReadBack(t *testing.T) {
 
 func TestReadingIsTolerant(t *testing.T) {
 	got, err := config.Decode([]byte(`{"version": 7, "zoom": 125, "theme": "dark", "timeout": "soon",
-		"keep_history": false, "redirects": 99, "pictures": null}`))
+		"keep_history": false, "redirects": 99, "pictures": null, "javascript": "yes"}`))
 	want := config.Default()
 	want.Zoom, want.KeepHistory = 125, false
 	if err != nil || got != want {
@@ -121,5 +125,35 @@ func TestTheDarkModeIsOffUntilSetAndKept(t *testing.T) {
 	}
 	if got, err = config.Load(path); err != nil || got != dark {
 		t.Fatalf("read back %+v, %v, want %+v", got, err, dark)
+	}
+}
+
+func TestCookiesAreKeptUntilSetNotToAndThirdPartiesOnesNot(t *testing.T) {
+	if d := config.Default(); !d.Cookies || d.ThirdPartyCookies {
+		t.Fatalf("light starts with cookies %v, a third party's %v", d.Cookies, d.ThirdPartyCookies)
+	}
+	got, err := config.Decode([]byte(`{"version": 1, "cookies": false, "third_party_cookies": true}`))
+	if err != nil || got.Cookies || !got.ThirdPartyCookies {
+		t.Fatalf("read %+v, %v, want cookies off and a third party's on", got, err)
+	}
+	for _, bad := range []string{`"yes"`, `1`, `null`} {
+		got, err = config.Decode([]byte(`{"cookies": ` + bad + `, "third_party_cookies": ` + bad + `}`))
+		if err != nil || got != config.Default() {
+			t.Errorf("cookies of %s read as %+v, %v, want the default", bad, got, err)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	set := config.Default()
+	set.Cookies, set.ThirdPartyCookies = false, true
+	if err = config.Save(path, set); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), `"cookies": false`) ||
+		!strings.Contains(string(data), `"third_party_cookies": true`) {
+		t.Fatalf("the file holds %s", data)
+	}
+	if got, err = config.Load(path); err != nil || got != set {
+		t.Fatalf("read back %+v, %v, want %+v", got, err, set)
 	}
 }

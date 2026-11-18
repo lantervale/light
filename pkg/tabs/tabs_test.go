@@ -27,6 +27,20 @@ func TestVisitingAfterBackDropsTheForwardPages(t *testing.T) {
 	}
 }
 
+func TestATabCountsThePagesItCanGoThrough(t *testing.T) {
+	h := tabs.NewTab("a")
+	h.Visit("b")
+	h.Visit("c")
+	h.Back()
+	if h.Len() != 3 {
+		t.Fatalf("a tab of three pages counts %d", h.Len())
+	}
+	h.Visit("d")
+	if h.Len() != 3 {
+		t.Fatalf("after a visit from the middle the tab counts %d", h.Len())
+	}
+}
+
 func TestVisitingTheSamePageAddsNothing(t *testing.T) {
 	h := tabs.NewTab("a")
 	h.Visit("a")

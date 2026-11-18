@@ -30,6 +30,9 @@ const (
 	MaxRedirects = 20
 	MinRequests  = 100
 	MaxRequests  = 10000
+	// A height of the developer tools out of these is their own.
+	MinToolsHeight = 120
+	MaxToolsHeight = 4000
 )
 
 // Config is every setting. The file names each by its json name.
@@ -58,10 +61,21 @@ type Config struct {
 	// MetaRefresh is whether a page that refreshes elsewhere at once is
 	// followed there.
 	MetaRefresh bool `json:"meta_refresh"`
+	// JavaScript is whether a page's scripts run, in a build that has an
+	// engine for them.
+	JavaScript bool `json:"javascript"`
+	// Cookies is whether sites' cookies are kept and sent, and
+	// ThirdPartyCookies whether those of another site than the page's
+	// are too.
+	Cookies           bool `json:"cookies"`
+	ThirdPartyCookies bool `json:"third_party_cookies"`
 	// PreserveLog is whether a new tab's developer tools keep the
 	// requests over a navigation; Requests how many its log keeps.
 	PreserveLog bool `json:"preserve_log"`
 	Requests    int  `json:"requests"`
+	// ToolsHeight is the height the developer tools were dragged to, 0
+	// for their own.
+	ToolsHeight int `json:"tools_height"`
 }
 
 // Default is the settings light starts with.
@@ -69,6 +83,7 @@ func Default() Config {
 	return Config{
 		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
 		Timeout: 30, Redirects: 10, UserAgent: "light/1.0 (ember)", MetaRefresh: true, Requests: 1000,
+		JavaScript: true, Cookies: true,
 	}
 }
 
@@ -83,6 +98,7 @@ func (c Config) Valid() Config {
 	c.Timeout = within(c.Timeout, MinTimeout, MaxTimeout, d.Timeout)
 	c.Redirects = within(c.Redirects, MinRedirects, MaxRedirects, d.Redirects)
 	c.Requests = within(c.Requests, MinRequests, MaxRequests, d.Requests)
+	c.ToolsHeight = within(c.ToolsHeight, MinToolsHeight, MaxToolsHeight, d.ToolsHeight)
 	return c
 }
 

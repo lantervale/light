@@ -10,8 +10,10 @@ import (
 
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
 	"github.com/lantervale/light/pkg/netlog"
+	"github.com/lantervale/light/pkg/script"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -62,13 +64,34 @@ func (s *Screen) configure(change func(c *config.Config)) {
 // apply has the settings hold: the requests and the pages loaded from
 // now on, the pages already loaded where they can, the downloads'
 // folder, the history's and the requests' caps.
+// viewport is the size of the view pages show in as the last frame saw
+// it, in the pixels of a page at the zoom they are built at: read by
+// the loader off the frame. It is nothing before the view shows.
+func (s *Screen) viewport() (float32, float32) {
+	size := s.viewed.Load()
+	return float32(size >> 32), float32(size & 0xffffffff)
+}
+
+// measure keeps the size viewport answers.
+func (s *Screen) measure() {
+	if s.host == nil {
+		return
+	}
+	box, _ := s.doc.BoxOf(s.host)
+	zoom := max(float32(s.config.Zoom)/100, 0.01)
+	s.viewed.Store(uint64(max(box.W/zoom, 0))<<32 | uint64(uint32(max(box.H/zoom, 0))))
+}
+
 func (s *Screen) apply() {
 	c := s.config
 	s.loader.Store(&web.Loader{
-		Client: fetch.New(&netlog.Transport{Base: s.opts.Transport}, fetch.Agent(c.UserAgent),
-			fetch.Redirects(c.Redirects)),
-		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100,
+		Client: fetch.New(&cookies.Transport{Jar: s.jar, Base: &netlog.Transport{Base: s.opts.Transport}},
+			fetch.Agent(c.UserAgent), fetch.Redirects(c.Redirects)),
+		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100, Scripts: s.scripting(),
+		Viewport: s.viewport,
 	})
+	s.jar.SetEnabled(c.Cookies)
+	s.jar.SetThirdParty(c.ThirdPartyCookies)
 	s.browser.Start = c.StartPage
 	s.visits.SetLimit(c.HistoryLimit)
 	s.saves.SetDir(s.downloadsDir())
@@ -81,7 +104,9 @@ func (s *Screen) apply() {
 // shade draws the shown page dark when the settings say so. A page of
 // the web is left as its site made it.
 func (s *Screen) shade() {
-	toggle(s.view, "dark", s.config.DarkMode && s.host == nil)
+	_, _, lights := tabs.Own(s.browser.Tab().Current())
+	toggle(s.view, "dark", s.config.DarkMode && (s.host == nil || lights))
+	s.tools.SetDark(s.config.DarkMode)
 }
 
 // logo is the logo the start page shows, by the settings.
@@ -176,6 +201,15 @@ func configBody(s *Screen) []*ui.Node {
 			func(c *config.Config) *bool { return &c.Pictures }),
 		s.checkSetting("set-meta-refresh", "Follow a page that refreshes elsewhere at once (from now on)",
 			func(c *config.Config) *bool { return &c.MetaRefresh }),
+		s.checkSetting("set-javascript", "Run JavaScript (pages loaded from now on)",
+			func(c *config.Config) *bool { return &c.JavaScript }),
+		ui.P(ui.ID("javascript-engine"), ui.Class("hint"), ui.Text(engine())),
+		ui.H2(ui.Text("Cookies")),
+		s.checkSetting("set-cookies", "Keep the cookies sites set, and send them back",
+			func(c *config.Config) *bool { return &c.Cookies }),
+		s.checkSetting("set-third-party-cookies", "Those of other sites than the page's too",
+			func(c *config.Config) *bool { return &c.ThirdPartyCookies }),
+		s.clearCookiesSetting(),
 		ui.H2(ui.Text("Network")),
 		s.numberSetting("set-timeout", "Request timeout", "Seconds a page and its sheets may take.",
 			config.MinTimeout, config.MaxTimeout, func(c *config.Config) *int { return &c.Timeout }),
@@ -192,6 +226,15 @@ func configBody(s *Screen) []*ui.Node {
 }
 
 func same(text string) string { return text }
+
+// engine says what runs a page's scripts in this build.
+func engine() string {
+	if !script.Available() {
+		return "This build of light has no JavaScript engine: no script runs, whatever the setting. " +
+			"Build it with -tags v8 to have one."
+	}
+	return "Scripts run in " + script.Engine() + ", see " + scriptsPage + "."
+}
 
 // given says the run was given a downloads folder, which the setting
 // does not change.

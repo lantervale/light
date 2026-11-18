@@ -221,9 +221,7 @@ func TestALinkOfAnExternalPageOpensRelativeToIt(t *testing.T) {
 	}
 	s.click("back")
 	s.at(srv.URL + "/")
-	if s.host == nil {
-		t.Fatal("back shows no page")
-	}
+	s.until("back shows the page, fetched again when its scripts ran", func() bool { return s.host != nil })
 }
 
 func TestLightsOwnSheetStaysOutOfAPage(t *testing.T) {

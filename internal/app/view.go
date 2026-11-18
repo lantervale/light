@@ -64,6 +64,8 @@ func (s *Screen) pageOf(address string) shownPage {
 		return s.sourcePage(of)
 	case name == tabs.SearchName:
 		return shownPage{class: name, body: s.results(query)}
+	case name == scriptsName:
+		return s.scriptsBody()
 	case known:
 		return shownPage{class: name, body: built.body(s)}
 	case lights:

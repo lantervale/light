@@ -1,20 +1,23 @@
 // Package devtools is light's developer tools: a panel docked under a
-// tab's page, drawn with ui elements, whose Network tab lists the tab's
-// requests as its netlog.Log has them and whose Warnings tab lists what
-// ui refused in the page's sheets.
+// tab's page, drawn with ui elements. Its frame is a tool bar of tabs,
+// the chosen tab's tool under it and a handle on its top edge that
+// sizes it; its tools are the tabs registered with Register: Console
+// (console.go), Network (network.go) and Warnings (warnings.go) here.
 package devtools
 
 import (
 	_ "embed"
 	"fmt"
-	"maps"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 
-	"github.com/lantervale/light/pkg/content"
+	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/netlog"
 )
 
@@ -23,24 +26,104 @@ import (
 //go:embed devtools.css
 var Sheet string
 
+// Tab is one tab of the panel's tool bar and the tool it shows. A file
+// adds its own with Register, from an init or a package variable.
+type Tab struct {
+	// ID names the tab: its button is dt-tab-<ID>, its tool is in
+	// dt-tool-<ID>, and State.Tab holds it while it is the one shown.
+	ID, Label string
+	// Icon is the tab's picture: what an svg element of 16 by 16 holds,
+	// drawn in strokes (see pictures).
+	Icon string
+	// Order places the tab in the tool bar, the lowest first.
+	Order int
+	// Build makes the tab's tool for a panel, once, when the panel is
+	// made.
+	Build func(p *Panel) Tool
+}
+
+// Tool is what a tab shows under the tool bar.
+type Tool struct {
+	// Bar is the tool's own row of buttons, nil for none, and Body what
+	// fills the panel under it. Both are made once.
+	Bar, Body *ui.Node
+	// Show fills them from the panel's state: it runs each time the
+	// panel is shown again while the tab is the chosen one.
+	Show func()
+	// Update runs every frame, shown telling whether the panel is open
+	// on this tab. It may be nil.
+	Update func(shown bool)
+}
+
+//nolint:gochecknoglobals // the tabs every panel is made with
+var registered []Tab
+
+// Register adds a tab to the panels made after it.
+func Register(tab Tab) {
+	registered = append(registered, tab)
+	slices.SortStableFunc(registered, func(a, b Tab) int { return a.Order - b.Order })
+}
+
+// The tabs of this package, and where they stand in the tool bar: a tab
+// registered with an Order under 100 comes before them.
+const (
+	consoleTab  = "console"
+	networkTab  = "network"
+	warningsTab = "warnings"
+)
+
+//nolint:gochecknoinits // the registration of this package's own tabs
+func init() {
+	Register(Tab{ID: consoleTab, Label: "Console", Order: 100, Build: newConsole,
+		Icon: `<path d="M2.5 3.5h11v9h-11zM5 6.5 7 8 5 9.5M8.5 10h2.5"/>`})
+	Register(Tab{ID: networkTab, Label: "Network", Order: 200, Build: newNetwork,
+		Icon: `<path d="M5.5 13V3.5M3 6l2.5-2.5L8 6M10.5 3v9.5M8 10l2.5 2.5L13 10"/>`})
+	Register(Tab{ID: warningsTab, Label: "Warnings", Order: 300, Build: newWarnings,
+		Icon: `<path d="M8 2.5 14 13H2zM8 6.5v3M8 11.2v.2"/>`})
+}
+
 // State is one tab's panel: what the player set in it, kept while another
 // tab's is shown.
 type State struct {
 	Open bool
-	// Warnings is whether the Warnings tab is shown, in place of Network.
-	Warnings bool
-	// Preserve keeps the rows over a navigation.
+	// Tab is the ID of the tab shown, "" for Network.
+	Tab string
+	// Preserve keeps the rows and the console over a navigation.
 	Preserve bool
-	// Filter and Kind choose the rows listed.
-	Filter string
-	Kind   netlog.Type
-	// Selected is the row whose details show, 0 for none, and Response
-	// whether they show its body in place of its headers.
+	// Filter and Kind choose the requests listed, Sort the column they
+	// are in the order of (0 for the order they were asked in, below 0
+	// for the last first), Selected the one whose details show, 0 for
+	// none, and Response whether they show its body in place of its
+	// headers.
+	Filter   string
+	Kind     netlog.Type
+	Sort     int
 	Selected int
 	Response bool
+	// Said and Muted choose the lines of the console: the levels it
+	// leaves out. XHR lists the requests of scripts among them, Requests
+	// every request and CSS what ui refused in the page's sheets.
+	Said               string
+	Muted              map[console.Level]bool
+	XHR, Requests, CSS bool
+	// History is what was typed in the console, the oldest first, and
+	// Unfolded the lines whose calls show.
+	History  []string
+	Unfolded map[string]bool
+	// Tool is what the tabs registered elsewhere keep, by their ID.
+	Tool map[string]any
 }
 
-// Host is what the panel asks of the screen it is part of.
+// Shown is the ID of the tab shown.
+func (s *State) Shown() string {
+	if s.Tab == "" {
+		return networkTab
+	}
+	return s.Tab
+}
+
+// Host is what the panel asks of the screen it is part of. Point, Serve
+// and Closed are needed; the rest may be nil.
 type Host struct {
 	// Point names an address while the pointer is over its row, "" after.
 	Point func(address string)
@@ -48,95 +131,302 @@ type Host struct {
 	Serve func(name string, picture []byte)
 	// Closed is called once the panel's own button closed it.
 	Closed func()
+	// Evaluate runs what was typed in the console in the tab's page, and
+	// gives its value as the console prints it.
+	Evaluate func(source string) (string, error)
+	// Unscripted is why the tab's page runs no script, "" when it does.
+	Unscripted func() string
+	// Pointer is where the pointer is in the window and whether its main
+	// button is down: the handle on the panel's edge follows it.
+	Pointer func() (at geom.Vec2, down bool)
+	// Resized is told the height the player gave the panel, 0 for the
+	// one it has by itself.
+	Resized func(height int)
+	// Source shows the source of address, at line when it is not 0.
+	Source func(address string, line int)
+	// Open shows address in a tab of its own.
+	Open func(address string)
+	// Storage is what the site of the tab's page keeps (storage.go).
+	Storage func() Stored
 }
 
 // rowID is the id of the element of a row, before its number.
 const rowID = "dt-row-"
+
+const (
+	// minHeight is the least the panel is high, and margin what it
+	// leaves of what it is docked in.
+	minHeight = 120
+	margin    = 80
+	// twice is how soon a second click on the handle is a double click.
+	twice = 400 * time.Millisecond
+)
+
+// tab is a Tab in a panel: its button, the text of it and its tool.
+type tab struct {
+	Tab
+	tool          Tool
+	button, label *ui.Node
+	frame         *ui.Node
+}
 
 // Panel is the developer tools of the tab last given to Show.
 type Panel struct {
 	doc  *ui.Document
 	host Host
 
-	root, network, warned, filter, preserve, body, details, foot *ui.Node
-	chips                                                        map[netlog.Type]*ui.Node
+	root, handle, failed, errors, preserve, foot *ui.Node
+	tabs                                         []*tab
 
 	state    *State
 	log      *netlog.Log
+	console  *console.Lines
 	warnings func() []error
-	// seen is the log's version as last listed.
-	seen uint64
+	// heard is the console's version as the tool bar last counted it.
+	heard uint64
+
+	// height is the one the player gave the panel, 0 for its own.
+	// dragging is whether the handle follows the pointer, from where it
+	// was grabbed and the height the panel had then, moved whether the
+	// pointer left that place since; held is whether the pointer's
+	// button was down the frame before.
+	height                int
+	dragging, moved, held bool
+	// tapped is when the handle was last pressed and let go where it
+	// was: a second time soon after gives the panel its own height.
+	tapped            time.Time
+	grabbed, grabbedH float32
 }
 
 // New is a panel for doc, shown once Node is among its elements.
 func New(doc *ui.Document, host Host) *Panel {
-	p := &Panel{doc: doc, host: host, state: &State{}, log: netlog.New(0), chips: make(map[netlog.Type]*ui.Node),
+	p := &Panel{doc: doc, host: host, state: &State{}, log: netlog.New(0), console: console.New(0),
 		warnings: func() []error { return nil }}
-	p.network = p.button("dt-tab-network", "Network", func() { p.state.Warnings = false })
-	p.warned = p.button("dt-tab-warnings", "Warnings", func() { p.state.Warnings = true })
-	p.filter = ui.Input(ui.ID("dt-filter"), ui.Placeholder("Filter"), ui.Attr("aria-label", "Filter requests"))
-	ui.On(p.filter, ui.EventInput, func() {
-		p.state.Filter = p.doc.Value(p.filter)
-		p.list()
-	})
+	for name, paths := range pictures {
+		host.Serve(pictureName(name), picture(paths, pictureInk[name]))
+	}
+	bar := ui.Div(ui.Class("dt-tools"))
+	p.root = ui.Section(ui.ID("devtools"), ui.Attr("aria-label", "Developer tools"))
+	p.handle = ui.Div(ui.ID("dt-handle"))
+	p.root.Append(p.handle, bar)
+	for _, registered := range registered {
+		t := &tab{Tab: registered, label: ui.Span(ui.Text(registered.Label))}
+		host.Serve(pictureName("tab-"+t.ID), picture(t.Icon, ""))
+		t.button = ui.Button(ui.ID("dt-tab-"+t.ID), ui.Class("dt-tab"), p.Icon("tab-"+t.ID), t.label,
+			ui.OnClick(func() {
+				p.state.Tab = t.ID
+				p.Refresh()
+			}))
+		t.tool = t.Build(p)
+		t.frame = ui.Div(ui.ID("dt-tool-"+t.ID), ui.Class("dt-tool"))
+		if t.tool.Bar != nil {
+			t.frame.Append(t.tool.Bar)
+		}
+		t.frame.Append(t.tool.Body)
+		bar.Append(t.button)
+		p.root.Append(t.frame)
+		p.tabs = append(p.tabs, t)
+	}
 	p.preserve = ui.Input(ui.ID("dt-preserve"), ui.Type("checkbox"))
 	ui.On(p.preserve, ui.EventChange, func() { p.state.Preserve = p.doc.Checked(p.preserve) })
-	bar := ui.Div(ui.Class("dt-bar"), p.network, p.warned, ui.Div(ui.Class("dt-rule")), p.filter)
-	for _, chip := range []struct {
-		name string
-		kind netlog.Type
-	}{{"All", netlog.Any}, {"Doc", netlog.Document}, {"CSS", netlog.Stylesheet}, {"Img", netlog.Image}, {"Other",
-		netlog.Other}} {
-		id := "dt-chip-" + string(chip.kind)
-		if chip.kind == netlog.Any {
-			id = "dt-chip-all"
-		}
-		p.chips[chip.kind] = p.button(id, chip.name, func() { p.state.Kind = chip.kind })
-		bar.Append(p.chips[chip.kind])
-	}
-	bar.Append(ui.Div(ui.Class("dt-rule")),
-		ui.Label(ui.Class("dt-check"), p.preserve, ui.Text("Preserve log")),
-		p.button("dt-clear", "Clear", func() {
-			p.log.Clear()
-			p.state.Selected = 0
-		}),
-		ui.Div(ui.Class("dt-space")),
-		p.button("dt-close", "Close", func() {
-			p.state.Open = false
-			p.host.Closed()
+	p.errors = ui.Span()
+	p.failed = ui.Button(ui.ID("dt-console-errors"), ui.Attr("aria-label", "Errors"),
+		ui.Span(ui.Class("dt-pill"), p.Icon("failed"), p.errors), ui.OnClick(func() {
+			p.state.Tab = consoleTab
+			p.Refresh()
 		}))
-	p.body = ui.Div(ui.Class("dt-body"))
-	p.details = ui.Div(ui.ID("dt-details"))
 	p.foot = ui.Div(ui.ID("dt-foot"))
-	p.root = ui.Section(ui.ID("devtools"), ui.Attr("aria-label", "Developer tools"), bar, p.body, p.foot)
+	bar.Append(ui.Div(ui.Class("dt-space")),
+		ui.Label(ui.Class("dt-check"), p.preserve, ui.Text("Preserve log")),
+		p.failed,
+		ui.Button(ui.ID("dt-close"), ui.Attr("aria-label", "Close the developer tools"), p.Icon("close"),
+			ui.OnClick(func() {
+				p.state.Open = false
+				p.Refresh()
+				p.host.Closed()
+			})))
+	p.root.Append(p.foot)
 	return p
-}
-
-// button is a button of the panel: it does what it does, then the panel
-// shows itself again.
-func (p *Panel) button(id, text string, do func()) *ui.Node {
-	return ui.Button(ui.ID(id), ui.Text(text), ui.OnClick(func() {
-		do()
-		p.show()
-	}))
 }
 
 func (p *Panel) Node() *ui.Node { return p.root }
 
-// Show shows a tab's panel: its state, its requests and the warnings of
-// its page, asked for each time they are listed.
-func (p *Panel) Show(state *State, log *netlog.Log, warnings func() []error) {
-	p.state, p.log, p.warnings = state, log, warnings
-	p.doc.SetValue(p.filter, state.Filter)
-	p.doc.SetChecked(p.preserve, state.Preserve)
-	p.show()
+// Doc is the Document the panel is part of.
+func (p *Panel) Doc() *ui.Document { return p.doc }
+
+// State is the state of the tab the panel shows.
+func (p *Panel) State() *State { return p.state }
+
+// Host is what the panel was given to ask its screen.
+func (p *Panel) Host() Host { return p.host }
+
+// Icon is one of the panel's pictures, by its name in pictures, or a
+// tab's as "tab-<ID>".
+func (p *Panel) Icon(name string) *ui.Node {
+	return ui.Img(ui.Class("dt-icon"), ui.Attr("src", pictureName(name)), ui.Attr("alt", ""))
 }
 
-// Update lists the requests again once one changed.
-func (p *Panel) Update() {
-	if p.state.Open && !p.state.Warnings && p.log.Version() != p.seen {
-		p.list()
+// Button is a button of the panel: it does what it does, then the panel
+// shows itself again.
+func (p *Panel) Button(id, text string, do func()) *ui.Node {
+	return ui.Button(ui.ID(id), ui.Text(text), ui.OnClick(func() {
+		do()
+		p.Refresh()
+	}))
+}
+
+// SetLabel changes what the button of the tab named id reads.
+func (p *Panel) SetLabel(id, label string) {
+	for _, t := range p.tabs {
+		if t.ID == id && t.label.Text() != label {
+			t.label.SetText(label)
+		}
 	}
+}
+
+// SetFoot changes the line under the tool, which "" hides.
+func (p *Panel) SetFoot(text string) {
+	if p.foot.Text() != text {
+		p.foot.SetText(text)
+	}
+	toggle(p.foot, "away", text == "")
+}
+
+// SetDark draws the panel dark, or light as a light page is.
+func (p *Panel) SetDark(dark bool) { toggle(p.root, "light", !dark) }
+
+// Height is the height the player gave the panel, 0 for its own.
+func (p *Panel) Height() int { return p.height }
+
+// SetHeight gives the panel a height, kept within what it is docked in;
+// 0 gives it back its own.
+func (p *Panel) SetHeight(height int) {
+	if height <= 0 {
+		p.height = 0
+		p.root.SetStyle("")
+		return
+	}
+	p.height = p.fit(height)
+	p.root.SetStyle("height: " + strconv.Itoa(p.height) + "px")
+}
+
+// fit is height kept between the least the panel is high and what it is
+// docked in less a margin.
+func (p *Panel) fit(height int) int {
+	if parent := p.root.Parent(); parent != nil {
+		if around, ok := p.doc.BoxOf(parent); ok && around.H > 0 {
+			height = min(height, int(around.H)-margin)
+		}
+	}
+	return max(height, minHeight)
+}
+
+// resize is SetHeight by the player: the screen is told.
+func (p *Panel) resize(height int) {
+	before := p.height
+	p.SetHeight(height)
+	if p.height != before && p.host.Resized != nil {
+		p.host.Resized(p.height)
+	}
+}
+
+// follow has the panel's top edge follow the pointer from a press on
+// its handle to the release, gives the panel its own height back at a
+// double click on it, and keeps a panel given a height within a window
+// made smaller. ui tells an element of no press and of no pointer that
+// left it, so the pointer is read from the screen each frame.
+func (p *Panel) follow() {
+	if p.host.Pointer == nil || !p.state.Open {
+		p.dragging, p.held = false, false
+		return
+	}
+	at, down := p.host.Pointer()
+	switch {
+	case !down && p.dragging:
+		p.dragging = false
+		p.root.RemoveClass("sizing")
+		switch {
+		case p.moved:
+			p.tapped = time.Time{}
+			if p.host.Resized != nil {
+				p.host.Resized(p.height)
+			}
+		case time.Since(p.tapped) < twice:
+			p.tapped = time.Time{}
+			p.resize(0)
+		default:
+			p.tapped = time.Now()
+		}
+	case down && p.dragging:
+		if at.Y != p.grabbed || p.moved {
+			p.moved = true
+			p.SetHeight(max(minHeight, int(math.Round(float64(p.grabbedH+p.grabbed-at.Y)))))
+		}
+	case down && !p.held && p.doc.ElementAt(at) == p.handle:
+		p.dragging, p.moved, p.grabbed, p.grabbedH = true, false, at.Y, p.root.Box().H
+		p.root.AddClass("sizing")
+	case p.height > 0 && p.fit(p.height) != p.height:
+		p.SetHeight(p.height)
+	}
+	p.held = down
+}
+
+// Show shows a tab's panel: its state, its requests, what its page's
+// scripts said and the warnings of its page, asked for each time they
+// are listed.
+func (p *Panel) Show(state *State, log *netlog.Log, said *console.Lines, warnings func() []error) {
+	p.state, p.log, p.console, p.warnings = state, log, said, warnings
+	p.doc.SetChecked(p.preserve, state.Preserve)
+	p.Refresh()
+}
+
+// Update follows the pointer on the handle, counts the console's errors
+// again once something was said, and has each tool follow what it
+// lists.
+func (p *Panel) Update() {
+	p.follow()
+	if p.console.Version() != p.heard {
+		p.count()
+	}
+	for _, t := range p.tabs {
+		if t.tool.Update != nil {
+			t.tool.Update(p.state.Open && p.state.Shown() == t.ID)
+		}
+	}
+}
+
+// Refresh shows the panel again from its state: the chosen tab and its
+// tool.
+func (p *Panel) Refresh() {
+	toggle(p.root, "shown", p.state.Open)
+	shown := p.state.Shown()
+	if !slices.ContainsFunc(p.tabs, func(t *tab) bool { return t.ID == shown }) {
+		shown = networkTab
+	}
+	p.count()
+	for _, t := range p.tabs {
+		toggle(t.button, "chosen", t.ID == shown)
+		toggle(t.frame, "shown", t.ID == shown)
+	}
+	if !p.state.Open {
+		return
+	}
+	for _, t := range p.tabs {
+		if t.ID == shown && t.tool.Show != nil {
+			t.tool.Show()
+		}
+	}
+}
+
+// count says at the right of the tool bar how many errors the console
+// holds.
+func (p *Panel) count() {
+	p.heard = p.console.Version()
+	errors := p.console.Count(console.Error)
+	if p.errors.Text() != strconv.Itoa(errors) {
+		p.errors.SetText(strconv.Itoa(errors))
+	}
+	toggle(p.failed, "away", errors == 0)
 }
 
 // RowAt is the request whose row n is part of.
@@ -153,208 +443,11 @@ func (p *Panel) RowAt(n *ui.Node) (netlog.Row, bool) {
 	return netlog.Row{}, false
 }
 
-func (p *Panel) show() {
-	toggle(p.root, "shown", p.state.Open)
-	toggle(p.network, "chosen", !p.state.Warnings)
-	toggle(p.warned, "chosen", p.state.Warnings)
-	for kind, chip := range p.chips {
-		toggle(chip, "chosen", kind == p.state.Kind)
+func counted(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
 	}
-	warnings := p.warnings()
-	p.warned.SetText(fmt.Sprintf("Warnings (%d)", len(warnings)))
-	if !p.state.Open {
-		return
-	}
-	if p.state.Warnings {
-		p.warn(warnings)
-		return
-	}
-	p.list()
-}
-
-// warn fills the body with the page's warnings.
-func (p *Panel) warn(warnings []error) {
-	list := ui.Div(ui.ID("dt-warnings"))
-	for _, w := range warnings {
-		list.Append(ui.Div(ui.Class("dt-warning"), ui.Text(w.Error())))
-	}
-	if len(warnings) == 0 {
-		list.Append(ui.Div(ui.Class("dt-none"), ui.Text("ui read this tab's page without a warning.")))
-	}
-	fill(p.body, list)
-	p.foot.SetText("What ui refused in the page's sheets and pictures")
-}
-
-// list fills the body with the requests the filters keep, the details of
-// the selected one beside them, and sums them up in the footer.
-func (p *Panel) list() {
-	p.seen = p.log.Version()
-	all := p.log.Rows()
-	kept := netlog.Filter(all, p.state.Filter, p.state.Kind)
-	head := line("Name", "Status", "Method", "Type", "Initiator", "Size", "Time")
-	head.AddClass("dt-head")
-	rows := ui.Div(ui.ID("dt-rows"), head)
-	for _, r := range kept {
-		rows.Append(p.row(r))
-	}
-	fill(p.body, rows, p.details)
-	p.detail(all)
-	p.foot.SetText(summary(len(all), kept, p.log.Dropped()))
-}
-
-// line is one line of the table: a cell for each text.
-func line(texts ...string) *ui.Node {
-	row := ui.Div(ui.Class("dt-row"))
-	for _, text := range texts {
-		row.Append(ui.Span(ui.Text(text)))
-	}
-	return row
-}
-
-func (p *Panel) row(r netlog.Row) *ui.Node {
-	row := line(r.Name(), status(r), r.Method, string(r.Type), r.Initiator, size(r.Size), took(r))
-	row.SetID(rowID + strconv.Itoa(r.ID))
-	ui.TabIndex(0).Apply(row)
-	ui.OnClick(func() {
-		p.state.Selected = r.ID
-		p.list()
-	}).Apply(row)
-	ui.OnPointerEnter(func() { p.host.Point(r.Address) }).Apply(row)
-	ui.OnPointerLeave(func() { p.host.Point("") }).Apply(row)
-	toggle(row, "failed", r.Failed())
-	toggle(row, "redirect", !r.Failed() && r.Status >= 300)
-	toggle(row, "selected", r.ID == p.state.Selected)
-	return row
-}
-
-// detail fills the details with the selected row's headers or response,
-// and hides them when no row of all is selected.
-func (p *Panel) detail(all []netlog.Row) {
-	at := slices.IndexFunc(all, func(r netlog.Row) bool { return r.ID == p.state.Selected })
-	toggle(p.details, "shown", at >= 0)
-	if at < 0 {
-		p.state.Selected = 0
-		return
-	}
-	r := all[at]
-	headers := p.button("dt-headers", "Headers", func() { p.state.Response = false })
-	response := p.button("dt-response", "Response", func() { p.state.Response = true })
-	toggle(headers, "chosen", !p.state.Response)
-	toggle(response, "chosen", p.state.Response)
-	content := ui.Div(ui.ID("dt-detail"))
-	if p.state.Response {
-		content.Append(p.response(r)...)
-	} else {
-		content.Append(headersOf(r, netlog.Chain(all, r.ID))...)
-	}
-	fill(p.details,
-		ui.Div(ui.Class("dt-bar"), headers, response, ui.Div(ui.Class("dt-space")),
-			p.button("dt-details-close", "×", func() { p.state.Selected = 0 })),
-		content)
-}
-
-func headersOf(r netlog.Row, chain []netlog.Row) []*ui.Node {
-	out := []*ui.Node{ui.H4(ui.Text("General")), pair("Address", r.Address), pair("Method", r.Method),
-		pair("Status", strings.TrimSpace(status(r)+" "+r.Reason))}
-	if r.Err != "" {
-		out = append(out, pair("Error", r.Err))
-	}
-	if r.Remote != "" {
-		out = append(out, pair("Remote address", r.Remote))
-	}
-	for _, hop := range chain {
-		if hop.ID < r.ID {
-			out = append(out, pair("Redirected from", hop.Address))
-		}
-	}
-	out = append(out, ui.H4(ui.Text("Response headers")))
-	out = append(out, pairs(r.Response)...)
-	out = append(out, ui.H4(ui.Text("Request headers")))
-	return append(out, pairs(r.Request)...)
-}
-
-func pairs(header map[string][]string) []*ui.Node {
-	var out []*ui.Node
-	for _, name := range slices.Sorted(maps.Keys(header)) {
-		out = append(out, pair(name, strings.Join(header[name], ", ")))
-	}
-	return out
-}
-
-func pair(name, value string) *ui.Node {
-	return ui.Div(ui.Class("dt-pair"), ui.Span(ui.Class("dt-name"), ui.Text(name)),
-		ui.Span(ui.Class("dt-value"), ui.Text(value)))
-}
-
-// response is what a row keeps of its body: text as it was sent, a
-// picture drawn, and for the rest what it is.
-func (p *Panel) response(r netlog.Row) []*ui.Node {
-	preview := ui.Pre(ui.ID("dt-preview"))
-	out := []*ui.Node{preview}
-	switch kind, media := content.Of(r.Response.Get("Content-Type"), r.Preview, r.Address); {
-	case len(r.Preview) == 0:
-		out = []*ui.Node{ui.Div(ui.Class("dt-none"), ui.Text("This request has no body to show."))}
-	case kind == content.Picture && r.Done && !r.Truncated:
-		name := "netlog:" + strconv.Itoa(r.ID)
-		p.host.Serve(name, content.Drawable(r.Preview))
-		preview.Append(ui.Img(ui.Attr("src", name), ui.Attr("alt", r.Name())))
-	case kind == content.Page || kind == content.Text:
-		preview.SetText(content.Spaced(string(r.Preview)))
-	default:
-		out = []*ui.Node{ui.Div(ui.Class("dt-none"), ui.Text("No preview of "+media+"."))}
-	}
-	if r.Truncated {
-		out = append(out, ui.Div(ui.Class("dt-none"),
-			ui.Text(fmt.Sprintf("Cut at %s: a row keeps no more of a body.", size(netlog.PreviewCap)))))
-	}
-	return out
-}
-
-func status(r netlog.Row) string {
-	switch {
-	case r.Err == "cancelled":
-		return "(cancelled)"
-	case r.Err != "":
-		return "(failed)"
-	case r.Status == 0:
-		return "(pending)"
-	}
-	return strconv.Itoa(r.Status)
-}
-
-func size(bytes int64) string {
-	switch {
-	case bytes < 1000:
-		return fmt.Sprintf("%d B", bytes)
-	case bytes < 1000*1000:
-		return fmt.Sprintf("%.1f kB", float64(bytes)/1000)
-	}
-	return fmt.Sprintf("%.1f MB", float64(bytes)/(1000*1000))
-}
-
-func took(r netlog.Row) string {
-	if ms := r.Took.Milliseconds(); ms < 1000 {
-		return fmt.Sprintf("%d ms", ms)
-	}
-	return fmt.Sprintf("%.2f s", r.Took.Seconds())
-}
-
-// summary is the footer: how many requests are listed, of how many, their
-// bytes and the time to the last answer, and how many went past the cap.
-func summary(all int, kept []netlog.Row, dropped int) string {
-	if all == 0 && dropped == 0 {
-		return "No requests"
-	}
-	total := netlog.Totals(kept)
-	count := fmt.Sprintf("%d requests", all)
-	if len(kept) != all {
-		count = fmt.Sprintf("%d of %d requests", len(kept), all)
-	}
-	text := fmt.Sprintf("%s · %s · %s", count, size(total.Bytes), took(netlog.Row{Took: total.Took}))
-	if dropped > 0 {
-		text += fmt.Sprintf(" · %d older requests dropped", dropped)
-	}
-	return text
+	return fmt.Sprintf("%d %ss", n, what)
 }
 
 func fill(n *ui.Node, children ...*ui.Node) {

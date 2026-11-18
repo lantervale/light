@@ -24,6 +24,9 @@ type target struct {
 	link      string
 	picture   string
 	selection string
+	// node is the element of the page under the click, nil for what is
+	// not of the page.
+	node *ui.Node
 }
 
 // contextMenu opens the menu of what a right click is on, at the pointer.
@@ -54,6 +57,7 @@ func (s *Screen) targetOf(n *ui.Node) target {
 		at, _ := s.doc.PointerOn(s.host)
 		n, base, t.selection = page.Doc.ElementAt(at), page.Address, page.Doc.Selection().Text
 	}
+	t.node = s.ofPage(n)
 	for ; n != nil; n = n.Parent() {
 		if row, ok := s.tools.RowAt(n); ok && t.request == nil {
 			t.request = &row
@@ -117,6 +121,9 @@ func (s *Screen) entries(t target) []menu.Entry {
 	}
 	if len(groups) == 0 {
 		groups = s.pageEntries()
+	}
+	if inspect := s.inspectEntries(t.node); inspect != nil {
+		groups = append(groups, inspect)
 	}
 	var entries []menu.Entry
 	for i, group := range groups {

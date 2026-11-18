@@ -14,14 +14,33 @@ dotenv:
   - PROJECT
   - .env.default
 
+# The v8 tag builds light with its JavaScript engine (V8, through cgo: macOS and Linux, amd64 and arm64). V8's
+# headers need its own libc++, hence CGO_CXXFLAGS. Without the tag light builds everywhere and runs no script.
+env:
+  CGO_CXXFLAGS: -nostdinc++
+
 tasks:
   run:
-    desc: Run light (needs ember's WebGPU library, once - cd ../ember && task wgpu)
+    desc: Run light with its JavaScript engine (needs ember's WebGPU library, once - cd ../ember && task wgpu)
+    cmds:
+      - go run -tags v8 ./cmd/light {{.CLI_ARGS}}
+
+  run:plain:
+    desc: Run light without a JavaScript engine, as a plain go run builds it
     cmds:
       - go run ./cmd/light {{.CLI_ARGS}}
 
   test:
-    desc: Vet and test light (no GPU, no network)
+    desc: Vet and test light, without and with its JavaScript engine (no GPU, no network)
     cmds:
       - go vet ./...
       - go test ./...
+      - go vet -tags v8 ./...
+      - go test -tags v8 ./...
+
+  lint:
+    desc: Lint light, without and with its JavaScript engine
+    cmds:
+      - task: golangci:lint
+      - task: golangci:lint
+        vars: {CLI_ARGS: --build-tags v8}

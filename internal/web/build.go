@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,7 +46,8 @@ func (b *builder) icon(ctx context.Context, root *html.Node) []byte {
 		if address == "" {
 			continue
 		}
-		answer, err := b.loader.Client.Get(netlog.As(ctx, byDocument, netlog.Image), address, "image/*")
+		answer, err := b.loader.Client.Get(netlog.As(ctx, byDocument, netlog.Image), address,
+			drawn+", image/x-icon, image/vnd.microsoft.icon")
 		if err != nil || !answer.OK() {
 			continue
 		}
@@ -57,8 +59,8 @@ func (b *builder) icon(ctx context.Context, root *html.Node) []byte {
 }
 
 // favicon is a site's icon as a picture ui draws, nil for what is none:
-// a PNG, JPEG, GIF or SVG as it is, and of an ICO file its widest picture
-// stored as a PNG.
+// a PNG, JPEG, GIF, WebP or SVG as it is, and of an ICO file its widest
+// picture stored as a PNG.
 func favicon(address, contentType string, data []byte) []byte {
 	if kind, _ := content.Of(contentType, data, address); kind != content.Picture {
 		return nil
@@ -101,6 +103,8 @@ var elements = map[string]func(...ui.Arg) *ui.Node{
 type stylesheet struct {
 	text string
 	from *url.URL
+	// node is the style element or the link it is of.
+	node *html.Node
 }
 
 // builder makes a page's Document: its sheets fetched first, then the
@@ -112,12 +116,31 @@ type builder struct {
 	// sheets are the page's style elements and linked stylesheets in
 	// document order.
 	sheets []stylesheet
+	// styled is what the Document has of each, for a page with a tree.
+	styled map[*html.Node]Styled
 	count  int
+	// tree is the page as scripts read it, nil for a page loaded
+	// without them, and scripts the page's.
+	tree    *Tree
+	scripts []*Script
+	// doc is the Document built, and encode writes text in the page's
+	// encoding, which its forms are sent in.
+	doc    *ui.Document
+	encode func(text string) string
+}
+
+func newBuilder(l *Loader, base *url.URL, links Links) *builder {
+	b := &builder{loader: l, base: base, links: links}
+	if l.Scripts {
+		b.tree = &Tree{b: b, shown: map[*html.Node]*ui.Node{}, of: map[*ui.Node]*html.Node{},
+			contents: map[*html.Node]*html.Node{}, head: ui.Div()}
+	}
+	return b
 }
 
 func (b *builder) resolve(ref string) string {
 	u, err := b.base.Parse(strings.TrimSpace(ref))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+	if err != nil || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) {
 		return ""
 	}
 	return u.String()
@@ -127,16 +150,20 @@ func (b *builder) resolve(ref string) string {
 func (b *builder) load(ctx context.Context, root *html.Node) {
 	var wg sync.WaitGroup
 	limit := make(chan struct{}, fetchers)
+	links := 0
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
 			switch {
 			case n.DataAtom == atom.Style && n.FirstChild != nil:
-				b.sheets = append(b.sheets, stylesheet{n.FirstChild.Data, b.base})
-			case linked(n) && len(b.sheets) < maxSheets:
+				b.sheets = append(b.sheets, stylesheet{n.FirstChild.Data, b.base, n})
+			case n.DataAtom == atom.Script && b.tree != nil:
+				b.script(ctx, n, &wg, limit)
+			case linked(n) && links < maxSheets:
 				if address := b.resolve(attr(n, "href")); address != "" {
+					links++
 					from, _ := url.Parse(address)
-					b.sheets = append(b.sheets, stylesheet{from: from})
+					b.sheets = append(b.sheets, stylesheet{from: from, node: n})
 					into := &b.sheets[len(b.sheets)-1]
 					wg.Add(1)
 					go func() {
@@ -158,6 +185,58 @@ func (b *builder) load(ctx context.Context, root *html.Node) {
 	wg.Wait()
 }
 
+// script keeps the script element n, its source fetched meanwhile when
+// it names one.
+func (b *builder) script(ctx context.Context, n *html.Node, wg *sync.WaitGroup, limit chan struct{}) {
+	why, runs := unread(n)
+	if !runs {
+		return
+	}
+	s := &Script{Address: b.base.String(), Skipped: why, Node: n}
+	_, deferred := lookup(n, "defer")
+	_, async := lookup(n, "async")
+	src, external := lookup(n, "src")
+	s.Deferred = external && (deferred || async)
+	if n.FirstChild != nil && !external {
+		s.Source = cut(n.FirstChild.Data)
+	}
+	b.scripts = append(b.scripts, s)
+	if !external || s.Skipped != "" {
+		return
+	}
+	if len(b.scripts) > maxScripts {
+		s.Skipped = "it is past the first " + strconv.Itoa(maxScripts) + " scripts of the page"
+		return
+	}
+	address := b.resolve(src)
+	if address == "" {
+		s.Skipped = fmt.Sprintf("its src %q is no http or https address", src)
+		return
+	}
+	s.Address = address
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		limit <- struct{}{}
+		defer func() { <-limit }()
+		s.Source, s.Address, s.Skipped = b.loader.Script(netlog.As(ctx, byDocument, netlog.Script), address)
+	}()
+}
+
+// ordered are the page's scripts in the order they run: as the page
+// has them, those that wait for it (defer, async) after the others.
+func (b *builder) ordered() []Script {
+	var now, later []Script
+	for _, s := range b.scripts {
+		if s.Deferred {
+			later = append(later, *s)
+		} else {
+			now = append(now, *s)
+		}
+	}
+	return append(now, later...)
+}
+
 // sheet fetches the sheet at address into the place kept for it: its
 // text, and the address it came from after its redirects, which its
 // url() are fetched from. One that cannot be fetched stays empty.
@@ -166,7 +245,7 @@ func (b *builder) sheet(ctx context.Context, address string, into *stylesheet) {
 	if err != nil || !answer.OK() {
 		return
 	}
-	into.text, into.from = cut(answer.Text()), answer.URL
+	into.text, into.from = cut(answer.Code()), answer.URL
 }
 
 func countStyles(n *html.Node) int {
@@ -183,12 +262,20 @@ func countStyles(n *html.Node) int {
 func (b *builder) document(ctx context.Context, root *html.Node) *ui.Document {
 	opts := options()
 	for _, sheet := range b.sheets {
-		opts = append(opts, ui.CSS(sheet.text, ui.From(sheet.from.String())))
+		if b.tree == nil {
+			opts = append(opts, ui.CSS(sheet.text, ui.From(sheet.from.String())))
+		}
 	}
 	if b.loader.Zoom > 0 {
 		opts = append(opts, ui.Zoom(b.loader.Zoom))
 	}
-	doc := ui.NewDocument(append(opts, ui.FetchImages(b.pictures(ctx)))...)
+	doc := ui.NewDocument(append(opts, ui.FetchImages(b.pictures(ctx)), ui.FetchFonts(b.fonts(ctx)))...)
+	b.doc = doc
+	if b.tree != nil {
+		b.style(doc)
+		b.tree.bind(root, doc)
+		return doc
+	}
 	var place func(n *html.Node)
 	place = func(n *html.Node) {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -234,9 +321,16 @@ func (b *builder) pictures(ctx context.Context) ui.ImageFetcher {
 func (b *builder) children(n *html.Node, into *ui.Node) {
 	for c := n.FirstChild; c != nil && b.count < maxElements; c = c.NextSibling {
 		switch {
+		case b.tree != nil:
+			if u := b.tree.made(c); u != nil {
+				into.Append(u)
+			}
 		case c.Type == html.TextNode:
 			ui.Text(c.Data).Apply(into)
-		case c.Type != html.ElementNode || dropped[c.DataAtom]:
+		case c.Type != html.ElementNode:
+		case c.DataAtom == atom.Noscript:
+			b.children(c, into)
+		case dropped[c.DataAtom]:
 		default:
 			b.count++
 			into.Append(b.element(c))
@@ -244,10 +338,25 @@ func (b *builder) children(n *html.Node, into *ui.Node) {
 	}
 }
 
+// element is the ui element of n with what n holds: the one the page's
+// tree has of it from then on, when the page has a tree.
 func (b *builder) element(n *html.Node) *ui.Node {
-	e := build(n.Data)
+	if pictured(n) {
+		e := ui.Svg(drawing(n))
+		if b.tree != nil {
+			b.count++
+			b.tree.keep(n, e)
+		}
+		b.attributes(n, e)
+		return e
+	}
+	e := b.make(n.Data)
+	if b.tree != nil {
+		b.count++
+		b.tree.keep(n, e)
+	}
 	b.attributes(n, e)
-	if n.DataAtom == atom.A {
+	if n.DataAtom == atom.A && b.tree == nil {
 		b.link(e, n)
 	}
 	b.children(n, e)
@@ -256,17 +365,23 @@ func (b *builder) element(n *html.Node) *ui.Node {
 
 func (b *builder) attributes(n *html.Node, e *ui.Node) {
 	for _, a := range n.Attr {
-		switch {
-		case a.Key == "id":
-			e.SetID(a.Val)
-		case a.Key == "class":
-			ui.Class(strings.Fields(a.Val)...).Apply(e)
-		case a.Key == "style":
-			ui.Style(a.Val).Apply(e)
-		case skipped(a.Key):
-		default:
-			e.SetAttr(a.Key, a.Val)
+		b.attribute(n, e, a.Key, a.Val)
+	}
+}
+
+// attribute sets on e, the element built for n, an attribute of n's,
+// unless it is one that stays off it.
+func (b *builder) attribute(n *html.Node, e *ui.Node, key, value string) {
+	if n.DataAtom == atom.Img && (key == "src" || key == attrSrcset || key == attrSizes) {
+		if address, ok := b.chosen(n); ok {
+			e.SetAttr("src", address)
+		} else {
+			e.RemoveAttr("src")
 		}
+		return
+	}
+	if key == "id" || key == "class" || key == "style" || !b.skips(n, key) {
+		e.SetAttr(key, value)
 	}
 }
 

@@ -8,6 +8,7 @@ package netlog
 import (
 	"net/http"
 	"net/url"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -25,27 +26,44 @@ const (
 	Any        Type = ""
 	Document   Type = "document"
 	Stylesheet Type = "stylesheet"
+	Script     Type = "script"
 	Image      Type = "image"
 	Font       Type = "font"
-	Other      Type = "other"
+	Media      Type = "media"
+	// XHR is what a script asked for through fetch or XMLHttpRequest.
+	XHR   Type = "xhr"
+	Other Type = "other"
 )
 
-// TypeOf is the type of an answer of that media type, wanted when it
-// declares none, as a redirect or a failure does.
+// TypeOf is the type of an answer of that media type: who asked first,
+// what a script asked for being XHR whatever is answered, then the media
+// type, and what was wanted when it declares none, as a redirect or a
+// failure does.
 func TypeOf(media string, wanted Type) Type {
 	switch {
-	case media == "":
+	case media == "" || wanted == XHR:
 		return wanted
 	case media == "text/html" || media == "application/xhtml+xml":
 		return Document
 	case media == "text/css":
 		return Stylesheet
+	case scripted(media):
+		return Script
 	case strings.HasPrefix(media, "image/"):
 		return Image
-	case strings.HasPrefix(media, "font/") || strings.HasPrefix(media, "application/font"):
+	case strings.HasPrefix(media, "font/") || strings.HasPrefix(media, "application/font") ||
+		strings.HasPrefix(media, "application/x-font"):
 		return Font
+	case strings.HasPrefix(media, "audio/") || strings.HasPrefix(media, "video/"):
+		return Media
 	}
 	return Other
+}
+
+// scripted reports whether media is one JavaScript is sent as.
+func scripted(media string) bool {
+	return strings.HasSuffix(media, "/javascript") || strings.HasSuffix(media, "/x-javascript") ||
+		strings.HasSuffix(media, "/ecmascript")
 }
 
 // Row is one request and its answer so far.
@@ -65,12 +83,15 @@ type Row struct {
 	// while there is none, and for an error status, whose body is the
 	// server's word about it.
 	Type Type
-	// Initiator is who asked, as With named it.
+	// Initiator is who asked, as With named it: "document", "stylesheet",
+	// or the script and the line of a script's request.
 	Initiator string
+	// Blocked is whether light refused to send the request: Err says why.
+	Blocked bool
 	// Size is the body's bytes read so far, as the client got them: after
-	// the transport undid a gzip encoding.
-	Size    int64
-	Started time.Time
+	// a gzip encoding was undone. Transferred is those the server sent.
+	Size, Transferred int64
+	Started           time.Time
 	// Took is how long the request has taken, to the end of its body once
 	// Done.
 	Took time.Duration
@@ -88,6 +109,38 @@ type Row struct {
 
 // Failed reports whether the request got no answer, or an error status.
 func (r Row) Failed() bool { return r.Err != "" || r.Status >= http.StatusBadRequest }
+
+// Host is the site the row's address is of, "" when it names none.
+func (r Row) Host() string {
+	u, err := url.Parse(r.Address)
+	if err != nil {
+		return ""
+	}
+	return u.Host
+}
+
+// Secure reports whether the request went over TLS.
+func (r Row) Secure() bool { return strings.HasPrefix(strings.ToLower(r.Address), "https://") }
+
+// Kind is what the answer is in a word, as a network panel's Type
+// column: the end of its media type ("html", "css", "js", "json", "png"),
+// else the extension of its address, "" when neither says.
+func (r Row) Kind() string {
+	kind := r.Media[strings.LastIndexAny(r.Media, "/.")+1:]
+	switch {
+	case scripted(r.Media):
+		return "js"
+	case kind == "":
+		u, err := url.Parse(r.Address)
+		if err != nil {
+			return ""
+		}
+		return strings.ToLower(strings.TrimPrefix(path.Ext(u.Path), "."))
+	}
+	kind = strings.TrimPrefix(strings.TrimPrefix(kind, "x-"), "font-")
+	kind, _, _ = strings.Cut(kind, "+")
+	return kind
+}
 
 // Name is the last part of the row's address, with its query, or its host
 // for the root of a site.
@@ -187,6 +240,14 @@ func (l *Log) add(r Row, follows *http.Response) *Row {
 	return row
 }
 
+// Block lists a request light refused to send, and why.
+func (l *Log) Block(method, address, initiator string, wanted Type, why string) {
+	l.add(Row{
+		Address: address, Method: method, Type: wanted, Initiator: initiator, Blocked: true, Err: why, Done: true,
+		Started: time.Now(),
+	}, nil)
+}
+
 // trim drops the oldest rows past the cap, and counts them.
 func (l *Log) trim() {
 	if over := len(l.rows) - l.limit; over > 0 {
@@ -254,13 +315,12 @@ func Chain(rows []Row, id int) []Row {
 }
 
 // Filter is the rows whose address holds text, whatever its case, and
-// whose type is kind; Other also takes fonts, as the panel's last chip.
+// whose type is kind.
 func Filter(rows []Row, text string, kind Type) []Row {
 	text = strings.ToLower(text)
 	var out []Row
 	for _, r := range rows {
-		typed := kind == Any || r.Type == kind || kind == Other && r.Type == Font
-		if typed && strings.Contains(strings.ToLower(r.Address), text) {
+		if (kind == Any || r.Type == kind) && strings.Contains(strings.ToLower(r.Address), text) {
 			out = append(out, r)
 		}
 	}
@@ -270,7 +330,8 @@ func Filter(rows []Row, text string, kind Type) []Row {
 // Total sums rows up.
 type Total struct {
 	Requests int
-	Bytes    int64
+	// Bytes is what was read, Transferred what the servers sent.
+	Bytes, Transferred int64
 	// Took is from the first request to the end of the last answer.
 	Took time.Duration
 }
@@ -281,6 +342,7 @@ func Totals(rows []Row) Total {
 	for _, r := range rows {
 		t.Requests++
 		t.Bytes += r.Size
+		t.Transferred += r.Transferred
 		if first.IsZero() || r.Started.Before(first) {
 			first = r.Started
 		}

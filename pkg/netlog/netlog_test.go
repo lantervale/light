@@ -211,6 +211,8 @@ func TestATypeComesFromTheContentTypeElseFromWhatWasWanted(t *testing.T) {
 		"text/html": netlog.Document, "application/xhtml+xml": netlog.Document, "text/css": netlog.Stylesheet,
 		"image/png": netlog.Image, "image/svg+xml": netlog.Image, "font/woff2": netlog.Font,
 		"application/font-woff": netlog.Font, "application/json": netlog.Other, "": netlog.Image,
+		"text/javascript": netlog.Script, "application/javascript": netlog.Script, "application/x-javascript": netlog.Script,
+		"application/ecmascript": netlog.Script, "video/mp4": netlog.Media, "audio/ogg": netlog.Media,
 	} {
 		if got := netlog.TypeOf(media, netlog.Image); got != want {
 			t.Errorf("%q is %s, want %s", media, got, want)
@@ -224,6 +226,8 @@ func TestRowsAreFilteredByTextAndType(t *testing.T) {
 		{ID: 2, Address: "https://s.test/css/Site.css", Type: netlog.Stylesheet},
 		{ID: 3, Address: "https://s.test/map.png", Type: netlog.Image},
 		{ID: 4, Address: "https://cdn.test/site.woff2", Type: netlog.Font},
+		{ID: 5, Address: "https://s.test/feed.pdf", Type: netlog.Other},
+		{ID: 6, Address: "https://s.test/api/items", Type: netlog.XHR},
 	}
 	ids := func(rows []netlog.Row) string {
 		var out []int
@@ -237,11 +241,13 @@ func TestRowsAreFilteredByTextAndType(t *testing.T) {
 		kind netlog.Type
 		want string
 	}{
-		"nothing":         {"", netlog.Any, "[1 2 3 4]"},
+		"nothing":         {"", netlog.Any, "[1 2 3 4 5 6]"},
 		"a word":          {"SITE", netlog.Any, "[2 4]"},
 		"a type":          {"", netlog.Image, "[3]"},
 		"both":            {"s.test", netlog.Stylesheet, "[2]"},
-		"the other types": {"", netlog.Other, "[4]"},
+		"fonts":           {"", netlog.Font, "[4]"},
+		"the other types": {"", netlog.Other, "[5]"},
+		"scripts' own":    {"", netlog.XHR, "[6]"},
 	} {
 		if got := ids(netlog.Filter(rows, c.text, c.kind)); got != c.want {
 			t.Errorf("%s keeps %s, want %s", name, got, c.want)

@@ -8,7 +8,9 @@ import (
 	"net/url"
 
 	"github.com/lantervale/light/internal/devtools"
+	"github.com/lantervale/light/internal/dom"
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/content"
 	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/tabs"
@@ -22,12 +24,17 @@ type load struct{ cancel context.CancelFunc }
 
 // session is what a tab holds beside its addresses: the pages of the web
 // it fetched, by the address asked and by the one that answered, those on
-// their way, its requests and its developer tools.
+// their way, its requests, what its page's scripts said, those scripts
+// while they run, what sites keep for as long as the tab, and its
+// developer tools.
 type session struct {
-	pages map[string]*web.Page
-	loads map[string]*load
-	log   *netlog.Log
-	tools devtools.State
+	pages   map[string]*web.Page
+	loads   map[string]*load
+	log     *netlog.Log
+	said    *console.Lines
+	scripts *running
+	kept    map[string]dom.Storage
+	tools   devtools.State
 	// zoom is the tab's own zoom in percent, 0 for the settings'.
 	zoom int
 	// note is what the status bubble says of the tab's last move when it
@@ -42,6 +49,7 @@ func (s *Screen) sessionOf(tab *tabs.Tab) *session {
 	if s.sessions[tab] == nil {
 		s.sessions[tab] = &session{
 			pages: map[string]*web.Page{}, loads: map[string]*load{}, log: netlog.New(s.config.Requests),
+			said: console.New(consoleLines), kept: map[string]dom.Storage{},
 			tools: devtools.State{Preserve: s.config.PreserveLog},
 		}
 	}
@@ -61,6 +69,7 @@ func (s *Screen) forget() {
 		for _, l := range session.loads {
 			l.cancel()
 		}
+		s.end(session)
 		delete(s.sessions, tab)
 	}
 }
@@ -75,12 +84,13 @@ func (s *Screen) fetched(address string) *web.Page {
 	}
 	if !session.tools.Preserve {
 		session.log.Clear()
+		session.said.Clear()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
 	l := &load{cancel}
 	session.loads[address] = l
-	links := web.Links{Open: s.Open, Over: s.point, Save: s.download}
-	loader := s.current()
+	links := web.Links{Open: s.linked, Over: s.point, Save: s.download}
+	loader, ctx := s.current(), s.began(ctx)
 	go func() {
 		defer cancel()
 		loaded := loader.Load(netlog.With(ctx, session.log, "navigation", netlog.Document), address, links)

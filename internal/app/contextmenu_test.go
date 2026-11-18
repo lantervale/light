@@ -14,7 +14,7 @@ import (
 )
 
 // tools is how the page's menu ends, whatever the page.
-const tools = "View page source History Downloads Developer tools Settings"
+const tools = "View page source History Downloads Developer tools Settings - Inspect element"
 
 func labels(entries []string) string { return fmt.Sprint(entries) }
 
@@ -56,7 +56,8 @@ func TestARightClickOnALinkOpensItInANewTabOrCopiesIt(t *testing.T) {
 	s := show(t)
 	s.visit(srv.URL + "/")
 	s.rightClickAt(s.inPage("vault"))
-	if got, want := labels(s.entries()), "[Open link in new tab Save link as… Copy link address]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open link in new tab Save link as… Copy link address - Inspect element]"; got != want {
 		t.Fatalf("a link's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy link address")
@@ -78,7 +79,8 @@ func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
 	doc := s.visit(srv.URL + "/")
 	s.until("the map is drawn", func() bool { return box(t, doc, "map").W == 30 })
 	s.rightClickAt(s.inPage("map"))
-	if got, want := labels(s.entries()), "[Open image in new tab Save image as… Copy image address]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open image in new tab Save image as… Copy image address - Inspect element]"; got != want {
 		t.Fatalf("a picture's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy image address")
@@ -94,7 +96,7 @@ func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
 	s.rightClickAt(s.inPage("door"))
 	if got, want := labels(s.entries()),
 		"[Open link in new tab Save link as… Copy link address - Open image in new tab Save image as… "+
-			"Copy image address]"; got != want {
+			"Copy image address - Inspect element]"; got != want {
 		t.Fatalf("a picture in a link offers %s, want %s", got, want)
 	}
 	s.choose("Open image in new tab")
@@ -108,7 +110,7 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 	words := doc.ByID("words").Children()[0]
 	doc.Select(ui.Position{Node: words, Offset: 4}, ui.Position{Node: words, Offset: 16})
 	s.rightClickAt(s.inPage("words"))
-	if got := labels(s.entries()); got != "[Copy]" {
+	if got := labels(s.entries()); got != "[Copy - Inspect element]" {
 		t.Fatalf("selected text offers %s", got)
 	}
 	s.choose("Copy")
@@ -116,7 +118,8 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 		t.Fatalf("copied %q", got)
 	}
 	s.rightClickAt(s.inPage("vault"))
-	if got, want := labels(s.entries()), "[Open link in new tab Save link as… Copy link address - Copy]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open link in new tab Save link as… Copy link address - Copy - Inspect element]"; got != want {
 		t.Fatalf("a link with text selected offers %s, want %s", got, want)
 	}
 }
@@ -215,7 +218,8 @@ func TestALinkOfLightsOwnPagesHasALinksMenu(t *testing.T) {
 	link := s.node("page").Children()[3].Children()[0]
 	r, _ := s.doc.BoxOf(link)
 	s.rightClickAt(r.Center())
-	if got, want := labels(s.entries()), "[Open link in new tab Save link as… (off) Copy link address]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open link in new tab Save link as… (off) Copy link address - Inspect element]"; got != want {
 		t.Fatalf("the menu is %s, want %s", got, want)
 	}
 	s.choose("Copy link address")

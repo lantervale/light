@@ -47,6 +47,9 @@ func (h *Tab) Current() string  { return h.urls[h.at] }
 func (h *Tab) CanBack() bool    { return h.at > 0 }
 func (h *Tab) CanForward() bool { return h.at < len(h.urls)-1 }
 
+// Len is how many pages Back and Forward go through.
+func (h *Tab) Len() int { return len(h.urls) }
+
 // Visit goes to address and drops what Forward would have returned to.
 func (h *Tab) Visit(address string) {
 	if address == h.Current() {

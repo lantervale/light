@@ -32,6 +32,11 @@ type Page struct {
 	Size image.Point
 	// FileName is the name the answer is saved under.
 	FileName string
+	// Scripts are the page's scripts in the order they run, and Tree what
+	// they need of the page's builder: both nil unless the page was
+	// loaded for scripts to run.
+	Scripts []Script
+	Tree    *Tree
 	// Icon is the site's icon as a picture ui draws, nil for none.
 	Icon []byte
 	// Empty is an answer with nothing to show (204, 205, no body).
