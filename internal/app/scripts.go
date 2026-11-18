@@ -54,6 +54,9 @@ type running struct {
 	// acting is whether the scripts are being told of a click of the
 	// player's: what they do meanwhile is the player's act.
 	acting bool
+	// kin are the documents the scripts share their engine with, nil
+	// for none (framekin.go).
+	kin *dom.Kin
 }
 
 // scripting reports whether pages are loaded for their scripts to run.
@@ -154,6 +157,9 @@ func (s *Screen) start(tab *tabs.Tab, session *session, page *web.Page) *running
 		return nil
 	}
 	live := &running{page: page, at: tab.Current()}
+	if live.kin = s.framesOf(tab, page).kinOf(nil); live.kin.Held() {
+		return nil
+	}
 	rt, err := dom.New(page, s.scriptHost(tab, session, live))
 	if err != nil {
 		session.said.Add(console.Line{Level: console.Error, Text: "The page's scripts do not run: " + err.Error(),
@@ -335,6 +341,7 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 		Storage: func(area string) dom.Storage { return s.storageIn(session, "", originOf(live.page.Address), area) },
 		Bases:   s.pageDatabases(live),
 		Windows: &windows{s: s, set: s.framesOf(tab, live.page)},
+		Kin:     live.kin, Self: topWindow,
 		Loading: func() bool { return s.framesOf(tab, live.page).loading(nil) },
 		Broadcast: func(name string, m dom.Posted) {
 			if origin := frames.Origin(live.page.Base); origin != opaqueOrigin && origin != "" {

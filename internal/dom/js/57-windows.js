@@ -2,7 +2,7 @@
 
 // written is value as another document reads it back (read): its
 // structured clone, written down as a text and the bytes of what it
-// holds that is no text. Each object met is numbered in the order it is
+// holds that is no text. Each object met is windowNumbers in the order it is
 // met, so one met again, or within itself, is named by its number, and
 // a port by its place among those that leave. Nothing is taken from the
 // page until given says so, and nothing of the page goes with it.
@@ -77,6 +77,12 @@ const written = (value, transfer) => {
     if (v instanceof EventTarget || v instanceof Event || platform.has(v) || facades.has(v)) throw uncloneable("An object of the page");
     if (v instanceof WeakMap || v instanceof WeakSet || v instanceof WeakRef || v instanceof Promise || v instanceof SharedBuffer) {
       throw uncloneable(`A ${v.constructor && v.constructor.name || "value"}`);
+    }
+    // An object of a kin's document is known for what it is only by
+    // that document: a plain one or an array is copied, another is not.
+    const kind = Object.getPrototypeOf(v);
+    if (!(v instanceof Object) && kind !== null && !Array.isArray(v) && Object.getPrototypeOf(kind) !== null) {
+      throw uncloneable("An object of another document");
     }
     note(v);
     return Array.isArray(v) ? ["a", v.length, pairs(v)] : ["o", pairs(v)];
@@ -297,13 +303,231 @@ const shield = (names, read, write, more, keys) => {
 
 const facades = new Set();
 const facadeOf = new Map();
-// windowOf is the window light names by a number: this page's own for
-// 0, null for none.
-const windowOf = (id) => {
-  if (id === 0) return window;
-  if (!Number.isInteger(id) || id < 0) return null;
-  if (!facadeOf.has(id)) facadeOf.set(id, facade(id));
+// windowNumbers are the windows of other frames a script may hold, each
+// with the number light names it by.
+const windowNumbers = new WeakMap();
+const wall = (id) => {
+  if (!facadeOf.has(id)) {
+    facadeOf.set(id, facade(id));
+    windowNumbers.set(facadeOf.get(id), id);
+  }
   return facadeOf.get(id);
+};
+// windowOf is the window light names by a number: this page's own for
+// 0, null for none. A page that has kin holds every other window as
+// one that reaches a kin's document while it shows one (kinOf), and
+// is the same window whatever it shows.
+const windowOf = (id) => {
+  if (id === 0 || id === kin.self) return window;
+  if (!Number.isInteger(id) || id < 0) return null;
+  return kin.all ? kinOf(id) : wall(id);
+};
+
+// ---- the windows of the page's kin
+//
+// The documents of the page's origin that keep their storage where it
+// does are its kin: light runs them in one engine, each with its own
+// globals, so the objects of one are held by another as they are. What
+// one cannot hold is another's global itself, which the engine keeps
+// to its own document; so the window of a kin is made here, and reads
+// and writes the other's through what that document registered of
+// itself (mine). The registry is light's own, handed from one
+// document's script to the next by light (join): no script of a page
+// sees it. Whether a window is kin is asked of light at every use, so
+// a window whose frame went to another origin answers as any window
+// of another origin does (wall) from then on, and one that came to
+// the page's origin reaches its document.
+const kin = { all: null, self: -1 };
+// whose is the number of the window value is, -1 for what is none.
+const whose = (value) => {
+  if (value === window) return kin.self;
+  const id = windowNumbers.get(value);
+  return id === undefined ? -1 : id;
+};
+const windowed = (value) => (value !== null && (typeof value === "object" || typeof value === "function") ? whose(value) : -1);
+// mine is what the page's kin reach its window by. A window never
+// crosses as it is: it is told by its number (which), and comes as
+// one (set, define).
+const mine = {
+  get: (name) => window[name],
+  which: (value) => whose(value),
+  set: (name, value, id) => Reflect.set(window, name, id < 0 ? value : windowOf(id)),
+  has: (name) => name in window,
+  remove: (name) => Reflect.deleteProperty(window, name),
+  keys: () => Reflect.ownKeys(window),
+  describe: (name) => Reflect.getOwnPropertyDescriptor(window, name),
+  define: (name, descriptor, id) => Reflect.defineProperty(window, name, id < 0 ? descriptor : { ...descriptor, value: windowOf(id) }),
+  element: (id) => wrap(host("window", "element", id)),
+  prototype: () => Object.getPrototypeOf(window),
+  view: (id) => windowOf(id),
+};
+// ownOf are the names a window of a kin answers as any window of
+// another frame does: what is done to a window, not in it.
+const ownOf = new Set(["postMessage", "close", "focus", "blur"]);
+const kinWindows = new Map();
+const kinPlaces = new Map();
+const kinTo = (id) => (kin.all && host("window", "kin", id) ? kin.all("get", id) : undefined);
+// kinPlace is the location of the window of a kin: it reads as the
+// other document's own, and what sends that window elsewhere is asked
+// of light as of any window, since who may send a window where is not
+// a matter of origin alone; a place in the document itself is the
+// document's own to go to.
+const kinPlace = (id) => {
+  if (kinPlaces.has(id)) return kinPlaces.get(id);
+  const walled = () => Reflect.get(wall(id), "location");
+  const steer = (theirs, address, replace) => {
+    const to = host("url", String(address), here.href);
+    if (!to) throw new DOMException(`'${address}' is not a valid URL.`, "SyntaxError");
+    if (to.href.split("#")[0] === theirs.href.split("#")[0] && (to.hash || String(address).includes("#"))) {
+      return replace ? theirs.replace(to.href) : theirs.assign(to.href);
+    }
+    return host("window", "go", id, to.href, Boolean(replace));
+  };
+  const methods = {
+    assign: function assign(address) { const to = kinTo(id); return to ? steer(to.get("location"), address, false) : walled().assign(address); },
+    replace: function replace(address) { const to = kinTo(id); return to ? steer(to.get("location"), address, true) : walled().replace(address); },
+  };
+  const made = new Proxy({}, {
+    get(_, name) {
+      const to = kinTo(id);
+      if (!to) return Reflect.get(walled(), name);
+      if (Object.hasOwn(methods, name)) return methods[name];
+      const theirs = to.get("location");
+      const value = theirs[name];
+      return typeof value === "function" ? value.bind(theirs) : value;
+    },
+    set(_, name, value) {
+      const to = kinTo(id);
+      if (!to) return Reflect.set(walled(), name, value);
+      const theirs = to.get("location");
+      if (name === "href") steer(theirs, value, false);
+      else if (typeof name === "string" && name !== "origin" && name in theirs) {
+        const changed = host("urlWith", theirs.href, name, String(value));
+        if (changed) steer(theirs, changed.href, false);
+      } else return Reflect.set(theirs, name, value);
+      return true;
+    },
+    has(_, name) { const to = kinTo(id); return Reflect.has(to ? to.get("location") : walled(), name); },
+    ownKeys() { const to = kinTo(id); return Reflect.ownKeys(to ? to.get("location") : walled()); },
+    getOwnPropertyDescriptor(_, name) {
+      const to = kinTo(id);
+      const found = Reflect.getOwnPropertyDescriptor(to ? to.get("location") : walled(), name);
+      return found && { ...found, configurable: true };
+    },
+    deleteProperty(_, name) { const to = kinTo(id); return to ? false : Reflect.deleteProperty(walled(), name); },
+    defineProperty() { return false; },
+    getPrototypeOf() { return kinTo(id) ? Object.prototype : null; },
+    setPrototypeOf(_, prototype) { return prototype === null; },
+    preventExtensions() { return false; },
+  });
+  kinPlaces.set(id, made);
+  facades.add(made);
+  return made;
+};
+const kinOf = (id) => {
+  if (kinWindows.has(id)) return kinWindows.get(id);
+  const other = () => kinTo(id);
+  const told = (to, value) => {
+    const of = value !== null && (typeof value === "object" || typeof value === "function") ? to.which(value) : -1;
+    return of < 0 ? value : windowOf(of);
+  };
+  // same is the window itself for what the wall names as itself.
+  const same = (value) => (value === wall(id) ? made : value);
+  const made = new Proxy({}, {
+    get(_, name) {
+      const to = other();
+      if (!to || ownOf.has(name)) return same(Reflect.get(wall(id), name));
+      return name === "location" ? kinPlace(id) : told(to, to.get(name));
+    },
+    set(_, name, value) {
+      const to = other();
+      if (!to) return Reflect.set(wall(id), name, value);
+      if (name === "location") return Reflect.set(kinPlace(id), "href", value);
+      const of = windowed(value);
+      return to.set(name, of < 0 ? value : undefined, of);
+    },
+    has(_, name) {
+      const to = other();
+      return to ? to.has(name) : Reflect.has(wall(id), name);
+    },
+    deleteProperty(_, name) {
+      const to = other();
+      return to ? to.remove(name) : Reflect.deleteProperty(wall(id), name);
+    },
+    ownKeys() {
+      const to = other();
+      return to ? to.keys() : Reflect.ownKeys(wall(id));
+    },
+    getOwnPropertyDescriptor(_, name) {
+      const to = other();
+      const found = to ? to.describe(name) : Reflect.getOwnPropertyDescriptor(wall(id), name);
+      if (!found) return undefined;
+      const shown = { ...found, configurable: true };
+      if (!to && "value" in shown) shown.value = same(shown.value);
+      if (to && name === "location") return { value: kinPlace(id), writable: true, enumerable: true, configurable: true };
+      if (to && "value" in shown) shown.value = told(to, shown.value);
+      return shown;
+    },
+    defineProperty(_, name, descriptor) {
+      const to = other();
+      if (!to) return Reflect.defineProperty(wall(id), name, descriptor);
+      const of = "value" in descriptor ? windowed(descriptor.value) : -1;
+      return to.define(name, of < 0 ? descriptor : { ...descriptor, value: undefined }, of);
+    },
+    getPrototypeOf() { const to = other(); return to ? to.prototype() : null; },
+    setPrototypeOf(_, prototype) { return prototype === null; },
+    isExtensible() { return true; },
+    preventExtensions() { return false; },
+  });
+  kinWindows.set(id, made);
+  windowNumbers.set(made, id);
+  facades.add(made);
+  return made;
+};
+// kinDocument is the document of the window light names by id when it
+// is kin to the page's, null otherwise; kinFrame the element of the
+// page's kin that shows the page, null for none.
+const kinDocument = (id) => {
+  const to = id > 0 ? kinTo(id) : undefined;
+  return to ? to.get("document") : null;
+};
+const kinFrame = () => {
+  const parent = host("window", "parent", 0);
+  const to = parent > 0 ? kinTo(parent) : undefined;
+  return to ? to.element(kin.self) : null;
+};
+// kinView is the page's window for the script that runs: its own
+// for the page's, and for a kin's the window that kin reaches the
+// page by, since the page's own is no other document's to hold.
+const kinView = () => {
+  const by = kin.all ? host("window", "entered") : 0;
+  const to = by > 0 ? kin.all("get", by) : undefined;
+  return to ? to.view(kin.self) : window;
+};
+// kinCalls are what light calls to make the page one of its kin: kin
+// gives the registry to hand to the next, join takes it, or makes it,
+// and registers the page's window under its number, leave takes it
+// out.
+const kinCalls = {
+  kin() { return kin.all; },
+  join(registry, self) {
+    if (registry === null || registry === undefined) {
+      const windows = new Map();
+      registry = (what, id, of) => {
+        if (what === "get") return windows.get(id);
+        if (what === "set") windows.set(id, of);
+        else if (windows.get(id) === of) windows.delete(id);
+        return undefined;
+      };
+    }
+    kin.all = registry;
+    kin.self = self;
+    registry("set", self, mine);
+  },
+  leave() {
+    if (kin.all) kin.all("leave", kin.self, mine);
+    kin.all = null;
+  },
 };
 
 // targeted reads the second and third arguments of a postMessage: the

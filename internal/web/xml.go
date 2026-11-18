@@ -113,29 +113,31 @@ type XMLScope struct {
 
 // ParseXML reads a whole document by XML's rules into the tree HTML is
 // read into: one root element, its namespaces resolved, CDATA sections
-// as text, nothing guessed. What is not well-formed is an *XMLError.
-func ParseXML(source string) (*html.Node, error) {
+// as text, nothing guessed, with the prefixes its elements were
+// written with. What is not well-formed is an *XMLError.
+func ParseXML(source string) (*html.Node, Prefixes, error) {
 	root := &html.Node{Type: html.DocumentNode}
 	p := newXMLParser(source, XMLScope{})
 	p.whole = true
 	if err := p.read(root); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return root, nil
+	return root, p.prefixes, nil
 }
 
 // ParseXMLFragment reads markup as what an element holds, within scope.
-func ParseXMLFragment(markup string, scope XMLScope) ([]*html.Node, error) {
+func ParseXMLFragment(markup string, scope XMLScope) ([]*html.Node, Prefixes, error) {
 	holder := &html.Node{Type: html.DocumentNode}
-	if err := newXMLParser(markup, scope).read(holder); err != nil {
-		return nil, err
+	p := newXMLParser(markup, scope)
+	if err := p.read(holder); err != nil {
+		return nil, nil, err
 	}
 	var nodes []*html.Node
 	for c := holder.FirstChild; c != nil; c = holder.FirstChild {
 		holder.RemoveChild(c)
 		nodes = append(nodes, c)
 	}
-	return nodes, nil
+	return nodes, p.prefixes, nil
 }
 
 type xmlParser struct {
@@ -149,7 +151,8 @@ type xmlParser struct {
 	open          []xmlOpen
 	scope         XMLScope
 	// named are HTML's entities the source names.
-	named map[string]string
+	named    map[string]string
+	prefixes Prefixes
 }
 
 // xmlOpen is an element that is not closed yet: its name as written,
@@ -161,7 +164,7 @@ type xmlOpen struct {
 }
 
 func newXMLParser(source string, scope XMLScope) *xmlParser {
-	p := &xmlParser{source: source, scope: scope, d: xml.NewDecoder(strings.NewReader(source))}
+	p := &xmlParser{source: source, scope: scope, d: xml.NewDecoder(strings.NewReader(source)), prefixes: Prefixes{}}
 	p.d.Strict = true
 	p.d.CharsetReader = func(_ string, in io.Reader) (io.Reader, error) { return in, nil }
 	if scope.Entities {
@@ -365,6 +368,9 @@ func (p *xmlParser) start(parent *html.Node, t xml.StartElement) error {
 	if n.Namespace == "" || n.Namespace == svgNamespace || n.Namespace == mathNamespace {
 		n.DataAtom = atom.Lookup([]byte(n.Data))
 	}
+	if t.Name.Space != "" {
+		p.prefixes[n] = t.Name.Space
+	}
 	seen := map[xml.Name]bool{}
 	for _, a := range t.Attr {
 		kept, name, failed := p.attribute(a)
@@ -429,35 +435,21 @@ func (p *xmlParser) resolve(prefix string, element bool) (string, error) {
 	return address, nil
 }
 
-// attribute is an attribute as the tree keeps it, as HTML's parser
-// keeps those of SVG: the ones of XML, XLink and the declarations of
-// namespaces under those names, any other with a prefix under the name
-// it was written with. Its name with its namespace tells it from the
-// others.
+// attribute is an attribute as the tree keeps it (AttrName). Its name
+// with its namespace tells it from the others.
 func (p *xmlParser) attribute(a xml.Attr) (html.Attribute, xml.Name, error) {
 	if strings.Contains(a.Name.Local, ":") {
 		return html.Attribute{}, xml.Name{}, p.fail("%s is not a name: nothing stands before its colon, or after it",
 			spelled(a.Name))
 	}
 	if a.Name.Space == "" && a.Name.Local == xmlnsPrefix {
-		return html.Attribute{Key: xmlnsPrefix, Val: a.Value}, xml.Name{Space: xmlnsAddress, Local: xmlnsPrefix}, nil
+		return NamedAttr(xmlnsAddress, "", xmlnsPrefix, a.Value), xml.Name{Space: xmlnsAddress, Local: xmlnsPrefix}, nil
 	}
 	space, err := p.resolve(a.Name.Space, false)
 	if err != nil {
 		return html.Attribute{}, xml.Name{}, p.fail("the prefix of the attribute %s is not declared", spelled(a.Name))
 	}
-	name := xml.Name{Space: space, Local: a.Name.Local}
-	switch space {
-	case "":
-		return html.Attribute{Key: a.Name.Local, Val: a.Value}, name, nil
-	case xmlAddress:
-		return html.Attribute{Namespace: xmlPrefix, Key: a.Name.Local, Val: a.Value}, name, nil
-	case xmlnsAddress:
-		return html.Attribute{Namespace: xmlnsPrefix, Key: a.Name.Local, Val: a.Value}, name, nil
-	case xlinkAddress:
-		return html.Attribute{Namespace: xlinkPrefix, Key: a.Name.Local, Val: a.Value}, name, nil
-	}
-	return html.Attribute{Key: spelled(a.Name), Val: a.Value}, name, nil
+	return NamedAttr(space, a.Name.Space, a.Name.Local, a.Value), xml.Name{Space: space, Local: a.Name.Local}, nil
 }
 
 func (p *xmlParser) end(t xml.EndElement) error {

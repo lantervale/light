@@ -130,7 +130,8 @@ func TestWhatTheBrowserAnswersAScriptRunsOnTheFramesGoroutine(t *testing.T) {
 func TestEveryKindOfCallOfTheHostIsHandedToTheFrame(t *testing.T) {
 	host := reflect.TypeFor[dom.Host]()
 	handed := map[string]bool{"Cookies": true, "Windows": true}
-	plain := map[string]bool{"Navigator": true, "Sandboxed": true, "Budget": true, "Hold": true}
+	plain := map[string]bool{"Navigator": true, "Sandboxed": true, "Budget": true, "Hold": true, "Kin": true,
+		"Self": true}
 	for i := range host.NumField() {
 		field := host.Field(i)
 		switch {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lantervale/light/internal/dom"
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/frames"
 	"github.com/lantervale/light/pkg/tabs"
 )
@@ -144,12 +145,20 @@ func (s *Screen) targeted(tab *tabs.Tab, address, target string, form *web.Submi
 }
 
 // pops reports whether a link or a form of f with that target opens a
-// tab of its own: its sandbox may keep it from it.
+// tab of its own: its sandbox may keep it from it. A tab is never
+// sandboxed, so a sandbox opens one only when it lets its windows out
+// of it, and the console is told of the one that does not.
 func (s *Screen) pops(f *frame, target string) bool {
-	if f.sandbox.On && !f.sandbox.Popups {
+	if !asksWindow(target) || s.reach(f, target) != nil || f.sandbox.On && !f.sandbox.Popups {
 		return false
 	}
-	return asksWindow(target) && s.reach(f, target) == nil
+	if f.sandbox.On && !f.sandbox.PopupsEscape {
+		f.set.session.said.Add(console.Line{Level: console.Error, Text: "Blocked opening a new window from a " +
+			"sandboxed frame: light opens no sandboxed tab, and the frame's 'allow-popups-to-escape-sandbox' " +
+			"permission is not set."})
+		return false
+	}
+	return true
 }
 
 // followUnderMiddle opens the link the middle button went down and came

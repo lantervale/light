@@ -264,14 +264,14 @@ func (l *Loader) read(ctx context.Context, answer *fetch.Answer, links Links) *P
 // build reads an HTML answer and builds its Document, its sheets and its
 // icon fetched meanwhile: a frame's document has no icon.
 func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, links Links) {
-	root, err := l.parse(page, answer)
+	root, prefixes, err := l.parse(page, answer)
 	if err != nil {
 		page.Err = err
 		return
 	}
 	b := newBuilder(l, answer.URL, links)
 	if b.tree != nil {
-		b.tree.xml = IsXML(page.Media)
+		b.tree.xml, b.tree.prefixes = IsXML(page.Media), prefixes
 	}
 	b.encode = encoderOf(answer.Body, answer.Header.Get("Content-Type"))
 	ctx = fetch.By(l.within(netlog.As(ctx, l.by(), netlog.Other), answer.URL), answer.URL)
@@ -293,24 +293,24 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 
 // parse reads an answer into its tree: by XML's rules for a document
 // sent as XML, which is shown whole or not at all, else as HTML.
-func (l *Loader) parse(page *Page, answer *fetch.Answer) (*html.Node, error) {
+func (l *Loader) parse(page *Page, answer *fetch.Answer) (*html.Node, Prefixes, error) {
 	if IsXML(page.Media) {
 		page.Source = DecodeXML(answer.Body, answer.Header.Get("Content-Type"))
-		root, err := ParseXML(cut(page.Source))
+		root, prefixes, err := ParseXML(cut(page.Source))
 		if err != nil {
-			return nil, fmt.Errorf("its XML is not well-formed, and nothing of it is shown: %w", err)
+			return nil, nil, fmt.Errorf("its XML is not well-formed, and nothing of it is shown: %w", err)
 		}
-		return root, nil
+		return root, prefixes, nil
 	}
 	page.Source = answer.Text()
 	root, err := html.ParseWithOptions(strings.NewReader(cut(page.Source)), html.ParseOptionEnableScripting(l.Scripts))
 	if err != nil {
-		return nil, fmt.Errorf("reading its HTML: %w", err)
+		return nil, nil, fmt.Errorf("reading its HTML: %w", err)
 	}
 	if l.Scripts {
 		writtenIn(cut(page.Source)).restore(root)
 	}
-	return root, nil
+	return root, nil, nil
 }
 
 // refresh is where an answer says to go at once, in a Refresh header or,

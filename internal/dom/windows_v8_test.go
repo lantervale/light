@@ -61,7 +61,10 @@ func (*tab) Named(of int, name string) int {
 	}
 	return dom.NoWindow
 }
-func (t *tab) Closed(of int) bool { return t.closed[of] }
+func (t *tab) Closed(of int) bool       { return t.closed[of] }
+func (*tab) Element(int) *ui.Node       { return nil }
+func (*tab) Kin(int) bool               { return false }
+func (*tab) May(int, string, bool) bool { return true }
 func (*tab) Of(n *ui.Node) int {
 	if n != nil {
 		return 2

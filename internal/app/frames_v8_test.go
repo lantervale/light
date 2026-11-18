@@ -8,7 +8,7 @@ import (
 	"github.com/lantervale/light/pkg/console"
 )
 
-func TestAScriptReachesItsPagesIframesAndNothingInTheirDocuments(t *testing.T) {
+func TestAScriptReachesItsPagesIframesAndTheDocumentsOfItsOrigin(t *testing.T) {
 	f, transport := framingOf(t, map[string]answer{
 		"site.test/": html(`<title>Scripted</title><iframe id="one" name="first" src="/inner" width="200"></iframe>
 			<iframe id="bad" src="javascript:alert(1)"></iframe><p id="heard"></p><script>
@@ -37,20 +37,22 @@ func TestAScriptReachesItsPagesIframesAndNothingInTheirDocuments(t *testing.T) {
 	}
 	s.until("the page heard of its frames", func() bool { return s.pageText("heard") == "bad:error one:load " })
 	for expression, want := range map[string]string{
-		`one.contentWindow === frames[0] && one.contentWindow === first && one.contentDocument === null`: "true",
+		`one.contentWindow === frames[0] && one.contentWindow === first && bad.contentDocument.URL`: `"about:blank"`,
+		`one.contentDocument === first.document && one.contentDocument !== document`:                "true",
+		`one.contentDocument.querySelector("p").textContent + " " + first.frameElement.id`:          `"inner one"`,
 		`frames.length + " " + (parent === window) + " " + (top === window) + " " + (frameElement === null)`: `"2 ` +
 			`true true true"`,
 		`one.src + " " + one.name + " " + one.width + " " + one.srcdoc + "|" + one.sandbox.length`: `"https://` +
 			`site.test/inner first 200 |0"`,
-		`one instanceof HTMLIFrameElement && document.title`: `"Scripted"`,
+		`one instanceof HTMLIFrameElement && document.title`: `"taken"`,
 	} {
 		if got, err := s.evaluate(expression); err != nil || got != want {
 			t.Errorf("%s is %s (%v), want %s", expression, got, err, want)
 		}
 	}
 	s.until("the frame's script asked for what it fetches", func() bool { return f.came("site.test/ran") })
-	if !s.consoleSays(console.Error, "SecurityError") || s.session().pages["https://site.test/"].Title != "Scripted" {
-		t.Errorf("a frame of the page's own origin reached its document: the console says %s", s.said())
+	if s.consoleSays(console.Error, "SecurityError") || s.session().pages["https://site.test/"].Title != "taken" {
+		t.Errorf("a frame of the page's own origin did not reach its document: the console says %s", s.said())
 	}
 
 	if _, err := s.evaluate(`one.src = "/second"`); err != nil {

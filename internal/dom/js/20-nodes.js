@@ -33,7 +33,8 @@ const pageRef = host("document", "page");
 const pageInfo = host("document", "info", pageRef);
 let strangers = false;
 let xmlAbout = pageInfo[1];
-// prefixed is whether a script made an element with a prefix.
+// prefixed is whether a script made an element with a prefix; those a
+// document of XML was written with are asked for while one is about.
 let prefixed = false;
 const inXML = (node) => xmlAbout && host("document", "xml", node[REF]);
 // objectOf is the object of the node of a number, of that name.
@@ -51,6 +52,7 @@ const objectOf = (ref, tag) => {
   }
   const colon = tag.indexOf(":");
   if (colon < 0) return new (classOf(tag))(token, ref, tag);
+  if (colon === 0) return new HTMLUnknownElement(token, ref, tag.slice(1));
   const namespace = tag.slice(0, colon);
   return new (namespace === "svg" ? SVGElement : Element)(token, ref, tag.slice(colon + 1), namespace);
 };
@@ -70,60 +72,15 @@ const wrap = (ref) => {
   wrappers.set(ref, node);
   return node;
 };
-const wrapAll = (refs) => NodeList.from(refs.map(wrap));
+const wrapAll = (refs) => nodeList(refs.map(wrap));
+// kidsOf are the children of a node now, foundIn the elements under it
+// a selector matches: arrays, for light's own code.
+const kidsOf = (node) => host("children", node[REF], false).map(wrap);
+const foundIn = (node, selector) => host("query", node[PAGE] ? 0 : node[REF], selector, true).map(wrap);
 const refOf = (node, what = "a node") => {
   if (!(node instanceof Node) || node[REF] === undefined) throw new TypeError(`${what} is not a Node`);
   return node[REF];
 };
-
-class NodeList extends Array {
-  static get [Symbol.species]() { return Array; }
-  item(i) { return this[i] === undefined ? null : this[i]; }
-  namedItem(name) {
-    return this.find((n) => n instanceof Element && (n.id === name || n.getAttribute("name") === name)) || null;
-  }
-  static from(nodes) {
-    const list = new NodeList();
-    for (const n of nodes) list.push(n);
-    return list;
-  }
-}
-// An HTMLCollection also names its elements by their id or name.
-const namedItems = {
-  has(list, name) { return name in list || (typeof name === "string" && list.namedItem(name) !== null); },
-  get(list, name) {
-    if (typeof name !== "string" || name in list) return Reflect.get(list, name, list);
-    const found = list.namedItem(name);
-    return found === null ? undefined : found;
-  },
-};
-class HTMLCollection extends NodeList {
-  static from(nodes) {
-    const list = new this();
-    for (const n of nodes) list.push(n);
-    return new Proxy(list, namedItems);
-  }
-}
-class RadioNodeList extends NodeList {
-  get value() {
-    const on = this.find((n) => n.checked);
-    return on ? on.value : "";
-  }
-  set value(value) {
-    const one = this.find((n) => n.type === "radio" && n.value === String(value));
-    if (one) one.checked = true;
-  }
-}
-// A form's controls of one name are a list of them.
-class HTMLFormControlsCollection extends HTMLCollection {
-  namedItem(name) {
-    const all = this.filter((n) => n.id === name || n.getAttribute("name") === name);
-    if (all.length < 2) return all[0] || null;
-    const list = new RadioNodeList();
-    for (const n of all) list.push(n);
-    return list;
-  }
-}
 
 // byName has the objects of a prototype answer, for a name nothing else
 // of them has, with what find finds under it: a form its controls, the
@@ -175,16 +132,16 @@ class Node extends EventTarget {
     const parent = this.parentNode;
     return parent instanceof Element ? parent : null;
   }
-  get childNodes() { return wrapAll(host("children", this[REF], false)); }
+  get childNodes() { return keptList(this, "childNodes", () => liveList(NodeList, () => kidsOf(this))); }
   get firstChild() { return wrap(host("child", this[REF], 0, false)); }
   get lastChild() { return wrap(host("child", this[REF], -1, false)); }
   get nextSibling() { return wrap(host("sibling", this[REF], 1, false)); }
   get previousSibling() { return wrap(host("sibling", this[REF], -1, false)); }
   get textContent() { return host("text", this[REF]); }
   set textContent(text) {
-    const removed = watching ? this.childNodes : null;
+    const removed = watching ? kidsOf(this) : null;
     host("setText", this[REF], text === null || text === undefined ? "" : String(text));
-    if (watching) observed({ type: "childList", target: this, removedNodes: removed, addedNodes: this.childNodes });
+    if (watching) observed({ type: "childList", target: this, removedNodes: removed, addedNodes: kidsOf(this) });
   }
   hasChildNodes() { return host("child", this[REF], 0, false) !== 0; }
   getRootNode() {
@@ -197,17 +154,21 @@ class Node extends EventTarget {
     if (this === document) return other === document || other.isConnected;
     return other instanceof Node && other[REF] !== undefined && host("contains", this[REF], other[REF]);
   }
-  appendChild(child) { return insert(this, child, null); }
-  insertBefore(child, before) { return insert(this, child, before || null); }
+  appendChild(child) { return insert(this, aNode(child), null); }
+  insertBefore(child, before) {
+    if (arguments.length < 2) throw new TypeError("insertBefore takes a node and the one it goes before.");
+    return insert(this, aNode(child), before === undefined || before === null ? null : aNode(before));
+  }
   removeChild(child) {
-    if (!(child instanceof Node) || child.parentNode !== this) {
+    if (aNode(child).parentNode !== this) {
       throw new DOMException("The node to be removed is not a child of this node.", "NotFoundError");
     }
     detach(child);
     return child;
   }
   replaceChild(child, old) {
-    if (!(old instanceof Node) || old.parentNode !== this) {
+    aNode(child);
+    if (aNode(old).parentNode !== this) {
       throw new DOMException("The node to be replaced is not a child of this node.", "NotFoundError");
     }
     if (child === old) return old;
@@ -217,17 +178,18 @@ class Node extends EventTarget {
   }
   cloneNode(deep) { return wrap(host("clone", this[REF], Boolean(deep))); }
   isSameNode(other) { return this === other; }
-  isEqualNode(other) {
-    return other instanceof Node && this.nodeType === other.nodeType &&
-      (this instanceof Element ? this.outerHTML === other.outerHTML : this.textContent === other.textContent);
-  }
+  isEqualNode(other) { return other instanceof Node && equalNodes(this, other); }
   compareDocumentPosition(other) {
     if (this === other) return 0;
+    if (other instanceof Attr) {
+      const from = other.compareDocumentPosition(this);
+      return (from & 33) | (from & 2 ? 4 : 0) | (from & 4 ? 2 : 0) | (from & 8 ? 16 : 0) | (from & 16 ? 8 : 0);
+    }
     if (!(other instanceof Node) || other[REF] === undefined) return 1;
     return host("compare", this[REF], other[REF]);
   }
   normalize() {
-    for (const child of this.childNodes) {
+    for (const child of kidsOf(this)) {
       if (!(child instanceof Text)) {
         child.normalize();
         continue;
@@ -258,6 +220,12 @@ const nodeTypes = {
 // that is none: a document's own, else the one the node is in.
 const declaringFrom = (node) => (node instanceof Document ? node.documentElement
   : node instanceof DocumentType || node instanceof DocumentFragment ? null : node.parentElement);
+// declaredOn are the attributes of an element that declare a
+// namespace: those of the namespace of such declarations, and the
+// xmlns HTML's parser leaves without one on an element that is not
+// HTML's.
+const declaredOn = (element) => attrRows(element).filter((row) => row[2] === XMLNS_NAMESPACE ||
+  (element[NS] && row[2] === "" && row[0] === "xmlns"));
 // namespaceFrom is the namespace a prefix stands for at a node, the
 // default one for null, as the elements from it up declare them.
 const namespaceFrom = (node, prefix) => {
@@ -268,9 +236,10 @@ const namespaceFrom = (node, prefix) => {
   if (prefix === "xml") return XML_NAMESPACE;
   if (prefix === "xmlns") return XMLNS_NAMESPACE;
   for (let at = node; at; at = at.parentElement) {
-    if (prefix === null && at.namespaceURI !== null) return at.namespaceURI;
-    const declared = at.getAttribute(prefix === null ? "xmlns" : "xmlns:" + prefix);
-    if (declared !== null) return declared || null;
+    if (at.namespaceURI !== null && at.prefix === prefix) return at.namespaceURI;
+    const declared = declaredOn(at).find((row) => row[4] === (prefix === null ? "xmlns" : prefix) &&
+      (row[3] === "") === (prefix === null));
+    if (declared) return declared[1] || null;
   }
   return null;
 };
@@ -282,9 +251,9 @@ const prefixFrom = (node, uri) => {
     return from ? prefixFrom(from, uri) : null;
   }
   for (let at = node; at; at = at.parentElement) {
-    for (const [name, value] of host("attrs", at[REF])) {
-      if (name.startsWith("xmlns:") && value === uri) return name.slice(6);
-    }
+    if (at.namespaceURI === uri && at.prefix !== null) return at.prefix;
+    const declared = declaredOn(at).find((row) => row[3] === "xmlns" && row[1] === uri);
+    if (declared) return declared[4];
   }
   return null;
 };
@@ -296,10 +265,10 @@ const refuse = (why) => { throw new DOMException(why, "HierarchyRequestError"); 
 // more than one doctype, or a doctype after its element. replaced is
 // the child the new one takes the place of.
 const admit = (parent, child, before, replaced) => {
-  const kids = parent.childNodes;
+  const kids = kidsOf(parent);
   const at = before ? kids.indexOf(before) : kids.length;
   const has = (from, kind) => kids.slice(...from).some((n) => n !== replaced && n instanceof kind);
-  const parts = child instanceof DocumentFragment ? child.childNodes : [child];
+  const parts = child instanceof DocumentFragment ? kidsOf(child) : [child];
   const elements = parts.filter((n) => n instanceof Element).length;
   if (elements > 1 || parts.some((n) => n instanceof Text)) refuse("A document holds one element, and no text.");
   if (elements && (has([0], Element) || has([at], DocumentType))) {
@@ -316,8 +285,10 @@ const insert = (parent, child, before, replaced = null) => {
     refuse("This node type does not support this method.");
   }
   const into = refOf(parent);
+  if (child instanceof Attr) refuse("An attribute is held by its element only.");
   const ref = refOf(child, "the child");
   if (child === parent || host("contains", ref, into)) refuse("The new child element contains the parent.");
+  if (before === child && replaced === null) before = child.nextSibling;
   if (before !== null && (!(before instanceof Node) || before.parentNode !== parent)) {
     throw new DOMException("The node before which the new node is to be inserted is not a child of this node.",
       "NotFoundError");
@@ -326,7 +297,7 @@ const insert = (parent, child, before, replaced = null) => {
   if (parent instanceof Document) admit(parent, child, before, replaced);
   else if (child instanceof DocumentType) refuse("A doctype is held by a document only.");
   if (child instanceof DocumentFragment) {
-    for (const one of child.childNodes) insert(parent, one, before);
+    for (const one of kidsOf(child)) insert(parent, one, before);
     return child;
   }
   if (child.parentNode) detach(child);
@@ -348,6 +319,39 @@ const detach = (child) => {
 };
 // nodesOf turns what append and its kin take, nodes and strings, into
 // one node.
+// aNode is what a script gave where a node is taken.
+const aNode = (given) => {
+  if (!(given instanceof Node)) throw new TypeError("The value given is not a Node.");
+  return given;
+};
+// beside is the nearest sibling of a node, one way, that is not among
+// the nodes about to be moved.
+const beside = (node, items, next) => {
+  let at = next ? node.nextSibling : node.previousSibling;
+  while (at && items.includes(at)) at = next ? at.nextSibling : at.previousSibling;
+  return at;
+};
+const putBefore = (node, items) => {
+  const parent = node.parentNode;
+  if (!parent) return;
+  const kept = beside(node, items, false);
+  const nodes = nodesOf(items);
+  insert(parent, nodes, kept ? kept.nextSibling : parent.firstChild);
+};
+const putAfter = (node, items) => {
+  const parent = node.parentNode;
+  if (!parent) return;
+  const kept = beside(node, items, true);
+  insert(parent, nodesOf(items), kept);
+};
+const putInPlaceOf = (node, items) => {
+  const parent = node.parentNode;
+  if (!parent) return;
+  const kept = beside(node, items, true);
+  const nodes = items.length ? nodesOf(items) : null;
+  if (node.parentNode === parent) detach(node);
+  if (nodes) insert(parent, nodes, kept);
+};
 const nodesOf = (items) => {
   if (items.length === 1) return items[0] instanceof Node ? items[0] : document.createTextNode(String(items[0]));
   const fragment = document.createDocumentFragment();
@@ -367,13 +371,16 @@ class CharacterData extends Node {
   get textContent() { return this.data; }
   set textContent(text) { this.data = text === null ? "" : text; }
   get length() { return this.data.length; }
-  get childNodes() { return new NodeList(); }
+  get childNodes() { return keptList(this, "childNodes", () => nodeList([])); }
   get firstChild() { return null; }
   get lastChild() { return null; }
   hasChildNodes() { return false; }
   get nextElementSibling() { return wrap(host("sibling", this[REF], 1, true)); }
   get previousElementSibling() { return wrap(host("sibling", this[REF], -1, true)); }
-  appendData(text) { this.data += text; }
+  appendData(text) {
+    if (!arguments.length) throw new TypeError("appendData takes the text to add.");
+    this.data += text;
+  }
   substringData(at, count) { return this.data.substr(offsetIn(this, at), count >>> 0); }
   insertData(at, text) { this.replaceData(at, 0, text); }
   deleteData(at, count) { this.replaceData(at, count, ""); }
@@ -383,15 +390,9 @@ class CharacterData extends Node {
     this.data = data.slice(0, at) + String(text) + data.slice(at + (count >>> 0));
   }
   remove() { detach(this); }
-  before(...items) { if (this.parentNode) insert(this.parentNode, nodesOf(items), this); }
-  after(...items) { if (this.parentNode) insert(this.parentNode, nodesOf(items), this.nextSibling); }
-  replaceWith(...items) {
-    const parent = this.parentNode;
-    if (!parent) return;
-    const next = this.nextSibling;
-    detach(this);
-    insert(parent, nodesOf(items), next);
-  }
+  before(...items) { putBefore(this, items); }
+  after(...items) { putAfter(this, items); }
+  replaceWith(...items) { putInPlaceOf(this, items); }
 }
 // offsetIn is an offset into a node's text, refused past its end.
 const offsetIn = (node, at) => {
@@ -444,7 +445,7 @@ class DocumentType extends Node {
   get systemId() { return host("attr", this[REF], "system") || ""; }
   get textContent() { return null; }
   set textContent(_) {}
-  get childNodes() { return new NodeList(); }
+  get childNodes() { return keptList(this, "childNodes", () => nodeList([])); }
   get firstChild() { return null; }
   get lastChild() { return null; }
   hasChildNodes() { return false; }
@@ -470,7 +471,11 @@ class DocumentFragment extends Node {
 
 // parentMixin is what elements, fragments and the document share.
 const parentMixin = {
-  children: { get() { return HTMLCollection.from(host("children", this[REF], true).map(wrap)); } },
+  children: {
+    get() {
+      return keptList(this, "children", () => liveList(HTMLCollection, () => host("children", this[REF], true).map(wrap)));
+    },
+  },
   firstElementChild: { get() { return wrap(host("child", this[REF], 0, true)); } },
   lastElementChild: { get() { return wrap(host("child", this[REF], -1, true)); } },
   childElementCount: { get() { return host("children", this[REF], true).length; } },
@@ -479,7 +484,7 @@ const parentMethods = {
   append(...items) { if (items.length) insert(this, nodesOf(items), null); },
   prepend(...items) { if (items.length) insert(this, nodesOf(items), this.firstChild); },
   replaceChildren(...items) {
-    for (const child of this.childNodes) detach(child);
+    for (const child of kidsOf(this)) detach(child);
     if (items.length) insert(this, nodesOf(items), null);
   },
   querySelector(selector) { return wrap(host("query", this[REF], String(selector), false)); },
@@ -489,48 +494,6 @@ accessors(DocumentFragment.prototype, parentMixin);
 define(DocumentFragment.prototype, parentMethods);
 
 // ---- tokens, styles, data
-
-class DOMTokenList {
-  constructor(element, attribute) {
-    this._element = element;
-    this._attribute = attribute;
-  }
-  _tokens() { return (this._element.getAttribute(this._attribute) || "").split(/\s+/).filter(Boolean); }
-  _set(tokens) { this._element.setAttribute(this._attribute, tokens.join(" ")); }
-  get length() { return this._tokens().length; }
-  get value() { return this._element.getAttribute(this._attribute) || ""; }
-  set value(text) { this._element.setAttribute(this._attribute, String(text)); }
-  item(i) { const token = this._tokens()[i]; return token === undefined ? null : token; }
-  contains(token) { return this._tokens().includes(String(token)); }
-  add(...tokens) {
-    const now = this._tokens();
-    for (const token of tokens.map(String)) if (!now.includes(token)) now.push(token);
-    this._set(now);
-  }
-  remove(...tokens) {
-    const gone = tokens.map(String);
-    this._set(this._tokens().filter((token) => !gone.includes(token)));
-  }
-  toggle(token, force) {
-    const has = this.contains(token);
-    const on = force === undefined ? !has : Boolean(force);
-    if (on && !has) this.add(token);
-    if (!on && has) this.remove(token);
-    return on;
-  }
-  replace(old, token) {
-    if (!this.contains(old)) return false;
-    this._set(this._tokens().map((t) => (t === String(old) ? String(token) : t)));
-    return true;
-  }
-  supports() { return true; }
-  forEach(fn, self) { this._tokens().forEach((token, i) => fn.call(self, token, i, this)); }
-  keys() { return this._tokens().keys(); }
-  values() { return this._tokens().values(); }
-  entries() { return this._tokens().entries(); }
-  [Symbol.iterator]() { return this._tokens()[Symbol.iterator](); }
-  toString() { return this.value; }
-}
 
 const kebab = (name) => (name.startsWith("--") ? name
   : name.replace(/^(webkit|moz|ms|o)(?=[A-Z])/, "-$1").replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()));
@@ -587,7 +550,7 @@ const styleOf = (element) => {
   let proxy = styles.get(element);
   if (proxy) return proxy;
   const style = {
-    get map() { return declarations(element.getAttribute("style") || ""); },
+    get map() { return declarations(ownAttr(element, "style") || ""); },
     write: null,
   };
   const view = (read) => {
@@ -675,20 +638,6 @@ const DOMRectReadOnly = DOMRect;
 
 // ---- elements
 
-class Attr {
-  constructor(element, name, value) {
-    this.ownerElement = element;
-    this.name = this.localName = this.nodeName = name;
-    this.value = this.nodeValue = value;
-    this.specified = true;
-  }
-}
-class NamedNodeMap extends Array {
-  static get [Symbol.species]() { return Array; }
-  item(i) { return this[i] || null; }
-  getNamedItem(name) { return this.find((a) => a.name === name) || null; }
-}
-
 class Element extends Node {
   constructor(key, ref, tag, namespace = "") {
     super(key, ref);
@@ -700,81 +649,51 @@ class Element extends Node {
   get tagName() {
     const prefix = this.prefix;
     const name = prefix ? prefix + ":" + this[TAG] : this[TAG];
-    return this[NS] || inXML(this) ? name : name.toUpperCase();
+    return this[NS] || inXML(this) ? name : name.replace(/[a-z]+/g, (run) => run.toUpperCase());
   }
   get nodeName() { return this.tagName; }
   get namespaceURI() {
     const space = this[NS];
     return space === "" ? HTML_NS : space === NO_NS ? null : namespaces[space] || space;
   }
-  get prefix() { return (prefixed && host("document", "prefix", this[REF])) || null; }
+  get prefix() { return ((prefixed || xmlAbout) && host("document", "prefix", this[REF])) || null; }
 
   // _named is an attribute's name as this element keeps it: in lower
   // case in HTML, as it is written elsewhere (viewBox) and in a
   // document of XML.
-  _named(name) { return this[NS] || inXML(this) ? String(name) : String(name).toLowerCase(); }
+  _named(name) { return this[NS] || inXML(this) ? String(name) : asciiLower(String(name)); }
   getAttribute(name) { return host("attr", this[REF], this._named(name)); }
   hasAttribute(name) { return this.getAttribute(name) !== null; }
   hasAttributes() { return host("attrs", this[REF]).length > 0; }
   getAttributeNames() { return host("attrs", this[REF]).map((a) => a[0]); }
-  get attributes() {
-    const map = new NamedNodeMap();
-    for (const [name, value] of host("attrs", this[REF])) map.push(new Attr(this, name, value));
-    return map;
-  }
-  getAttributeNode(name) { return this.attributes.getNamedItem(this._named(name)); }
-  setAttributeNode(attribute) {
-    const old = this.getAttributeNode(attribute.name);
-    this.setAttribute(attribute.name, attribute.value);
-    attribute.ownerElement = this;
-    return old;
-  }
-  setAttributeNodeNS(attribute) { return this.setAttributeNode(attribute); }
-  getAttributeNodeNS(_, name) { return this.getAttributeNode(name); }
   setAttribute(name, value) {
     name = this._named(name);
-    if (!/^[^\s"'>/=]+$/.test(name)) throw new DOMException(`'${name}' is not a valid attribute name.`, "InvalidCharacterError");
+    if (!/^[^\t\n\f\r \0/=>]+$/.test(name)) invalid("attribute name", name);
     const oldValue = watching ? this.getAttribute(name) : null;
     host("setAttr", this[REF], name, String(value));
     if (name.startsWith("on")) forgetHandler(this, name.slice(2));
-    if (watching) observed({ type: "attributes", target: this, attributeName: name, oldValue });
-  }
-  removeAttribute(name) {
-    name = this._named(name);
-    const oldValue = this.getAttribute(name);
-    if (oldValue === null) return;
-    host("removeAttr", this[REF], name);
-    if (name.startsWith("on")) forgetHandler(this, name.slice(2));
+    if (name === "nonce") nonces.delete(this);
     if (watching) observed({ type: "attributes", target: this, attributeName: name, oldValue });
   }
   toggleAttribute(name, force) {
+    if (!/^[^\t\n\f\r \0/=>]+$/.test(name)) invalid("attribute name", name);
     const has = this.hasAttribute(name);
     const on = force === undefined ? !has : Boolean(force);
     if (on && !has) this.setAttribute(name, "");
     if (!on && has) this.removeAttribute(name);
     return on;
   }
-  getAttributeNS(_, name) { return this.getAttribute(name); }
-  setAttributeNS(namespace, name, value) { this.setAttribute(namespace ? name : String(name).replace(/^.*:/, ""), value); }
-  removeAttributeNS(_, name) { this.removeAttribute(name); }
-  hasAttributeNS(_, name) { return this.hasAttribute(name); }
 
-  get id() { return this.getAttribute("id") || ""; }
+  get id() { return ownAttr(this, "id") || ""; }
   set id(value) { this.setAttribute("id", value); }
-  get className() { return this.getAttribute("class") || ""; }
+  get className() { return ownAttr(this, "class") || ""; }
   set className(value) { this.setAttribute("class", value); }
-  get classList() {
-    if (!this._classList) define(this, { _classList: new DOMTokenList(this, "class") });
-    return this._classList;
-  }
-  set classList(value) { this.setAttribute("class", value); }
-  get slot() { return this.getAttribute("slot") || ""; }
 
   get innerHTML() { return host("html", this[REF], false); }
   set innerHTML(markup) {
-    const removed = watching ? this.childNodes : null;
+    const removed = watching ? kidsOf(this) : null;
     host("setHTML", this[REF], markup === null ? "" : String(markup));
-    if (watching) observed({ type: "childList", target: this, removedNodes: removed, addedNodes: this.childNodes });
+    if (watching) observed({ type: "childList", target: this, removedNodes: removed, addedNodes: kidsOf(this) });
   }
   get outerHTML() { return host("html", this[REF], true); }
   set outerHTML(markup) {
@@ -811,24 +730,16 @@ class Element extends Node {
   get nextElementSibling() { return wrap(host("sibling", this[REF], 1, true)); }
   get previousElementSibling() { return wrap(host("sibling", this[REF], -1, true)); }
   remove() { detach(this); }
-  before(...items) { if (this.parentNode) insert(this.parentNode, nodesOf(items), this); }
-  after(...items) { if (this.parentNode) insert(this.parentNode, nodesOf(items), this.nextSibling); }
-  replaceWith(...items) {
-    const parent = this.parentNode;
-    if (!parent) return;
-    const next = this.nextSibling;
-    detach(this);
-    if (items.length) insert(parent, nodesOf(items), next);
-  }
+  before(...items) { putBefore(this, items); }
+  after(...items) { putAfter(this, items); }
+  replaceWith(...items) { putInPlaceOf(this, items); }
   matches(selector) { return host("matches", this[REF], String(selector)); }
   webkitMatchesSelector(selector) { return this.matches(selector); }
   closest(selector) { return wrap(host("closest", this[REF], String(selector))); }
   getElementsByTagName(tag) { return tagged(this, tag); }
   getElementsByTagNameNS(uri, tag) { return tagged(this, tag, uri === "*" ? "*" : spaceOf(uri)); }
   getElementsByClassName(names) {
-    const classes = String(names).split(/\s+/).filter(Boolean);
-    if (!classes.length) return new HTMLCollection();
-    return HTMLCollection.from(host("query", this[REF], classes.map((c) => "." + CSS.escape(c)).join(""), true).map(wrap));
+    return classed(this, names);
   }
 
   getBoundingClientRect() { return new DOMRect(...host("box", this[REF])); }
@@ -867,29 +778,17 @@ const scrolls = (element) => element === document.documentElement || element ===
 // tagged are the elements under a node of a name, as it is written in
 // a document of XML and in lower case for HTML's, or of a local name
 // in a namespace.
-const tagged = (root, name, space = null) =>
-  HTMLCollection.from(host("document", "tagged", root[REF], String(name), space).map(wrap));
+const tagged = (root, name, space = null) => {
+  name = String(name);
+  return liveList(HTMLCollection, () => host("document", "tagged", root[REF], name, space).map(wrap));
+};
+// classed are the elements under root of every class of a list of
+// them.
+const classed = (root, names) => {
+  const classes = String(names).split(/[\t\n\f\r ]+/).filter(Boolean);
+  if (!classes.length) return liveList(HTMLCollection, () => []);
+  const selector = classes.map((c) => "." + CSS.escape(c)).join("");
+  return liveList(HTMLCollection, () => foundIn(root, selector));
+};
 accessors(Element.prototype, parentMixin);
 define(Element.prototype, parentMethods);
-
-// reflect makes properties that are attributes: a string, a flag when
-// the default is false, a number when it is one.
-const reflect = (prototype, properties) => {
-  for (const name of Object.keys(properties)) {
-    const [attribute, fallback] = [].concat(properties[name]);
-    const kind = typeof fallback;
-    Object.defineProperty(prototype, name, {
-      get() {
-        const value = this.getAttribute(attribute);
-        if (kind === "boolean") return value !== null;
-        if (kind === "number") return value === null || isNaN(parseInt(value, 10)) ? fallback : parseInt(value, 10);
-        return value === null ? (fallback || "") : value;
-      },
-      set(value) {
-        if (kind === "boolean") this.toggleAttribute(attribute, Boolean(value));
-        else this.setAttribute(attribute, value);
-      },
-      configurable: true, enumerable: true,
-    });
-  }
-};

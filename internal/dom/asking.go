@@ -53,6 +53,17 @@ func (h *Hold) Asking() *Runtime { return h.by }
 // Host, on the frame's goroutine, which is the window's thread), the
 // frame's what enters the engine while a script waits for such a call.
 type parking struct {
+	// handover is the turn itself, the documents' that share an engine
+	// (kin.go): one script runs in an engine at a time.
+	*handover
+	// queued is what waits for the answer to run.
+	queued    []func()
+	replaying bool
+}
+
+// handover is whose turn it is to run, between the frame and the
+// script's side of an engine.
+type handover struct {
 	// entered is whether an entry runs, script whether its side has
 	// the turn, and parked whether it waits for an answer: the engine
 	// is then held, and nothing else enters it.
@@ -66,9 +77,14 @@ type parking struct {
 	toFrame, toScript chan func()
 	answer            chan *Answer
 	failed            string
-	// queued is what waits for the answer to run.
-	queued    []func()
-	replaying bool
+	// by is the Runtime whose script waits for an answer, and closing
+	// the documents closed meanwhile whose engine it holds: they close
+	// once it goes on.
+	by      *Runtime
+	closing []func()
+	// running is the Runtime whose scripts were entered, nil when none
+	// runs: a script of one may call into another's (kin.go).
+	running *Runtime
 	// frame is the frame's goroutine, kept under test.
 	frame uint64
 }
@@ -125,6 +141,10 @@ func (r *Runtime) whenFree(fn func()) {
 // a goroutine of its own wherever a browser may show a question.
 func (r *Runtime) through(touch func()) bool {
 	p := &r.asking
+	if p.running == nil && !p.parked {
+		p.running = r
+		defer r.left()
+	}
 	switch {
 	case p.script:
 		r.onScript()
@@ -222,11 +242,15 @@ func (r *Runtime) ask(a arguments) (any, error) {
 	case p.calls > 0:
 		r.say("error", "Ignored call to '"+q.Kind+"()'. It was made while light answered another call of the page.", "")
 		return nothing()
+	case p.running != nil && p.running != r && p.running.host.Sandboxed.NoModals:
+		r.say("error", "Ignored call to '"+q.Kind+"()'. The document whose script called it is sandboxed, and the "+
+			"'allow-modals' keyword is not set.", "")
+		return nothing()
 	case r.closed || !p.script || !r.host.Ask(q):
 		return nothing()
 	}
 	resume := r.ctx.Pause()
-	p.parked = true
+	p.parked, p.by = true, r
 	if r.host.Hold != nil {
 		r.host.Hold.by = r
 	}
@@ -253,24 +277,57 @@ func unasked(q Question) string {
 }
 
 // Asking reports whether the page's scripts wait for an answer.
-func (r *Runtime) Asking() bool { return r.asking.parked }
+func (r *Runtime) Asking() bool { return r.asking.parked && r.asking.by == r }
 
 // resumed gives the script that waits what it waits for, and the turn.
 func (r *Runtime) resumed(a *Answer) {
 	p := &r.asking
-	p.parked = false
+	p.parked, p.by = false, nil
 	if r.host.Hold != nil && r.host.Hold.by == r {
 		r.host.Hold.by = nil
 	}
 	p.script = true
 	p.answer <- a
 	r.serve()
+	r.left()
+}
+
+// left forgets whose scripts were entered, once none runs or waits,
+// and closes the documents that were closed meanwhile.
+func (r *Runtime) left() {
+	if p := &r.asking; !p.parked {
+		p.running = nil
+		r.settled()
+	}
+}
+
+// settled closes the documents that were closed while a script held
+// the engine they share with their kin, once none holds it.
+func (r *Runtime) settled() {
+	p := &r.asking
+	closing := p.closing
+	p.closing = nil
+	for _, do := range closing {
+		do()
+	}
+}
+
+// heldByKin reports whether a script holds the engine r shares with
+// its kin: one of another document that waits for an answer, or one
+// that runs, of whichever document. What a script holds of r's
+// document is not taken from under it: r closes once it ended.
+func (r *Runtime) heldByKin() bool {
+	p := &r.asking
+	if p.parked {
+		return p.by != r
+	}
+	return r.host.Kin != nil && p.running != nil
 }
 
 // Answer gives the page's scripts the answer they wait for: they go
 // on until they end or ask again, then what waited for them runs.
 func (r *Runtime) Answer(a Answer) {
-	if !r.asking.parked || r.closed {
+	if !r.asking.parked || r.asking.by != r || r.closed {
 		return
 	}
 	r.resumed(&a)
@@ -281,7 +338,7 @@ func (r *Runtime) Answer(a Answer) {
 // closes: it is stopped where it asked, and the console hears nothing
 // of how it ends.
 func (r *Runtime) unanswered() {
-	if !r.asking.parked {
+	if !r.asking.parked || r.asking.by != r {
 		return
 	}
 	r.ctx.Interrupt()

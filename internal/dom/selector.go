@@ -8,6 +8,8 @@ import (
 	"unicode"
 
 	"golang.org/x/net/html"
+
+	"github.com/lantervale/light/internal/web"
 )
 
 // errSelector is a selector that is none.
@@ -102,7 +104,7 @@ func previous(n *html.Node) *html.Node {
 // idOf is n's id, "" for none.
 func idOf(n *html.Node) string {
 	for _, a := range n.Attr {
-		if a.Key == "id" {
+		if a.Key == "id" && !web.Namespaced(a) {
 			return a.Val
 		}
 	}
@@ -112,7 +114,7 @@ func idOf(n *html.Node) string {
 // attribute is n's attribute name, and whether it has one.
 func attribute(n *html.Node, name string) (string, bool) {
 	for _, a := range n.Attr {
-		if a.Key == name {
+		if a.Key == name && !web.Namespaced(a) {
 			return a.Val, true
 		}
 	}

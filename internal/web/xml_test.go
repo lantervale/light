@@ -41,11 +41,7 @@ func shape(n *html.Node) string {
 			}
 			out.WriteString(n.Data)
 			for _, a := range n.Attr {
-				name := a.Key
-				if a.Namespace != "" {
-					name = a.Namespace + ":" + a.Key
-				}
-				out.WriteString(" " + name + "=" + a.Val)
+				out.WriteString(" " + QualifiedAttr(a) + "=" + a.Val)
 			}
 			out.WriteString(">")
 		}
@@ -96,7 +92,7 @@ func TestXMLIsReadByItsOwnRules(t *testing.T) {
 				`<math xmlns="http://www.w3.org/1998/Math/MathML"><mi/></math><o:thing o:kind="1" xml:lang="fr"/>` +
 				`<plain xmlns=""/></h:html>`,
 			`<html xmlns:h=http://www.w3.org/1999/xhtml xmlns:s=http://www.w3.org/2000/svg ` +
-				`xmlns:x=http://www.w3.org/1999/xlink xmlns:o=urn:other><svg|svg><svg|a xlink:href=#b></></>` +
+				`xmlns:x=http://www.w3.org/1999/xlink xmlns:o=urn:other><svg|svg><svg|a x:href=#b></></>` +
 				`<math|math xmlns=http://www.w3.org/1998/Math/MathML><math|mi></></><urn:other|thing o:kind=1 xml:lang=fr></>` +
 				`<-|plain xmlns=></></>`,
 		},
@@ -111,7 +107,7 @@ func TestXMLIsReadByItsOwnRules(t *testing.T) {
 			`<!DOCTYPE r SYSTEM "r.dtd" [<!ELEMENT r EMPTY>]><r/>`, `<!r  r.dtd><-|r></>`,
 		},
 	} {
-		root, err := ParseXML(c.source)
+		root, _, err := ParseXML(c.source)
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
@@ -123,7 +119,7 @@ func TestXMLIsReadByItsOwnRules(t *testing.T) {
 }
 
 func TestTheElementsOfXHTMLAreThoseHTMLIsReadInto(t *testing.T) {
-	root, err := ParseXML(`<html ` + xhtml + `><head><title>T</title></head><body><DIV/>` +
+	root, _, err := ParseXML(`<html ` + xhtml + `><head><title>T</title></head><body><DIV/>` +
 		`<svg xmlns="http://www.w3.org/2000/svg"/>` +
 		`<div xmlns="urn:other"/></body></html>`)
 	if err != nil {
@@ -173,7 +169,7 @@ func TestWhatIsNotWellFormedSaysWhere(t *testing.T) {
 		"a prefix declared as nothing":                 {`<a xmlns:p=""/>`, 1, 16, "declared"},
 		"bytes that are not the encoding":              {"<a>\xff</a>", 1, 5, "UTF-8"},
 	} {
-		_, err := ParseXML(c.source)
+		_, _, err := ParseXML(c.source)
 		var where *XMLError
 		if !errors.As(err, &where) {
 			t.Errorf("%s: read, or failed with %v", name, err)
@@ -198,7 +194,7 @@ func TestAnXMLDocumentIsDecodedByItsMarkItsHeaderThenItsDeclaration(t *testing.T
 		"UTF-8 for nothing said":   {"<r>\xc3\xa9</r>", "", "é"},
 		"UTF-8 said by its header": {"<r>\xc3\xa9</r>", "application/xml; charset=UTF-8", "é"},
 	} {
-		root, err := ParseXML(DecodeXML([]byte(c.body), c.contentType))
+		root, _, err := ParseXML(DecodeXML([]byte(c.body), c.contentType))
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
@@ -211,7 +207,7 @@ func TestAnXMLDocumentIsDecodedByItsMarkItsHeaderThenItsDeclaration(t *testing.T
 
 func TestAFragmentOfXMLIsReadWithinItsElement(t *testing.T) {
 	within := XMLScope{Default: xhtmlNamespace, Prefixes: map[string]string{"s": svgAddress}, Entities: true}
-	nodes, err := ParseXMLFragment(`text<b>bold</b><s:g/><![CDATA[<]]>&nbsp;<!--c-->`, within)
+	nodes, _, err := ParseXMLFragment(`text<b>bold</b><s:g/><![CDATA[<]]>&nbsp;<!--c-->`, within)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,37 +219,37 @@ func TestAFragmentOfXMLIsReadWithinItsElement(t *testing.T) {
 		t.Fatalf("got %s, want %s", got, want)
 	}
 	for _, markup := range []string{"<b>", "</b>", "<p:a/>", "<!DOCTYPE a>", `<?xml version="1.0"?>`} {
-		if _, err = ParseXMLFragment(markup, XMLScope{}); err == nil {
+		if _, _, err = ParseXMLFragment(markup, XMLScope{}); err == nil {
 			t.Errorf("%s is read", markup)
 		}
 	}
-	if nodes, err = ParseXMLFragment("&nbsp;", XMLScope{}); err == nil {
+	if nodes, _, err = ParseXMLFragment("&nbsp;", XMLScope{}); err == nil {
 		t.Errorf("an entity of HTML is read without its doctype: %v", nodes)
 	}
 }
 
 func TestATreeIsWrittenBackAsXML(t *testing.T) {
 	for _, source := range []string{
-		`<html xmlns="http://www.w3.org/1999/xhtml"><head><title>a &amp; b</title></head><body><br/>` +
+		`<html xmlns="http://www.w3.org/1999/xhtml"><head><title>a &amp; b</title></head><body><br />` +
 			`<p class="a&quot;b">&lt;<![CDATA[<]]></p><svg xmlns="http://www.w3.org/2000/svg"><g/></svg><!--c--><?t d?>` +
 			`</body></html>`,
 		`<!DOCTYPE r SYSTEM "r.dtd"><r><a xmlns="urn:a"><b xmlns=""/></a></r>`,
-		`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "x.dtd"><html xmlns="http://www.w3.org/1999/xhtml"/>`,
+		`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "x.dtd"><html xmlns="http://www.w3.org/1999/xhtml"></html>`,
 	} {
-		root, err := ParseXML(source)
+		root, _, err := ParseXML(source)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := MarkupXML(root, false); got != source {
+		if got := MarkupXML(root, false, noPrefix); got != source {
 			t.Errorf("written %s\n   read %s", got, source)
 		}
 	}
-	root, _ := ParseXML(`<r xmlns="urn:r"><a><b/>text</a></r>`)
+	root, _, _ := ParseXML(`<r xmlns="urn:r"><a><b/>text</a></r>`)
 	a := root.FirstChild.FirstChild
-	if got := MarkupXML(a, true); got != `<a xmlns="urn:r"><b/>text</a>` {
+	if got := MarkupXML(a, true, noPrefix); got != `<a xmlns="urn:r"><b/>text</a>` {
 		t.Errorf("an element written alone is written %s, without its namespace", got)
 	}
-	if got := MarkupXML(a, false); got != `<b xmlns="urn:r"/>text` {
+	if got := MarkupXML(a, false, noPrefix); got != `<b xmlns="urn:r"/>text` {
 		t.Errorf("what it holds is written %s, without its namespace", got)
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -51,8 +52,9 @@ type CLI struct {
 	Downloads string `env:"LIGHT_DOWNLOADS" placeholder:"FOLDER" help:"The folder files are saved to, whatever the settings say (theirs, else ~/Downloads, by default)."`
 	WebDriver string `name:"webdriver" env:"LIGHT_WEBDRIVER" placeholder:"HOST:PORT" help:"Serve W3C WebDriver there, to drive light from a test runner: an address of this machine only (127.0.0.1:4444). Off by default. A driven light keeps its settings, history and cookies in memory unless --dir names a folder."`
 
-	HostMap map[string]string `name:"host-map" placeholder:"NAME=ADDRESS;…" help:"For a test runner, with --webdriver only: names, and the names under them, that light finds at an address of this machine (web-platform.test=127.0.0.1), whatever the system resolves them to."`
-	TrustCA string            `name:"trust-ca" placeholder:"FILE" help:"For a test runner, with --webdriver only: a certificate authority (PEM) this run trusts beside the system's. Every certificate is still checked."`
+	HostMap      map[string]string `name:"host-map" placeholder:"NAME=ADDRESS;…" help:"For a test runner, with --webdriver only: names, and the names under them, that light finds at an address of this machine (web-platform.test=127.0.0.1), whatever the system resolves them to."`
+	TrustCA      string            `name:"trust-ca" placeholder:"FILE" help:"For a test runner, with --webdriver only: a certificate authority (PEM) this run trusts beside the system's. Every certificate is still checked."`
+	ScriptBudget *time.Duration    `name:"script-budget" placeholder:"DURATION" help:"For a test runner, with --webdriver only: how long one script of a page may run before it is stopped, in place of the two seconds of every page."`
 
 	Version kong.VersionFlag `help:"Say which light this is."`
 }
@@ -124,6 +126,7 @@ func (c CLI) options() app.Options {
 		Dir: c.dir(), Downloads: c.Downloads, DefaultDownloads: systemDownloads(),
 		Files: shell.System{}, Version: version,
 		Languages: identity.System(), Driven: c.WebDriver != "" || identity.Driven(os.Environ()),
+		ScriptBudget: c.scriptBudget(),
 	}
 }
 

@@ -193,3 +193,90 @@ func TestASandboxedFrameWithoutPopupsOpensNoWindowAndGoesNowhere(t *testing.T) {
 		t.Error("a window a sandbox kept closed was asked for")
 	}
 }
+
+// escaping is a page with two sandboxed frames allowed popups, one of
+// them allowed to open them out of its sandbox; more is what else both
+// sandboxes allow, and body what their document holds after its links
+// and forms.
+func escaping(t *testing.T, more, body string) (*framing, *shown) {
+	t.Helper()
+	const links = `<body style="margin:0"><a id="new" href="/next" target="_blank">new</a>
+		<a id="named" href="/next" target="elsewhere">named</a>
+		<form action="/found" target="_blank"><button id="find">find</button></form>
+		<form id="post" action="/sent" method="post" target="_blank"><button id="send">send</button></form>`
+	f, transport := framingOf(t, map[string]answer{
+		"site.test/": html(`<body style="margin:0">
+			<iframe id="held" sandbox="allow-popups allow-forms ` + more + `" src="https://other.test/links" width="500">
+			</iframe><iframe id="free" sandbox="allow-popups allow-popups-to-escape-sandbox allow-forms ` + more + `"
+			src="https://other.test/links" width="500"></iframe>`),
+		"other.test/links": html(links + body),
+		"other.test/next":  html(`<title>Next</title><p>the next page</p>`),
+		"other.test/found": html(`<title>Found</title><p>found it</p>`),
+		"other.test/sent":  html(`<title>Sent</title><p>it was sent</p>`),
+	})
+	s := showWith(t, Options{Transport: transport, Downloads: t.TempDir()})
+	s.visit("https://site.test/")
+	s.framedText("held")
+	s.framedText("free")
+	s.quiet()
+	return f, s
+}
+
+// refused checks that a click on id in the frame held opened nothing
+// and that the console names the token the frame lacks.
+func (s *shown) refused(f *framing, id string) {
+	s.t.Helper()
+	s.session().said.Clear()
+	before := s.framedText("held")
+	s.clickAt(s.inFrame(s.frameAt("held"), id))
+	s.quiet()
+	if got := s.opened(); got != "[https://site.test/]" || len(s.screens) != 1 {
+		s.t.Fatalf("%s in a frame that may not leave its sandbox left the tabs as %s, in %d windows", id, got,
+			len(s.screens))
+	}
+	if got := s.framedText("held"); got != before || s.frameAt("held").page.Address != "https://other.test/links" {
+		s.t.Errorf("%s sent the frame to %q", id, got)
+	}
+	if !s.consoleSays(console.Error, "'allow-popups-to-escape-sandbox' permission is not set") {
+		s.t.Errorf("%s was refused without the console naming the token: %v", id, s.session().said.Lines())
+	}
+	if lines := s.session().said.Lines(); len(lines) != 1 || s.consoleSays(console.Error, "'allow-popups' permission") {
+		s.t.Errorf("%s was refused in %d lines, want the one that names the token the frame lacks: %v", id, len(lines),
+			lines)
+	}
+	for _, to := range []string{"other.test/next", "other.test/found", "other.test/sent"} {
+		if f.came(to) {
+			s.t.Fatalf("%s asked for %s", id, to)
+		}
+	}
+}
+
+func TestASandboxedFrameOpensNoWindowItsSandboxWouldNotFollowInto(t *testing.T) {
+	f, s := escaping(t, "", "")
+	for _, id := range []string{"new", "named", "find", "send"} {
+		s.refused(f, id)
+	}
+}
+
+func TestASandboxedFrameAllowedToEscapeOpensAnUnsandboxedTab(t *testing.T) {
+	f, s := escaping(t, "", "")
+	for id, address := range map[string]string{"new": "https://other.test/next", "named": "https://other.test/next",
+		"find": "https://other.test/found", "send": "https://other.test/sent"} {
+		s.session().said.Clear()
+		s.clickAt(s.inFrame(s.frameAt("free"), id))
+		if got, want := s.opened(), "https://site.test/ ["+address+"]"; got != want {
+			t.Fatalf("%s in a frame allowed to escape left the tabs as %s, want %s", id, got, want)
+		}
+		s.until(address+" loaded in its tab", func() bool { return s.session().pages[address] != nil })
+		if set := s.session().frames[s.session().pages[address]]; set != nil && len(set.all) != 0 {
+			t.Errorf("the tab opened by %s holds %d frames", id, len(set.all))
+		}
+		s.click("close-1")
+		s.until("the page shows again", func() bool { return s.host != nil })
+		s.framedText("free")
+		s.quiet()
+	}
+	if got := f.header("other.test/sent", "Origin"); got != "null" {
+		t.Errorf("the sandboxed frame's form says it is of %q", got)
+	}
+}

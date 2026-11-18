@@ -5,9 +5,20 @@
 const light = globalThis.__light;
 delete globalThis.__light;
 const window = globalThis;
+// treeReads are the questions to light that leave the tree as it is:
+// any other makes the live lists of nodes read it again
+// (15-collections.js).
+const treeReads = new Set(["doc", "top", "tag", "parent", "children", "child", "sibling", "connected", "contains",
+  "compare", "text", "html", "query", "matches", "closest", "byId", "attr", "attrs", "value", "selected", "selectedText",
+  "box", "laid", "at", "viewport", "now", "where", "log", "url", "urlWith", "document", "attribute", "list", "own",
+  "owner", "xml", "tagged", "markup"]);
+let treeVersion = 0;
 // What light refuses under a DOM name ("SyntaxError: …") is thrown as
 // the DOMException of that name.
 const host = (...args) => {
+  const op = args[0];
+  if (!treeReads.has(op) || (op === "document" && !treeReads.has(args[1])) ||
+    (op === "attribute" && !treeReads.has(args[2]))) treeVersion++;
   try {
     return light(...args);
   } catch (error) {
@@ -119,6 +130,10 @@ class Event {
   get cancelBubble() { return this._stopped; }
   set cancelBubble(value) { if (value) this._stopped = true; }
   initEvent(type, bubbles, cancelable) {
+    if (!arguments.length) throw new TypeError("An event is set up with its type.");
+    if (this._sent) return;
+    this._stopped = this._halted = this.defaultPrevented = false;
+    this.target = null;
     this.type = String(type);
     this.bubbles = Boolean(bubbles);
     this.cancelable = Boolean(cancelable);
@@ -132,7 +147,9 @@ class CustomEvent extends Event {
     super(type, init);
     this.detail = init.detail === undefined ? null : init.detail;
   }
-  initCustomEvent(type, bubbles, cancelable, detail) {
+  initCustomEvent(type, bubbles, cancelable, detail = null) {
+    if (!arguments.length) throw new TypeError("An event is set up with its type.");
+    if (this._sent) return;
     this.initEvent(type, bubbles, cancelable);
     this.detail = detail;
   }
@@ -424,7 +441,7 @@ const pathOf = (target, event) => {
 // then back up when it bubbles. It reports whether its default stands.
 const dispatch = (target, event) => {
   event.target = target;
-  event._stopped = event._halted = false;
+  event._sent = true;
   const path = event._path = pathOf(target, event);
   for (let i = path.length - 1; i > 0 && !event._stopped; i--) invoke(path[i], event, CAPTURING);
   if (!event._stopped) invoke(target, event, AT_TARGET);
@@ -433,6 +450,7 @@ const dispatch = (target, event) => {
   }
   event.currentTarget = null;
   event.eventPhase = NONE;
+  event._sent = event._stopped = event._halted = false;
   return !event.defaultPrevented;
 };
 

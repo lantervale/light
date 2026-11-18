@@ -21,6 +21,9 @@ var (
 	ErrOutOfMemory = errors.New("the script used too much memory and was stopped")
 	// ErrClosed is what a closed Context answers.
 	ErrClosed = errors.New("the script's context is closed")
+	// ErrNotKin is why no Context is made beside another: the two are
+	// not of the same kin.
+	ErrNotKin = errors.New("a context shares an engine only with its kin")
 )
 
 // Func is a Go function scripts call. Its arguments and its result are
@@ -103,6 +106,13 @@ type Options struct {
 	// Resolve is the address import.meta.resolve gives for a specifier
 	// in the module at from; without it a module has no such function.
 	Resolve func(from, specifier string) (string, error)
+	// Beside is a Context whose engine the new one shares: the two then
+	// hold each other's objects, though each has its own globals, and
+	// one budget and one memory are theirs both. Kin names who may: a
+	// Context is made beside another only when both name the same kin,
+	// and one that names none shares its engine with nobody.
+	Beside Context
+	Kin    string
 }
 
 const (

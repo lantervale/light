@@ -57,7 +57,9 @@ func (r *Runtime) engine(o script.Options) (script.Context, error) {
 			answer(from, what, func(m script.Module, err error) { done(bare(m), err) })
 		}
 	}
-	ctx, err := script.New(o)
+	var ctx script.Context
+	err := ErrAsking
+	r.through(func() { ctx, err = script.New(o) })
 	if err != nil {
 		return nil, err
 	}

@@ -19,12 +19,17 @@ from wptrunner.products import Product
 
 NAME = "light"
 
+# How long one script of a test may run, in seconds, before the runner's
+# timeout multiplier: a test is one long task more often than a page is.
+SCRIPT_BUDGET = 10
+
 
 class LightBrowser(WebDriverBrowser):
-    def __init__(self, logger, binary, hosts, ca=None, **kwargs):
+    def __init__(self, logger, binary, hosts, ca=None, script_budget=SCRIPT_BUDGET, **kwargs):
         super().__init__(logger, binary=binary, webdriver_binary=binary, supports_pac=False, **kwargs)
         self.hosts = hosts
         self.ca = ca
+        self.script_budget = script_budget
 
     def make_command(self):
         command = [self.binary, "--webdriver", f"{self.host}:{self.port}"]
@@ -32,6 +37,7 @@ class LightBrowser(WebDriverBrowser):
             command += ["--host-map", ";".join(f"{name}=127.0.0.1" for name in self.hosts)]
         if self.ca:
             command += ["--trust-ca", self.ca]
+        command += ["--script-budget", f"{self.script_budget:g}s"]
         return command + self.webdriver_args
 
 
@@ -46,6 +52,7 @@ def browser_kwargs(logger, test_type, run_info_data, config, **kwargs):
         "webdriver_args": kwargs.get("webdriver_args"),
         "hosts": sorted(names[""] for names in config.domains.values()),
         "ca": config.ssl_config.get("ca_cert_path") if secure else None,
+        "script_budget": SCRIPT_BUDGET * get_timeout_multiplier(test_type, run_info_data, **kwargs),
     }
 
 

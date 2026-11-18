@@ -349,7 +349,6 @@ Object.defineProperty(HTMLStyleElement.prototype, "disabled", {
   configurable: true,
 });
 Object.defineProperty(HTMLLinkElement.prototype, "sheet", { get() { return sheetOfElement(this); }, configurable: true });
-reflect(HTMLLinkElement.prototype, { disabled: ["disabled", false] });
 
 let adopted = Object.freeze([]);
 Object.defineProperty(Document.prototype, "styleSheets", {

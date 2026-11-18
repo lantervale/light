@@ -51,8 +51,19 @@ type Windows interface {
 	// Closed reports whether of's frame is no more.
 	Closed(of int) bool
 	// Of is the window of an iframe of the page, NoWindow when it shows
-	// none.
+	// none, and Element the iframe of the page that shows of, nil for a
+	// window that is not of one.
 	Of(frame *ui.Node) int
+	Element(of int) *ui.Node
+	// May reports whether the page's document may have the document of
+	// the window to, one of its kin, navigate: to address when it names
+	// one, by a form when form (navigation.go). The console is told of
+	// what it may not.
+	May(to int, address string, form bool) bool
+	// Kin reports whether the document of shows is kin to the page's:
+	// the two share an engine, so each reaches the other's objects
+	// (kin.go). The browser decides, from the origins it holds.
+	Kin(of int) bool
 	// Post leaves message, a value as its sender wrote it down, for the
 	// page of to, if its origin is the one target names when it comes:
 	// ErrTargetOrigin for a target that names none.
@@ -103,6 +114,9 @@ func (alone) Child(int, int) int             { return NoWindow }
 func (alone) Named(int, string) int          { return NoWindow }
 func (alone) Closed(int) bool                { return false }
 func (alone) Of(*ui.Node) int                { return NoWindow }
+func (alone) Element(int) *ui.Node           { return nil }
+func (alone) May(int, string, bool) bool     { return true }
+func (alone) Kin(int) bool                   { return false }
 func (alone) Post(int, Posted, string) error { return nil }
 func (alone) Focus(int)                      {}
 func (alone) Pipe() (int, int, bool)         { return 0, 0, false }
@@ -131,6 +145,27 @@ func (r *Runtime) origin() string {
 		return originOf(at)
 	}
 	return opaqueOrigin
+}
+
+// ofKin answers what light's own script asks of the page's kin
+// (kin.go): whether the document of a window is one, the window of the
+// kin whose scripts were entered, OwnWindow when they are the page's
+// own, and the iframe of the page that shows a window.
+func (r *Runtime) ofKin(what string, of int) any {
+	w := r.windows()
+	switch what {
+	case "kin":
+		return r.host.Kin != nil && of != OwnWindow && w.Kin(of) && r.host.Kin.has(of)
+	case "entered":
+		if by := r.asking.running; by != nil && by != r && r.host.Kin != nil && by.host.Kin == r.host.Kin {
+			return by.host.Self
+		}
+		return OwnWindow
+	}
+	if shown := w.Element(of); shown != nil {
+		return r.ref(r.tree.Of(shown))
+	}
+	return 0
 }
 
 // window answers what a script asks of another window, by the name of
@@ -164,6 +199,8 @@ func (r *Runtime) window(a arguments) (any, error) {
 			}
 		}
 		return NoWindow, nil
+	case "kin", "entered", "element":
+		return r.ofKin(a.text(0), of), nil
 	case "aims":
 		if _, is := frames.Reaches(a.text(1), opaqueOrigin, opaqueOrigin); !is {
 			//nolint:revive,staticcheck // a DOMException's message, as Chrome words it

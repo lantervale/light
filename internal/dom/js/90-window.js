@@ -86,7 +86,7 @@ define(window, {
       angle: 0, addEventListener() {}, removeEventListener() {},
     },
   },
-  visualViewport: undefined, name: "", closed: false, opener: null, frameElement: null,
+  visualViewport: undefined, name: "", closed: false, opener: null,
   isSecureContext: here.protocol === "https:", origin: host("origin"), crossOriginIsolated: false, event: undefined, status: "",
   alert: asks("alert", () => undefined, undefined),
   confirm: asks("confirm", (ok) => ok, false),
@@ -125,7 +125,7 @@ define(window, {
   MessageEvent, MessageChannel, MessagePort, BroadcastChannel, TransitionEvent, AnimationEvent, WheelEvent, TouchEvent, DragEvent, ClipboardEvent,
   CompositionEvent, BeforeUnloadEvent, PageTransitionEvent,
   Node, Element, HTMLElement, HTMLUnknownElement, SVGElement, Text, Comment, CharacterData, DocumentType, DocumentFragment, Document,
-  HTMLDocument: Document, NodeList, HTMLCollection, HTMLFormControlsCollection, RadioNodeList, DOMTokenList, NamedNodeMap, Attr, DOMRect, DOMRectReadOnly,
+  HTMLDocument: Document, NodeList, HTMLCollection, HTMLAllCollection, HTMLFormControlsCollection, HTMLOptionsCollection, RadioNodeList, DOMTokenList, NamedNodeMap, Attr, DOMRect, DOMRectReadOnly,
   Range, NodeFilter, TreeWalker, Image, Option, Audio: undefined,
   HTMLAnchorElement, HTMLImageElement, HTMLInputElement, HTMLTextAreaElement, HTMLButtonElement, HTMLSelectElement,
   HTMLOptionElement, HTMLFormElement, HTMLLabelElement, HTMLTemplateElement, HTMLScriptElement, HTMLStyleElement,
@@ -144,6 +144,7 @@ accessors(window, {
   location: { get() { return location; }, set(address) { go(address, false); } },
   parent: { get() { return windowOf(host("window", "parent", 0)); }, set(value) { define(window, { parent: value }); } },
   top: { get() { return windowOf(host("window", "top", 0)); } },
+  frameElement: { get() { return kinFrame(); } },
   length: { get() { return host("window", "length", 0); }, set(value) { define(window, { length: value }); } },
   localStorage: stored("local"), sessionStorage: stored("session"),
   innerWidth: { get() { return host("viewport")[0]; } },
@@ -206,6 +207,7 @@ const sweep = () => {
 };
 
 const calls = {
+  ...kinCalls,
   tick,
   sweep,
   fonts: fontsMoved,

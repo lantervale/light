@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lantervale/light/internal/dom"
+	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/frames"
+	"github.com/lantervale/light/pkg/script"
 )
 
 // kin is how the documents of a page's frames stand to the page: where
@@ -22,21 +25,60 @@ type kin struct {
 	origins [2]string
 	// aired is what each document hears of the others' broadcasts.
 	aired map[string]string
+	// near are the ways to look whose two documents are kin: they
+	// share an engine and reach each other. more are ways to look only
+	// this kin has, and engines how many engines its documents run in.
+	near    map[string]bool
+	more    []way
+	engines int
 }
 
+// ways are the ways to look the kin is checked by.
+func (k kin) ways() []way { return append(ways(), k.more...) }
+
 func kins() []kin {
+	all := map[string]bool{"parent to child": true, "child to parent": true, "sibling": true, "nested top": true}
+	everyone := map[string]string{"": "leaf,mid,sib", "a": "leaf,sib,top", "b": "leaf,mid,top", "n": "mid,sib,top"}
 	return []kin{
 		{name: "same origin", first: "site.test", second: "site.test", far: "site.test",
-			origins: [2]string{"https://site.test", "https://site.test"},
-			aired:   map[string]string{"": "leaf,mid,sib", "a": "leaf,sib,top", "b": "leaf,mid,top", "n": "mid,sib,top"}},
+			origins: [2]string{"https://site.test", "https://site.test"}, aired: everyone, near: all, engines: 1},
 		{name: "same site", first: "a.site.test", second: "b.site.test", far: "b.site.test",
 			origins: [2]string{"https://a.site.test", "https://b.site.test"},
-			aired:   map[string]string{"b": "leaf", "n": "sib"}},
+			aired:   map[string]string{"b": "leaf", "n": "sib"}, engines: 3},
 		{name: "cross site", first: "other.test", second: "third.test", far: "third.test",
 			origins: [2]string{"https://other.test", "https://third.test"},
-			aired:   map[string]string{"b": "leaf", "n": "sib"}},
+			aired:   map[string]string{"b": "leaf", "n": "sib"}, engines: 3},
 		{name: "sandboxed", first: "site.test", second: "site.test", far: "site.test", sandbox: ` sandbox="allow-scripts"`,
-			origins: [2]string{"null", "null"}},
+			origins: [2]string{"null", "null"}, engines: 4},
+		{name: "sandboxed with allow-same-origin", first: "site.test", second: "site.test", far: "site.test",
+			sandbox: ` sandbox="allow-scripts allow-same-origin"`,
+			origins: [2]string{"https://site.test", "https://site.test"}, aired: everyone, near: all, engines: 1},
+		// The page and its first frame are kin, the others of another
+		// site: every check of a window of another origin is made from
+		// a kin, into one, and of a window reached through one.
+		{name: "kin beside strangers", first: "site.test", second: "other.test", far: "other.test",
+			origins: [2]string{"https://site.test", "https://other.test"},
+			aired:   map[string]string{"": "mid", "a": "top", "b": "leaf", "n": "sib"},
+			near:    map[string]bool{"parent to child": true, "child to parent": true}, engines: 2,
+			more: []way{
+				{name: "through a kin", from: "", window: "frames[0].frames[0]", parent: "frames[0]", top: "window",
+					asker: "top", asked: "leaf", origin: -1, target: 1},
+				{name: "stranger to a kin", from: "b", window: "parent.frames[0]", parent: "parent", top: "top", length: 1,
+					asker: "sib", asked: "mid", origin: 1, target: 0},
+			}},
+		// The innermost document is of the page's origin under another
+		// site's: it keeps its storage elsewhere, and is kin to neither
+		// the page nor the page's own frame.
+		{name: "kin under a stranger", first: "other.test", second: "site.test", far: "site.test",
+			origins: [2]string{"https://other.test", "https://site.test"},
+			aired:   map[string]string{"": "sib", "b": "top"},
+			near:    map[string]bool{"page to its kin": true}, engines: 3,
+			more: []way{
+				{name: "page to its kin", from: "", window: "frames[1]", parent: "window", top: "window",
+					asker: "top", asked: "sib", origin: -1, target: 1},
+				{name: "under a stranger to the page's kin", from: "n", window: "top.frames[1]", parent: "top", top: "top",
+					asker: "leaf", asked: "sib", origin: 1, target: 1},
+			}},
 	}
 }
 
@@ -68,7 +110,7 @@ func keeper(name string) string {
 			if (e.ports.length) through(e.ports[0]);
 			const own = Object.getPrototypeOf(e) === MessageEvent.prototype && e.target === window &&
 				(typeof e.data !== "object" || Object.getPrototypeOf(e.data) === Object.prototype) &&
-				(e.source === window || Object.getPrototypeOf(e.source) === null);
+				(e.source === window || Object.getPrototypeOf(e.source) === null || typeof e.source.secret === "string");
 			got.push(e.origin + "|" + (typeof e.data === "object" ? JSON.stringify(e.data) : e.data) + "|" + own);
 			if (typeof e.data === "string" && e.data.startsWith("ping ")) e.source.postMessage("pong " + e.data.slice(5), "*");
 		});
@@ -183,6 +225,57 @@ func denied(asker string) map[string]string {
 	return out
 }
 
+// reached are the ways a script reaches what is the document of its
+// kin's, each with what it must get: the other document's own, as it
+// is, from globals that are not the script's.
+func (m *matrix) reached(w way) map[string]string {
+	theirs := "secret of " + w.asked
+	at := map[string]string{"top": "site.test/", "mid": m.kin.first + "/mid", "sib": m.kin.second + "/sib",
+		"leaf": m.kin.far + "/leaf"}[w.asked]
+	out := map[string]string{
+		`W.secret`: theirs, `W.obj.secret`: theirs, `W.fn()`: theirs, `W.document.title`: theirs,
+		`W.window.secret + W.self.secret + W.frames.secret`:                         strings.Repeat(theirs, 3),
+		`Object.getOwnPropertyDescriptor(W, "secret").value`:                        theirs,
+		`"secret" in W && Reflect.ownKeys(W).includes("secret")`:                    "true",
+		`W.window === W && W.self === W && W.frames === W && W !== window`:          "true",
+		`W.document === W.document && W.document.body.ownerDocument === W.document`: "true",
+		`W.document.defaultView === W`:                                              "true",
+		`document.defaultView === window`:                                           "true",
+		`W.parent === ` + w.parent + ` && W.top === ` + w.top:                       "true",
+		`W.length`: strconv.Itoa(w.length),
+		`W.location.href + "|" + W.location + (W.location === W.location)`: "https://" + at + "|https://" + at + "true",
+		`W.document.location.href`: "https://" + at,
+		`W.Object !== Object && W.Element !== Element && W.Node !== Node && W.DOMException !== DOMException`: "true",
+		`W.document instanceof W.Document && !(W.document instanceof Document)`:                              "true",
+		`W.document.body instanceof W.HTMLElement && !(W.obj instanceof Object)`:                             "true",
+		`W.obj instanceof W.Object && W.fn instanceof W.Function`:                                            "true",
+		`W.document.createElement("p") instanceof W.HTMLParagraphElement`:                                    "true",
+		`Object.getPrototypeOf(W) !== null && Object.getPrototypeOf(W.location) !== null`:                    "true",
+		`(W.reached = {by: secret}, W.reached.by + (Object.getPrototypeOf(W.reached) === Object.prototype) + ` +
+			`(delete W.reached) + ("reached" in W))`: "secret of " + w.asker + "truetruefalse",
+		`(W.mine = window, (W.mine === window) + "" + (delete W.mine))`:        "truetrue",
+		`W.postMessage === W.postMessage && W.postMessage instanceof Function`: "true",
+		`structuredClone(W)`:                                               "throws DataCloneError",
+		`W.postMessage(W, "*")`:                                            "throws DataCloneError",
+		`W.postMessage(W.document, "*")`:                                   "throws DataCloneError",
+		`W.postMessage(W.fn, "*")`:                                         "throws DataCloneError",
+		`W.Function("return secret")()`:                                    "throws TypeError",
+		`W.eval("secret")`:                                                 "undefined",
+		`W.postMessage(new W.Date(5), "*")`:                                "throws DataCloneError",
+		`W.fn.constructor("return secret")()`:                              "throws TypeError",
+		`W.document.body.appendChild(document.createElement("p"))`:         "throws TypeError",
+		`document.body.appendChild(W.document.createElement("p"))`:         "throws TypeError",
+		`document.importNode(W.document.body, true)`:                       "throws TypeError",
+		`document.adoptNode(W.document.createElement("p"))`:                "throws TypeError",
+		`document.body.insertBefore(W.document.createElement("p"), null)`:  "throws TypeError",
+		`document.body.contains(W.document.body)`:                          "false",
+		`typeof __light + typeof W.__light + typeof W.kin + typeof W.join`: strings.Repeat("undefined", 4),
+		`Reflect.ownKeys(W).filter((k) => !Reflect.ownKeys(window).includes(k) && !/^(secret|obj|fn|got|aired|news|` +
+			`port|last|chan|portGot|spare|\d+)$/.test(String(k))).join()`: "",
+	}
+	return out
+}
+
 // crawl walks everything a script can get from another window by its
 // names, four deep, and lists what it finds that is no window of
 // another frame, no function of the script's own document and no
@@ -203,7 +296,10 @@ const crawl = `(() => {
 			}
 			return;
 		}
-		if (Object.getPrototypeOf(v) !== null) { out.push(path + " is an object with a prototype"); return; }
+		if (Object.getPrototypeOf(v) !== null) {
+			if (!KIN.includes(String(v.secret))) out.push(path + " is an object with a prototype");
+			return;
+		}
 		for (const k of Reflect.ownKeys(v)) {
 			let x;
 			try { x = v[k]; } catch (e) {
@@ -530,13 +626,24 @@ func (m *matrix) broadcasts() {
 func TestNothingButCopiedDataCrossesFromOneFrameToAnother(t *testing.T) {
 	checks := 0
 	for _, k := range kins() {
+		before := script.Live()
 		m := showMatrix(t, k)
-		for _, w := range ways() {
-			m.members(w)
-			for expression, want := range denied(w.asker) {
-				m.expect(w, expression, want)
+		if got := script.Live() - before; got != k.engines {
+			t.Errorf("%s: its documents run in %d engines, want %d", k.name, got, k.engines)
+		}
+		m.grouped()
+		for _, w := range k.ways() {
+			if k.near[w.name] {
+				for expression, want := range m.reached(w) {
+					m.expect(w, expression, want)
+				}
+			} else {
+				m.members(w)
+				for expression, want := range denied(w.asker) {
+					m.expect(w, expression, want)
+				}
+				m.expect(w, strings.NewReplacer("walk(W,", "walk(("+w.window+"),", "KIN", m.kinsOf(w.asker)).Replace(crawl), "0 ")
 			}
-			m.expect(w, strings.ReplaceAll(crawl, "walk(W,", "walk(("+w.window+"),"), "0 ")
 			m.exchange(w)
 			m.ports(w)
 			if got := m.within(w.from, `secret + "|" + document.title + "|" + fn()`); got != strings.Repeat("|secret of "+
@@ -554,13 +661,66 @@ func TestNothingButCopiedDataCrossesFromOneFrameToAnother(t *testing.T) {
 		if said := m.said(); strings.Contains(said, "error:") {
 			t.Errorf("%s: the console says %s", k.name, said)
 		}
-		if set := m.session().frames[m.session().pages[m.browser.Tab().Current()]]; len(set.ports) != 2*len(ways())*2 {
+		if set := m.session().frames[m.session().pages[m.browser.Tab().Current()]]; len(set.ports) != 2*len(k.ways())*2 {
 			t.Errorf("%s: %d ends are left open, want the spare ones", k.name, len(set.ports))
 		}
 		checks += m.checks
 		_ = m.Close()
 	}
-	t.Logf("%d checks, over %d kinds of frame and %d ways to look", checks, len(kins()), len(ways()))
+	t.Logf("%d checks, over %d kinds of frame", checks, len(kins()))
+}
+
+// documents are the scripts of the documents of the matrix, by name.
+func (m *matrix) documents() map[string]*running {
+	return map[string]*running{"top": m.session().scripts, "mid": m.frameNamed("a").run, "sib": m.frameNamed("b").run,
+		"leaf": m.frameNamed("n").run}
+}
+
+// kinsOf are the secrets of the documents that are kin to the one of
+// that name, as a list a script reads: the windows of those are no
+// windows of another origin to it.
+func (m *matrix) kinsOf(name string) string {
+	live := m.documents()
+	secrets := []string{}
+	for other, run := range live {
+		if other != name && run.kin != nil && run.kin == live[name].kin {
+			secrets = append(secrets, `"secret of `+other+`"`)
+		}
+	}
+	return "[" + strings.Join(secrets, ",") + "]"
+}
+
+// grouped checks that the documents that share an engine are those the
+// kin says reach each other, and that those are of one origin kept in
+// one place.
+func (m *matrix) grouped() {
+	m.t.Helper()
+	live := m.documents()
+	for _, w := range m.kin.ways() {
+		m.checks++
+		one, other := live[w.asker], live[w.asked]
+		if shared := one.kin != nil && one.kin == other.kin; shared != m.kin.near[w.name] {
+			m.t.Errorf("%s, %s: the two share an engine is %v, want %v", m.kin.name, w.name, shared, m.kin.near[w.name])
+		}
+	}
+	keys := map[*dom.Kin]string{}
+	set := m.session().frames[m.session().scripts.page]
+	for name, run := range live {
+		var f *frame
+		if name != "top" {
+			f = m.frameNamed(map[string]string{"mid": "a", "sib": "b", "leaf": "n"}[name])
+		}
+		key, has := set.kinKey(f)
+		m.checks++
+		switch {
+		case has != (run.kin != nil), has && run.kin.Key() != key:
+			m.t.Errorf("%s: %s is of the kin %v, its key being %q (%v)", m.kin.name, name, run.kin, key, has)
+		case has && keys[run.kin] != "" && keys[run.kin] != key:
+			m.t.Errorf("%s: one engine holds documents of %q and of %q", m.kin.name, keys[run.kin], key)
+		case has:
+			keys[run.kin] = key
+		}
+	}
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
@@ -570,4 +730,127 @@ func (f *framing) add(at string, a answer) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.pages[at] = a
+}
+
+// boxedTop is a page with a sandboxed frame of its own origin beside
+// one that is not, each with a link, a form and a function that sends
+// its own document elsewhere.
+func boxedTop(sandbox string) string {
+	return `<title>Top</title><body style="margin:0"><iframe id="one"` + sandbox + ` src="/boxed"></iframe>
+		<iframe id="two" src="/second"></iframe>` + boxedHeld
+}
+
+const boxedHeld = `<a id="l" href="/away">away</a><form id="f" action="/sent"></form>
+	<script>window.leave = (to) => { location.href = to; };</script>`
+
+// The sandbox of a frame that is kin to its page is asked of every
+// navigation its script makes, straight or through what it reaches of
+// its kin: a sibling it never sends, its tab only with the token, a
+// form only with allow-forms, a question only with allow-modals.
+func TestASandboxedKinSendsNothingItsSandboxKeepsItFrom(t *testing.T) {
+	const two, tab = `parent.frames[1]`, `top`
+	web, transport := framingOf(t, map[string]answer{
+		"site.test/boxed":  html(`<p>boxed</p><script>window.mark = "boxed";</script>`),
+		"site.test/second": html(`<p>second</p>` + boxedHeld),
+		"site.test/away":   html(`<title>Away</title><p>away</p>`),
+		"site.test/sent":   html(`<title>Sent</title><p>sent</p>`),
+	})
+	s := showWith(t, Options{Transport: transport, Downloads: t.TempDir()})
+	const scripts, unsafe, unsent = "allow-scripts allow-same-origin", "Unsafe attempt", "A form was not sent"
+	type attempt struct {
+		tokens, act string
+		// says is what the console holds of an attempt that is refused;
+		// frame is what the other frame shows after one that is not, and
+		// left where the tab went.
+		says, frame, left string
+	}
+	var attempts []attempt
+	ways := func(of string) []string {
+		return []string{
+			of + `.location = "/away"`, of + `.location.href = "/away"`, of + `.location.assign("/away")`,
+			of + `.location.replace("/away")`, of + `.document.location = "/away"`,
+			of + `.document.location.href = "/away"`, of + `.document.location.assign("/away")`,
+			of + `.document.location.replace("/away")`, of + `.document.defaultView.location = "/away"`,
+			of + `.document.getElementById("l").click()`, of + `.leave("/away")`,
+		}
+	}
+	for _, tokens := range []string{scripts, scripts + " allow-top-navigation allow-forms allow-modals"} {
+		for _, act := range append(ways(two), two+`.document.location.reload()`, two+`.history.go(-1)`) {
+			attempts = append(attempts, attempt{tokens: tokens, act: act, says: unsafe})
+		}
+	}
+	attempts = append(attempts,
+		attempt{tokens: scripts, act: two + `.document.getElementById("f").submit()`, says: unsent},
+		attempt{tokens: scripts + " allow-forms", act: two + `.document.getElementById("f").submit()`, says: unsafe})
+	for _, act := range ways(two) {
+		attempts = append(attempts, attempt{act: act, frame: "away"})
+	}
+	attempts = append(attempts, attempt{act: two + `.document.getElementById("f").submit()`, frame: "sent"})
+	for _, act := range append(ways(tab), tab+`.document.location.reload()`) {
+		attempts = append(attempts, attempt{tokens: scripts, act: act, says: unsafe},
+			attempt{tokens: scripts + " allow-top-navigation-by-user-activation", act: act, says: unsafe})
+	}
+	for _, act := range ways(tab) {
+		attempts = append(attempts, attempt{tokens: scripts + " allow-top-navigation", act: act,
+			left: "https://site.test/away"})
+	}
+	submit := tab + `.document.getElementById("f").submit()`
+	attempts = append(attempts,
+		attempt{tokens: scripts + " allow-forms", act: submit, says: unsafe},
+		attempt{tokens: scripts + " allow-top-navigation", act: submit, says: unsent},
+		attempt{tokens: scripts + " allow-top-navigation allow-forms", act: submit, left: "https://site.test/sent"},
+		attempt{tokens: scripts, act: `parent.alert("asked")`, says: "'allow-modals' keyword is not set"},
+		attempt{tokens: scripts, act: `parent.frames[1].confirm("asked")`, says: "'allow-modals' keyword is not set"},
+	)
+	for i, a := range attempts {
+		name := fmt.Sprintf("%q with %q", a.act, a.tokens)
+		sandbox := ""
+		if a.tokens != "" {
+			sandbox = ` sandbox="` + a.tokens + `"`
+		}
+		top := "https://site.test/boxed-" + strconv.Itoa(i)
+		web.add(strings.TrimPrefix(top, "https://"), html(boxedTop(sandbox)))
+		s.visit(top)
+		s.running("", "one", "two")
+		if warned := s.consoleSays(console.Warn, "can escape its sandboxing"); warned != (a.tokens != "") {
+			t.Errorf("%s: the console warns of a sandbox that is no wall: %t", name, warned)
+		}
+		s.session().said.Clear()
+		if got := s.within("one", a.act); strings.HasPrefix(got, "throws") {
+			t.Errorf("%s gave %s", name, got)
+		}
+		switch {
+		case a.left != "":
+			s.until(name+": the tab left its page for "+a.left, func() bool {
+				at := s.browser.Tab().Current()
+				return strings.HasPrefix(at, a.left) && s.session().pages[at] != nil
+			})
+			continue
+		case a.frame != "":
+			s.until(name+": the frame was sent", func() bool {
+				f := s.frameNamed("two")
+				return f != nil && f.load == nil && f.page != nil && strings.TrimSpace(f.page.Doc.Body().Text()) == a.frame
+			})
+		}
+		for range 6 {
+			s.frame()
+		}
+		if got := s.browser.Tab().Current(); got != top || s.doc.ByID("asking") != nil {
+			t.Fatalf("%s: the tab went to %s, or asks: %t", name, got, s.doc.ByID("asking") != nil)
+		}
+		if got := s.framedText("two"); a.frame == "" && !strings.HasPrefix(got, "second") {
+			t.Errorf("%s: the other frame shows %q", name, got)
+		}
+		if a.says != "" && !strings.Contains(s.said(), a.says) || a.says == "" && strings.Contains(s.said(), "error:") {
+			t.Errorf("%s: the console says %q, want %q in it", name, s.said(), a.says)
+		}
+	}
+	web.add("site.test/asks", html(boxedTop(` sandbox="`+scripts+` allow-modals"`)))
+	s.visit("https://site.test/asks")
+	s.running("", "one", "two")
+	s.does("one", `setTimeout(() => { window.answered = String(parent.confirm("asked")); }, 0);`)
+	s.until("the frame's question shows", func() bool { return s.doc.ByID("asking") != nil })
+	s.click("asking-ok")
+	s.becomes("one", `String(window.answered)`, "true")
+	t.Logf("%d attempts", len(attempts)+1)
 }

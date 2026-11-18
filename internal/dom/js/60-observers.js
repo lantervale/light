@@ -18,6 +18,12 @@ class MutationObserver {
     if (!options.childList && !attributes && !characterData) {
       throw new TypeError("The options object must set at least one of 'attributes', 'characterData', or 'childList' to true.");
     }
+    if (!attributes && (options.attributeOldValue || options.attributeFilter !== undefined)) {
+      throw new TypeError("The options object asks for attributes it does not watch.");
+    }
+    if (!characterData && options.characterDataOldValue) {
+      throw new TypeError("The options object asks for the old text of text it does not watch.");
+    }
     this._watched.set(target, { ...options, attributes, characterData });
     observers.add(this);
     watching = true;
@@ -53,9 +59,10 @@ observed = (change) => {
     const keepsOld = change.type === "attributes" ? options.attributeOldValue : options.characterDataOldValue;
     observer._records.push({
       type: change.type, target: change.target,
-      addedNodes: NodeList.from(change.addedNodes || []), removedNodes: NodeList.from(change.removedNodes || []),
+      addedNodes: nodeList(Array.from(change.addedNodes || [])),
+      removedNodes: nodeList(Array.from(change.removedNodes || [])),
       previousSibling: change.previousSibling || null, nextSibling: change.nextSibling || null,
-      attributeName: change.attributeName || null, attributeNamespace: null,
+      attributeName: change.attributeName || null, attributeNamespace: change.attributeNamespace || null,
       oldValue: keepsOld && change.oldValue !== undefined ? change.oldValue : null,
     });
     queued = true;

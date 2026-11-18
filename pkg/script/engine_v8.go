@@ -20,11 +20,18 @@ func Engine() string { return "V8 " + strings.TrimSuffix(v8.Version(), "-v8go") 
 // Available reports whether this build runs scripts.
 func Available() bool { return true }
 
-// live counts the Contexts made and not yet closed.
-var live atomic.Int64 //nolint:gochecknoglobals // a count of the process's engines, for its tests and its tools
+// live counts the engines made and not yet closed, and contexts the
+// Contexts: more than the engines when some share one.
+//
+//nolint:gochecknoglobals // counts of the process's engines, for its tests and its tools
+var live, contexts atomic.Int64
 
-// Live is how many Contexts are open: each is an engine of its own.
+// Live is how many engines are open: one for each Context but those
+// made beside another.
 func Live() int { return int(live.Load()) }
+
+// Contexts is how many Contexts are open.
+func Contexts() int { return int(contexts.Load()) }
 
 // initialHeap is the heap a context starts with.
 const initialHeap = 8 << 20
@@ -34,12 +41,13 @@ const initialHeap = 8 << 20
 const errorsSource = `(({ TypeError, SyntaxError, RangeError, ReferenceError }) => (message, kind) =>
 	new ({ TypeError, SyntaxError, RangeError, ReferenceError }[kind] || Error)(message))(globalThis)`
 
-// context is a V8 isolate with one context: a page shares nothing with
-// another, and closing it frees all of it.
-type context struct {
-	opts Options
-	iso  *v8.Isolate
-	ctx  *v8.Context
+// isolate is a V8 isolate and what is its own, whichever of its
+// contexts runs: one script runs in it at a time, under one budget.
+type isolate struct {
+	iso *v8.Isolate
+	// kin is who shares it, and contexts those that do.
+	kin      string
+	contexts map[*v8.Context]*context
 	// depth counts the runs and calls in progress: the budget is the
 	// outermost's.
 	depth int
@@ -47,10 +55,25 @@ type context struct {
 	// due (Pause).
 	watchdog *time.Timer
 	due      time.Time
-	// watch guards expired, which the watchdog sets as it interrupts.
-	watch   sync.Mutex
-	expired bool
-	stopped atomic.Bool
+	// watch guards expired, which the watchdog sets as it interrupts,
+	// and gone, set once the isolate is disposed of.
+	watch         sync.Mutex
+	expired, gone bool
+	stopped       atomic.Bool
+}
+
+// context is a V8 context in an isolate of its own, or in that of its
+// kin: a page shares nothing with another but with those, and closing
+// the last of an isolate frees all of it.
+type context struct {
+	opts Options
+	*isolate
+	ctx *v8.Context
+	// closed is set as the context closes, for Interrupt.
+	closed atomic.Bool
+	// fence stands between the scripts of a context that has kin and
+	// the functions light gives it, and shut closes it (fenceSource).
+	fence, shut *v8.Function
 	// rejected are the promises rejected with no handler since the
 	// outermost run began.
 	rejected []rejection
@@ -77,16 +100,22 @@ type rejection struct {
 
 // New makes a Context with nothing bound.
 func New(opts Options) (Context, error) {
-	iso := v8.NewIsolate(v8.WithResourceConstraints(initialHeap, opts.memory()), v8.WithExceptionMessages())
-	c := &context{opts: opts, iso: iso, ctx: v8.NewContext(iso)}
-	live.Add(1)
-	iso.SetPromiseRejectedCallback(c.promiseRejected)
+	shared, err := opts.isolate()
+	if err != nil {
+		return nil, err
+	}
+	c := &context{opts: opts, isolate: shared, ctx: v8.NewContext(shared.iso)}
+	shared.contexts[c.ctx] = c
+	contexts.Add(1)
 	made, err := c.ctx.RunScript(errorsSource, "light:error")
 	if err != nil {
 		c.Close()
 		return nil, err
 	}
 	c.errors, err = made.AsFunction()
+	if err == nil {
+		err = c.fencing()
+	}
 	if err == nil {
 		err = c.importing()
 	}
@@ -95,6 +124,78 @@ func New(opts Options) (Context, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// fenceSource makes the fence of a context that has kin. What a
+// context holds outlives it in the scripts of its kin, and a function
+// of light's that is called once its context closed takes the process
+// down; so the scripts never hold such a function, only one that calls
+// it until the context closes, and throws from then on.
+const fenceSource = `(() => {
+	let gone = false;
+	return [(fn) => function (...args) {
+		if (gone) throw new Error("light: the document this was of is gone");
+		return fn.apply(this, args);
+	}, () => { gone = true; }];
+})()`
+
+// fencing makes the fence of a context that has kin.
+func (c *context) fencing() error {
+	if c.opts.Kin == "" {
+		return nil
+	}
+	made, err := c.ctx.RunScript(fenceSource, "light:fence")
+	if err != nil {
+		return err
+	}
+	defer made.Release()
+	pair, err := made.AsObject()
+	if err != nil {
+		return err
+	}
+	for i, kept := range []**v8.Function{&c.fence, &c.shut} {
+		part, failed := pair.GetIdx(uint32(i))
+		if failed != nil {
+			return failed
+		}
+		if *kept, failed = part.AsFunction(); failed != nil {
+			return failed
+		}
+	}
+	return nil
+}
+
+// fenced is a function of light's as the scripts of the context hold
+// it: behind the fence, where the context has one.
+func (c *context) fenced(fn *v8.Function) (v8.Valuer, error) {
+	if c.fence == nil {
+		return fn, nil
+	}
+	return c.fence.Call(v8.Undefined(c.iso), fn)
+}
+
+// isolate is the isolate of a new Context: that of the one it is made
+// beside, when they are kin, else a new one.
+func (o Options) isolate() (*isolate, error) {
+	if o.Beside != nil {
+		beside, is := o.Beside.(*context)
+		switch {
+		case !is || o.Kin == "" || beside.kin != o.Kin:
+			return nil, ErrNotKin
+		case beside.ctx == nil:
+			return nil, ErrClosed
+		}
+		return beside.isolate, nil
+	}
+	shared := &isolate{kin: o.Kin, contexts: map[*v8.Context]*context{},
+		iso: v8.NewIsolate(v8.WithResourceConstraints(initialHeap, o.memory()), v8.WithExceptionMessages())}
+	live.Add(1)
+	shared.iso.SetPromiseRejectedCallback(func(m v8.PromiseRejectMessage) {
+		if of := shared.contexts[m.Context]; of != nil {
+			of.promiseRejected(m)
+		}
+	})
+	return shared, nil
 }
 
 // exception is err as an Error of the page's own realm, which a script
@@ -142,7 +243,11 @@ func (c *context) Bind(name string, fn Func) error {
 		c.answered = value
 		return value, err
 	})
-	return c.ctx.Global().Set(name, tmpl.GetFunction(c.ctx))
+	bound, err := c.fenced(tmpl.GetFunction(c.ctx))
+	if err != nil {
+		return err
+	}
+	return c.ctx.Global().Set(name, bound)
 }
 
 func (c *context) Run(source, origin string) (any, error) {
@@ -154,24 +259,38 @@ func (c *context) Run(source, origin string) (any, error) {
 }
 
 func (c *context) Interrupt() {
-	if !c.stopped.Load() {
+	if !c.closed.Load() && !c.stopped.Load() {
 		c.iso.TerminateExecution()
 	}
 }
 
+// Close frees the context, and its isolate with the last of those
+// that share it.
 func (c *context) Close() {
 	if c.ctx == nil {
 		return
 	}
-	c.stopped.Store(true)
-	c.watch.Lock()
-	defer c.watch.Unlock()
-	c.iso.SetPromiseRejectedCallback(nil)
+	c.closed.Store(true)
+	last := len(c.contexts) == 1
+	if last {
+		c.stopped.Store(true)
+		c.watch.Lock()
+		defer c.watch.Unlock()
+		c.iso.SetPromiseRejectedCallback(nil)
+	}
+	if c.shut != nil && !last {
+		_, _ = c.shut.Call(v8.Undefined(c.iso))
+	}
 	c.close()
+	delete(c.contexts, c.ctx)
 	c.ctx.Close()
-	c.iso.Dispose()
 	c.ctx = nil
-	live.Add(-1)
+	contexts.Add(-1)
+	if last {
+		c.iso.Dispose()
+		c.gone = true
+		live.Add(-1)
+	}
 }
 
 // guarded runs one entry into the engine under the budget, and gives
@@ -210,8 +329,10 @@ func (c *context) within(enter func() error) error {
 	c.depth--
 	if outermost {
 		watchdog.Stop()
-		c.forget()
-		defer c.report()
+		for _, of := range c.contexts {
+			of.forget()
+		}
+		defer c.isolate.report()
 	}
 	if err != nil {
 		return c.failure(err, outermost)
@@ -237,7 +358,7 @@ func (c *context) Pause() func() {
 func (c *context) expire() {
 	c.watch.Lock()
 	defer c.watch.Unlock()
-	if c.ctx != nil {
+	if !c.gone {
 		c.expired = true
 		c.iso.TerminateExecution()
 	}
@@ -332,7 +453,15 @@ func (c *context) thrown(value *v8.Value) *Error {
 	return e
 }
 
-// report tells of the rejections nobody handled.
+// report tells of the rejections nobody handled, in each context of
+// the isolate: a script of one may reject a promise of another.
+func (i *isolate) report() {
+	for _, of := range i.contexts {
+		of.report()
+	}
+}
+
+// report tells of the rejections of the context nobody handled.
 func (c *context) report() {
 	rejected := c.rejected
 	c.rejected = nil

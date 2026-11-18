@@ -2,6 +2,7 @@ package dom
 
 import (
 	"errors"
+	"maps"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -145,7 +146,7 @@ func (r *Runtime) asked(what string, n *html.Node, a arguments) (any, error) {
 	case "xml":
 		return r.xmlOf(n), nil
 	case "prefix":
-		return r.prefixes[n], nil
+		return r.prefixOf(n), nil
 	case "info":
 		if d := r.docs[n]; d != nil {
 			return []any{d.media, d.xml, d.address}, nil
@@ -172,7 +173,7 @@ func (r *Runtime) asked(what string, n *html.Node, a arguments) (any, error) {
 	case "clone":
 		return r.cloned(n, a.flag(2))
 	case "markup":
-		return web.MarkupXML(n, true), nil
+		return web.MarkupXML(n, true, r.prefixOf), nil
 	}
 	return nil, errors.New("light: no operation of documents named " + what)
 }
@@ -215,10 +216,11 @@ func (r *Runtime) parsed(a arguments) (any, error) {
 	}
 	root := r.tree.Parsed
 	if web.IsXML(media) {
-		read, err := web.ParseXML(source)
+		read, prefixes, err := web.ParseXML(source)
 		if err != nil {
 			return []any{0, err.Error()}, nil //nolint:nilerr // told to the script, which decides
 		}
+		maps.Copy(r.prefixes, prefixes)
 		root = func(string) *html.Node { return read }
 	}
 	ref, err := r.register(root(source), made{media: media, address: address, xml: web.IsXML(media)})
@@ -241,6 +243,17 @@ func (r *Runtime) cloned(n *html.Node, deep bool) (any, error) {
 	return r.register(root, what)
 }
 
+// lowerASCII is text with its ASCII capitals in lower case, the only
+// ones the names of HTML fold.
+func lowerASCII(text string) string {
+	return strings.Map(func(c rune) rune {
+		if c >= 'A' && c <= 'Z' {
+			return c + 'a' - 'A'
+		}
+		return c
+	}, text)
+}
+
 // tagged are the elements under root of a name, as getElementsByTagName
 // finds them: every one for "*", HTML's by the name in lower case in a
 // document of HTML, the others as they are written, after the prefix
@@ -248,7 +261,7 @@ func (r *Runtime) cloned(n *html.Node, deep bool) (any, error) {
 // named, as the tree names it, they are those of that local name in
 // it, "*" for any.
 func (r *Runtime) tagged(root *html.Node, a arguments) []*html.Node {
-	name, lower := a.text(2), strings.ToLower(a.text(2))
+	name, lower := a.text(2), lowerASCII(a.text(2))
 	space, spaced := "", len(a) > 3 && a[3] != nil
 	if spaced {
 		space = a.text(3)
@@ -266,7 +279,7 @@ func (r *Runtime) tagged(root *html.Node, a arguments) []*html.Node {
 			}
 		default:
 			written := n.Data
-			if prefix := r.prefixes[n]; prefix != "" {
+			if prefix := r.prefixOf(n); prefix != "" {
 				written = prefix + ":" + n.Data
 			}
 			if name == "*" || written == name && (!folds || n.Namespace != "" || name == lower) ||
@@ -285,10 +298,11 @@ func (r *Runtime) tagged(root *html.Node, a arguments) []*html.Node {
 func (r *Runtime) markupIn(text string, n *html.Node) ([]*html.Node, error) {
 	var nodes []*html.Node
 	if r.xmlOf(n) {
-		read, err := web.ParseXMLFragment(text, web.XMLScopeOf(n))
+		read, prefixes, err := web.ParseXMLFragment(text, web.XMLScopeOf(n))
 		if err != nil {
 			return nil, errors.New("SyntaxError: " + err.Error())
 		}
+		maps.Copy(r.prefixes, prefixes)
 		nodes = read
 		for _, c := range nodes {
 			r.each(c, func(c *html.Node) {

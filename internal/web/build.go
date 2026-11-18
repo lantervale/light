@@ -439,7 +439,7 @@ func attr(n *html.Node, name string) string {
 // lookup is n's attribute name, and whether it has one.
 func lookup(n *html.Node, name string) (string, bool) {
 	for _, a := range n.Attr {
-		if a.Key == name {
+		if a.Key == name && !Namespaced(a) {
 			return a.Val, true
 		}
 	}

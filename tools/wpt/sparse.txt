@@ -5,8 +5,7 @@ docs
 fonts/ahem-extra
 images
 interfaces
-dom/nodes
-dom/events
+dom
 domparsing
 domxpath
 url

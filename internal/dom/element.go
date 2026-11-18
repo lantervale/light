@@ -11,25 +11,10 @@ import (
 	"github.com/lantervale/light/internal/web"
 )
 
-// named is an attribute's name as its markup writes it.
-func named(a html.Attribute) string {
-	if a.Namespace != "" {
-		return a.Namespace + ":" + a.Key
-	}
-	return a.Key
-}
-
 // put sets an attribute of n, and what of n's state it stands for.
 func (r *Runtime) put(n *html.Node, name, value string) {
 	r.tree.SetAttr(n, name, value)
-	u := r.tree.Node(n)
-	switch {
-	case u == nil:
-	case name == "value":
-		r.doc.SetValue(u, value)
-	case name == checked:
-		r.doc.SetChecked(u, true)
-	}
+	r.stated(n, name, value)
 }
 
 func (r *Runtime) attr(n *html.Node, a arguments) (any, error) {
@@ -57,7 +42,7 @@ func (r *Runtime) removeAttr(n *html.Node, a arguments) (any, error) {
 func (r *Runtime) attrs(n *html.Node, _ arguments) (any, error) {
 	out := make([][2]string, len(n.Attr))
 	for i, a := range n.Attr {
-		out[i] = [2]string{named(a), a.Val}
+		out[i] = [2]string{web.QualifiedAttr(a), a.Val}
 	}
 	return out, nil
 }
@@ -205,7 +190,7 @@ var raw = map[string]bool{
 // outer markup, as a browser writes it.
 func (r *Runtime) html(n *html.Node, a arguments) (any, error) {
 	if r.xmlOf(n) {
-		return web.MarkupXML(n, a.flag(1)), nil
+		return web.MarkupXML(n, a.flag(1), r.prefixOf), nil
 	}
 	var out strings.Builder
 	if a.flag(1) {
@@ -245,16 +230,17 @@ func (r *Runtime) write(out *strings.Builder, n *html.Node) {
 	case html.DocumentNode:
 		r.inner(out, n)
 	case html.ElementNode:
-		out.WriteString("<" + n.Data)
+		name := r.written(n)
+		out.WriteString("<" + name)
 		for _, attribute := range n.Attr {
-			out.WriteString(" " + named(attribute) + `="` + valueEscaper.Replace(attribute.Val) + `"`)
+			out.WriteString(" " + web.QualifiedAttr(attribute) + `="` + valueEscaper.Replace(attribute.Val) + `"`)
 		}
 		out.WriteString(">")
 		if n.Namespace == "" && void[n.Data] {
 			return
 		}
 		r.inner(out, n)
-		out.WriteString("</" + n.Data + ">")
+		out.WriteString("</" + name + ">")
 	}
 }
 

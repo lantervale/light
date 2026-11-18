@@ -48,6 +48,8 @@ class DOMImplementation {
   // createDocument makes a document of XML, of the type its root's
   // namespace is of.
   createDocument(uri, name, doctype = null) {
+    if (arguments.length < 2) throw new TypeError("createDocument takes a namespace and a name.");
+    if (doctype !== null && !(doctype instanceof DocumentType)) throw new TypeError("The doctype given is not one.");
     uri = uri === null || uri === undefined || uri === "" ? null : String(uri);
     name = name === null ? "" : String(name);
     const made = wrap(host("document", "new", uri === HTML_NS ? "application/xhtml+xml"
@@ -81,6 +83,7 @@ const parseDocument = (markup, type) => {
 };
 
 const writtenAsXML = (node) => {
+  if (node instanceof Attr) return "";
   if (!(node instanceof Node) || node[REF] === undefined) throw new TypeError("XMLSerializer writes a Node.");
   return host("document", "markup", node[REF]);
 };

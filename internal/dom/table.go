@@ -40,6 +40,7 @@ func (r *Runtime) table() map[string]op {
 		"setAttr":      r.of(r.setAttr),
 		"removeAttr":   r.of(r.removeAttr),
 		"attrs":        r.of(r.attrs),
+		"attribute":    r.of(r.attribute),
 		"value":        r.on(r.value),
 		"setValue":     r.on(r.setValue),
 		checked:        r.on(r.checked),

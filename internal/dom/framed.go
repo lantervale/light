@@ -107,6 +107,21 @@ func (f framedWindows) Named(of int, name string) int {
 	return f.window(func() int { return f.w.Named(of, name) })
 }
 func (f framedWindows) Of(frame *ui.Node) int { return f.window(func() int { return f.w.Of(frame) }) }
+func (f framedWindows) Element(of int) *ui.Node {
+	var shown *ui.Node
+	f.r.onFrame(func() { shown = f.w.Element(of) })
+	return shown
+}
+func (f framedWindows) May(to int, address string, form bool) bool {
+	var may bool
+	f.r.onFrame(func() { may = f.w.May(to, address, form) })
+	return may
+}
+func (f framedWindows) Kin(of int) bool {
+	var kin bool
+	f.r.onFrame(func() { kin = f.w.Kin(of) })
+	return kin
+}
 func (f framedWindows) Closed(of int) bool {
 	var closed bool
 	f.r.onFrame(func() { closed = f.w.Closed(of) })

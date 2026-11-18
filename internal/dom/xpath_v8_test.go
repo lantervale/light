@@ -589,7 +589,7 @@ func TestXPathRefusesWhatIsNotXPath(t *testing.T) {
 	for _, c := range []struct{ script, want string }{
 		{`document.evaluate("//x:li", document, null, 0, null)`, "DOMException NamespaceError"},
 		{`document.evaluate("//x:li", document, () => null, 0, null)`, "DOMException NamespaceError"},
-		{`document.evaluate("//@x:*", document, { lookupNamespaceURI: () => "" }, 0, null)`, "DOMException NamespaceError"},
+		{`document.evaluate("//@x:*", document, { lookupNamespaceURI: () => null }, 0, null)`, "DOMException NamespaceError"},
 		{`document.createExpression("//x:li")`, "DOMException NamespaceError"},
 		{`document.createExpression("//li[")`, "DOMException SyntaxError"},
 		{`new XPathEvaluator().createExpression("1 +")`, "DOMException SyntaxError"},

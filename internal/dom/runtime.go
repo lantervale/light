@@ -177,6 +177,11 @@ type Host struct {
 	Origin    func() string
 	Sandboxed Sandboxed
 	Windows   Windows
+	// Kin are the documents the page's shares its engine with, nil for
+	// none, and Self the number its own window has among Windows for
+	// the others (kin.go).
+	Kin  *Kin
+	Self int
 	// Broadcast gives a message of a BroadcastChannel of that name to
 	// the other documents of the page's origin; nil reaches none.
 	// Loading reports whether a frame of the page is still on its way:
@@ -249,8 +254,10 @@ type Runtime struct {
 	// bases is the page's use of its site's databases (indexeddb.go).
 	bases  bases
 	closed bool
-	// asking is how the scripts wait for an answer (asking.go).
-	asking parking
+	// asking is how the scripts wait for an answer (asking.go), and
+	// leaving a Runtime closed while a script of its kin held its engine.
+	asking  parking
+	leaving bool
 }
 
 // New makes the Runtime of page, loaded with its scripts (web.Loader's
@@ -264,6 +271,7 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 		handles: newHandles(), selectors: map[string]selectors{}, stores: map[string]Storage{},
 		ran: map[*html.Node]bool{}, requests: map[int]func(){}, kept: map[int]bool{}, loaded: newModuleMap(),
 	}
+	r.asking.handover = host.Kin.handover()
 	r.host = r.framed(host)
 	r.ops = r.table()
 	r.sheets = newSheets()
@@ -271,12 +279,15 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 	r.fontOps()
 	r.seedSheets()
 	ctx, err := r.engine(script.Options{Budget: host.Budget, Rejected: r.rejected, Import: r.imported,
-		Resolve: r.specified})
+		Resolve: r.specified, Kin: host.Kin.name(), Beside: host.Kin.beside()})
 	if err != nil {
 		return nil, err
 	}
 	r.ctx = ctx
-	if err = r.install(); err != nil {
+	if err = r.install(); err == nil {
+		err = host.Kin.join(r)
+	}
+	if err != nil {
 		ctx.Close()
 		return nil, err
 	}
@@ -523,8 +534,16 @@ func (r *Runtime) Close() {
 	if r.closed {
 		return
 	}
+	if r.heldByKin() {
+		if !r.leaving {
+			r.leaving = true
+			r.asking.closing = append(r.asking.closing, r.Close)
+		}
+		return
+	}
 	r.closed = true
 	r.unanswered()
+	r.host.Kin.leave(r)
 	for id, cancel := range r.requests {
 		if !r.kept[id] {
 			cancel()
@@ -538,8 +557,10 @@ func (r *Runtime) Close() {
 	r.ran, r.requests, r.kept, r.waiting, r.later, r.loaded = nil, nil, nil, nil, nil, moduleMap{}
 }
 
-// Closed reports whether the Runtime was closed.
-func (r *Runtime) Closed() bool { return r.closed }
+// Closed reports whether the Runtime was closed: at once for the
+// browser, though its engine goes only when a script of its kin that
+// waits for an answer no longer holds it.
+func (r *Runtime) Closed() bool { return r.closed || r.leaving }
 
 // now is the time since the page began in milliseconds, as fine as
 // scripts are told it.

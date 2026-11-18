@@ -88,15 +88,17 @@ func (f *frame) label() string {
 		return "frame"
 	case f.page.Address == inlineAddress:
 		return "srcdoc"
+	case f.page.Address == blankAddress:
+		return blankAddress
 	case f.page.Base != nil && f.page.Base.Host != "":
 		return f.page.Base.Host
 	}
 	return "frame"
 }
 
-// crossed reports whether the document f shows, or one it is in, is of
-// another site than its tab's page, or of none.
-func (f *frame) crossed() bool {
+// chain are the documents f's own is in and itself, the nearest to
+// the tab's page first, a nil for one with no origin.
+func (f *frame) chain() []*url.URL {
 	chain := f.documents()
 	chain = chain[:len(chain)-1]
 	if f.held.Opaque() {
@@ -104,8 +106,12 @@ func (f *frame) crossed() bool {
 	} else if f.page != nil {
 		chain = append(chain, f.page.Base)
 	}
-	return frames.Partition(f.set.top.Base, chain) != ""
+	return chain
 }
+
+// crossed reports whether the document f shows, or one it is in, is of
+// another site than its tab's page, or of none.
+func (f *frame) crossed() bool { return frames.Partition(f.set.top.Base, f.chain()) != "" }
 
 // byWindow is the frame of that window, nil with true for the page's.
 func (set *framed) byWindow(id int) (*frame, bool) {
@@ -267,6 +273,39 @@ func (w *windows) Of(n *ui.Node) int {
 	return dom.NoWindow
 }
 
+// Element is the iframe of by's document that shows the window of.
+func (w *windows) Element(of int) *ui.Node {
+	if f, ok := w.set.byWindow(of); ok && f != nil && f.parent == w.by {
+		return f.node
+	}
+	return nil
+}
+
+// Kin reports whether the document the window of shows is kin to
+// by's: of its origin, keeping its storage where it does, and so in
+// its engine. A document of by's kin that has no scripts running yet
+// gets them here, so by's can reach it.
+func (w *windows) Kin(of int) bool {
+	mine := w.set.scriptsIn(w.set.session, w.by)
+	if of == dom.OwnWindow || mine == nil || mine.kin == nil {
+		return false
+	}
+	f, ok := w.set.byWindow(of)
+	if !ok || f == w.by {
+		return false
+	}
+	theirs := w.set.scriptsIn(w.set.session, f)
+	if f == nil && theirs != nil && theirs.page != w.set.top {
+		return false
+	}
+	if theirs == nil && f != nil && (f.page != nil || w.s.initial(f, mine.kin)) && w.s.reachable(f) &&
+		w.set.kinOf(f) == mine.kin {
+		w.s.startFrame(f)
+		theirs = f.run
+	}
+	return theirs != nil && theirs.kin == mine.kin && !theirs.rt.Closed()
+}
+
 // Post leaves a message for the scripts that run in a window now: it
 // comes at the tab's next frame, if their document's origin is then
 // the one the message is for.
@@ -349,24 +388,10 @@ func (w *windows) Go(to int, address string, replace bool) {
 	s, set := w.s, w.set
 	target, ok := w.frame(to)
 	asking := set.scriptsOf(w.by)
-	if !ok || asking == nil {
+	if !ok || asking == nil || !w.sends(target, asking, address, true) {
 		return
 	}
-	from, origin := asking.page, set.originIn(w.by)
-	move := frames.Navigation{
-		Self: target == w.by, Top: target == nil, Activated: asking.acting,
-		Descendant: target != nil && (w.by == nil || target.within(w.by)),
-		SameOrigin: origin != opaqueOrigin && origin == set.originIn(target),
-	}
-	if w.by != nil {
-		move.Sandbox = w.by.held
-	}
-	if !onTheWeb(address) || !move.Allowed() {
-		set.session.said.Add(console.Line{Level: console.Error, Frame: w.label(), Text: "Unsafe attempt to initiate " +
-			"navigation for a frame from the frame with URL '" + from.Address + "': it may not send that frame to '" +
-			address + "'."})
-		return
-	}
+	from := asking.page
 	user := asking.acting
 	s.later = append(s.later, func() {
 		switch {
@@ -389,6 +414,51 @@ func (w *windows) Go(to int, address string, replace bool) {
 			s.fromPage(from.Address, func() { asking.by(s)(func() { s.Open(address) }) })
 		}
 	})
+}
+
+// sends reports whether by's document may send target, the tab for
+// nil, elsewhere: to address when named is set. The console is told
+// of what it may not.
+func (w *windows) sends(target *frame, asking *running, address string, named bool) bool {
+	set := w.set
+	origin := set.originIn(w.by)
+	move := frames.Navigation{
+		Self: target == w.by, Top: target == nil, Activated: asking.acting,
+		Descendant: target != nil && (w.by == nil || target.within(w.by)),
+		SameOrigin: origin != opaqueOrigin && origin == set.originIn(target),
+	}
+	if w.by != nil {
+		move.Sandbox = w.by.held
+	}
+	if named && !onTheWeb(address) || !move.Allowed() {
+		where := "elsewhere"
+		if named {
+			where = "to '" + address + "'"
+		}
+		set.session.said.Add(console.Line{Level: console.Error, Frame: w.label(), Text: "Unsafe attempt to initiate " +
+			"navigation for a frame from the frame with URL '" + asking.page.Address + "': it may not send that frame " +
+			where + "."})
+		return false
+	}
+	return true
+}
+
+// May reports whether by's document may have the document of the
+// window to navigate: its script called into that document, which is
+// kin to it, and what a document may not do itself it does not have
+// another do. A form is sent only from a sandbox that sends forms.
+func (w *windows) May(to int, address string, form bool) bool {
+	target, ok := w.set.byWindow(to)
+	asking := w.set.scriptsOf(w.by)
+	if !ok || asking == nil {
+		return false
+	}
+	if form && w.by != nil && !w.by.held.Submits() {
+		w.set.session.said.Add(console.Line{Level: console.Warn, Frame: w.label(), Text: "A form was not sent: the " +
+			"script that sent it is of a sandboxed frame, and the 'allow-forms' permission is not set."})
+		return false
+	}
+	return w.sends(target, asking, address, address != "")
 }
 
 // Focus gives a window the keyboard when the document that asks may:
@@ -442,11 +512,16 @@ func (s *Screen) runFrames(set *framed) {
 	}
 }
 
-// startFrame makes the scripts of the document f shows, and runs them.
+// startFrame makes the scripts of the document f shows, and runs them:
+// later, while a script of its kin waits for an answer and holds the
+// engine it is to share.
 func (s *Screen) startFrame(f *frame) {
 	live := &running{page: f.page, at: f.page.Address}
 	if f.page.Address == inlineAddress && f.page.Base != nil {
 		live.at = f.page.Base.String()
+	}
+	if live.kin = f.set.kinOf(f); live.kin.Held() {
+		return
 	}
 	rt, err := dom.New(f.page, s.frameHost(f, live))
 	if err != nil {
@@ -530,6 +605,7 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 		Sandboxed: dom.Sandboxed{Opaque: opaque, NoModals: !f.held.Asks()},
 		Windows:   &windows{s: s, set: set, by: f},
 		Loading:   func() bool { return set.loading(f) },
+		Kin:       live.kin, Self: f.id,
 	}
 	if !opaque {
 		within := district{origin: origin}

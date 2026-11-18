@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTheTestNetworkIsOnlyForADrivenLight(t *testing.T) {
@@ -41,6 +42,28 @@ func TestTheTestNetworkIsOnlyForADrivenLight(t *testing.T) {
 	} {
 		if transport, err = parsed(t, args...).transport(); transport != nil || err == nil {
 			t.Errorf("light %s dials through %v, %v", strings.Join(args, " "), transport, err)
+		}
+	}
+}
+
+func TestAScriptsBudgetIsOnlyForADrivenLight(t *testing.T) {
+	t.Setenv("LIGHT_WEBDRIVER", "")
+	if _, err := parse([]string{"--script-budget", "10s"}); err == nil || !strings.Contains(err.Error(), "--webdriver") {
+		t.Errorf("light --script-budget 10s: %v", err)
+	}
+	if got := parsed(t).options().ScriptBudget; got != 0 {
+		t.Errorf("light gives its scripts %v, want the budget of every page", got)
+	}
+	if got := parsed(t, "--webdriver", "127.0.0.1:4444").options().ScriptBudget; got != 0 {
+		t.Errorf("a driven light given none gives its scripts %v, want the budget of every page", got)
+	}
+	cli := parsed(t, "--webdriver", "127.0.0.1:4444", "--script-budget", "10s")
+	if got := cli.options().ScriptBudget; got != 10*time.Second {
+		t.Errorf("--script-budget 10s gives the scripts %v", got)
+	}
+	for _, budget := range []string{"0s", "-1s", "soon"} {
+		if _, err := parse([]string{"--webdriver", "127.0.0.1:4444", "--script-budget", budget}); err == nil {
+			t.Errorf("light --script-budget %s is taken", budget)
 		}
 	}
 }

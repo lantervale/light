@@ -101,7 +101,8 @@ func (r *Runtime) tagOf(u *ui.Node) string { return r.tree.Tag(u) }
 
 // nameOf is the name scripts know n by: an element's tag, after its
 // namespace when it is not HTML's ("svg:path"), in braces when it is
-// neither SVG's nor MathML's ("{urn:x}item", "{}item" for none). A
+// neither SVG's nor MathML's ("{urn:x}item", "{}item" for none), and
+// after a colon for one of HTML whose own name has one (":a:b"). A
 // processing instruction's is its target after a question mark, and a
 // document a script made says whether createDocument made it, which
 // makes it an XMLDocument.
@@ -132,6 +133,9 @@ func (r *Runtime) nameOf(n *html.Node) string {
 	}
 	switch n.Namespace {
 	case "":
+		if strings.Contains(n.Data, ":") {
+			return ":" + n.Data
+		}
 		return n.Data
 	case "svg", "math":
 		return n.Namespace + ":" + n.Data
@@ -348,7 +352,7 @@ func (r *Runtime) copyOf(n *html.Node, deep bool) *html.Node {
 		c = r.tree.Element(n.Data, "")
 		c.Attr = append([]html.Attribute(nil), n.Attr...)
 	}
-	if prefix := r.prefixes[n]; prefix != "" {
+	if prefix := r.prefixOf(n); prefix != "" {
 		r.prefixes[c] = prefix
 	}
 	if !deep {
@@ -395,7 +399,8 @@ func (r *Runtime) setText(n *html.Node, a arguments) (any, error) {
 	switch {
 	case n.Type == html.TextNode || n.Type == html.CommentNode:
 		r.tree.SetData(n, text)
-	case text != "" && n.FirstChild != nil && n.FirstChild == n.LastChild && n.FirstChild.Type == html.TextNode:
+	case text != "" && n.FirstChild != nil && n.FirstChild == n.LastChild && n.FirstChild.Type == html.TextNode &&
+		r.ids[n.FirstChild] == 0:
 		r.tree.SetData(n.FirstChild, text)
 	default:
 		r.empty(n)

@@ -335,8 +335,8 @@ are in its HAR file.
   `data:` one runs and shows nothing, and the Console says so). A page is shown with its sheets, pictures and
   fonts, a text as it was sent; a picture alone, a file to download and the other kinds are not, and nothing is
   saved from a frame's address. A script that sets `src` or `srcdoc`, or adds or removes the element, is followed.
-- **Scripts** of a frame's document run, each document in a JavaScript engine of its own
-  ([below](#scripts-in-frames)): its script elements and modules, its timers, its `fetch`, its events. A frame
+- **Scripts** of a frame's document run, in a JavaScript engine it shares only with the documents of its
+  own origin ([below](#scripts-in-frames)): its script elements and modules, its timers, its `fetch`, its events. A frame
   whose `sandbox` has no `allow-scripts`, like any frame with JavaScript off, is shown as a page without scripts,
   what its `noscript` holds included, and a document with no script costs no engine.
 - **Links and forms** of a frame open in it, with no entry in the tab's history: Back leaves the page, not the
@@ -366,8 +366,10 @@ are in its HAR file.
   it asks for carry no cookie and keep none, and its forms say they come from `null`. Its forms are not sent
   without `allow-forms`, whether a click or a script sends them, its links and its scripts do not leave the tab
   without `allow-top-navigation` (or `allow-top-navigation-by-user-activation`, on a click), a `_blank` link or a
-  target no frame it reaches has goes nowhere without `allow-popups`, a `download` link saves nothing without
-  `allow-downloads`, and a named target reaches only frames inside it. Without `allow-scripts` nothing runs;
+  target no frame it reaches has goes nowhere without `allow-popups`, and nowhere either without
+  `allow-popups-to-escape-sandbox`: light has no sandboxed tab to open in its place, so it opens none and the
+  Console names the missing token, where a browser opens a window under the same sandbox. A `download` link
+  saves nothing without `allow-downloads`, and a named target reaches only frames inside it. Without `allow-scripts` nothing runs;
   without `allow-modals` `alert`, `confirm` and `prompt` are refused in the Console. A frame in a sandboxed one is
   left what both allow, and a document keeps the sandbox it was loaded under until the frame shows another.
 - **Not honoured**: the `frame-src` and `child-src` of the page's own Content-Security-Policy, `allow`
@@ -378,8 +380,9 @@ are in its HAR file.
 
 ### Scripts in frames
 
-Every document that runs scripts, the page's and each frame's, has a V8 engine (an isolate) of its own. Two
-documents share no object, whatever their origins: what one knows of another goes through light, in Go, as text.
+The documents of a page that are of one origin and keep their storage in one place (their kin, below) run in
+one V8 engine (an isolate), each with its own globals; every other document has another engine. Two documents
+of different origins share no object: what one knows of the other goes through light, in Go, as text.
 
 - **What runs**: classic scripts and modules (a module map a document), timers and `requestAnimationFrame`,
   `fetch` and `XMLHttpRequest`, the events of clicks and keys (a click goes to the document under the pointer, the
@@ -397,10 +400,59 @@ documents share no object, whatever their origins: what one knows of another goe
   `frames`, `parent`, `top`, `opener` (`null`), `length`, `closed`, `location` (only `href` to set and
   `replace()`), `postMessage()`, `close()`, `focus()`, `blur()`, a frame by its index or its name, and `then`
   read as `undefined`. Anything else, read, written, defined or deleted, throws a `SecurityError`.
-- **Same-origin frames are kept apart too** (a deviation): a frame of the page's own origin is another
-  engine, so `contentDocument` is `null`, `frameElement` is `null`, `contentWindow` and `parent` are the windows
-  above and `parent.document`, `frame.contentWindow.someFunction()` and `document.domain` do not work. Pages that
-  script their own frames directly break; those that post messages do not.
+- **Frames of one origin reach each other**: `iframe.contentDocument`, `contentWindow.document`,
+  `frameElement`, `parent.document`, `top.document`, `frames[i].document`, a frame by its name, and whatever
+  else a window holds (`frame.contentWindow.someFunction()`, its globals, read, written, defined and deleted),
+  for a frame that never left its first document, one sent elsewhere within the origin, a `srcdoc`, an
+  `about:blank` and an `iframe` a script made. A frame holds an empty `about:blank` document of its parent's
+  origin until what it asks for has come, as in a browser; light makes it when a script first reaches for it. A
+  document with no script of its own gets an engine when its kin first reach for it. Each document keeps its own
+  globals and prototypes: `iframe.contentWindow.Element !== Element`.
+- **Who is kin** is decided in Go, from the origins light holds, by one function (`frames.Kin`), and asked again
+  at every use of a window: two documents of the same tab's page, of the same origin (scheme, host and port),
+  that keep their storage in the same place. A frame of the page's origin under a frame of another site keeps its
+  storage apart and is kin to its like only, not to the page; a sandboxed frame is kin to none without
+  `allow-same-origin`, nor one whose sandbox runs no script (its `contentDocument` is `null`). There is no
+  `document.domain`. A window is the same object whatever its frame shows: it reaches the document while that is
+  kin, and is the window above from the moment it is not.
+- **What differs from a browser between kin** (deviations):
+  - A node belongs to its document: `appendChild`, `insertBefore`, `adoptNode`, `importNode` and the like throw a
+    `TypeError` for a node of another document (in a browser the node moves, or is copied).
+  - What a script still holds of a document its frame left (the document, its nodes, its functions) throws when
+    it is used, or answers what it last knew; a browser keeps such a document alive.
+  - `frame.contentWindow.eval(…)` answers `undefined` and `new frame.contentWindow.Function(…)` makes nothing:
+    V8 lets no document compile code in another's globals. A function the other document defined is called as
+    any.
+  - A window is reached through the windows above (`parent`, `frames`, `contentWindow`, `defaultView`,
+    `event.source`). A script that stores its own `window` inside an object of another document hands over
+    something the other cannot use (a `TypeError`); setting it as a property of the other's window works.
+    `document.defaultView`, read by a listener of one document that another document's script called into, is
+    the window as that other script sees it.
+  - `postMessage` and `structuredClone` copy a plain object or an array of another document, and refuse its
+    `Date`, `Map`, typed arrays and the like (`DataCloneError`): only their own document knows them for what
+    they are.
+- **A sandbox with `allow-scripts` and `allow-same-origin` is not a security boundary**, in light as in every
+  browser, and the standard says so: such a frame is kin to its page, reaches its document, and can have it run
+  anything (or take the `sandbox` attribute off its own `iframe`). light prints the warning browsers print
+  ("An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its
+  sandboxing."). What light still holds such a frame to is what the standard checks against the script that
+  asks, not a wall:
+  - **Navigation**: the standard checks a navigation against the document of the script that asked for it (the
+    incumbent), whatever window, location, link or form it went through. `w.location = …`, `href`, `assign()`
+    and `replace()` on a kin's window are asked of light as for any window. A navigation made through a kin's
+    own objects (`w.document.location`, its `reload()`, `w.history.back()`, a click on its link, its form's
+    `submit()`, a function of its own that navigates) is checked against the document whose script was entered
+    as well as the one that navigates, and refused if either may not: a sibling is never sent anywhere from a
+    sandbox, the tab only with `allow-top-navigation` (or `-by-user-activation` on a click), a form only with
+    `allow-forms`. V8 does not tell light the incumbent, so this is the entered document: a function a sandboxed
+    frame hands its kin to call later (`w.setTimeout(fn)`) navigates as the kin, which a browser would refuse,
+    and a kin's own function that navigates itself when a sandboxed frame calls it is refused, which a browser
+    would allow.
+  - **Dialogs**: `w.alert()` called by a script of a sandboxed frame without `allow-modals` on its kin's window
+    is refused (stricter than the standard, which asks the window's own document only).
+  - Downloads, popups and pointer lock are asked of the document that holds the link or the form, as the
+    standard has it. `window.open` opens nothing in light, for anyone.
+  - Kin share their engine's memory limit and its two seconds: see the failures below.
 - **`postMessage`** between frames copies the message in the sender (light's structured clone), carries it as
   text through Go and builds it again from the receiver's own objects. `event.origin` and `event.source` are set
   by light. `targetOrigin` (`*`, `/`, or an origin) is checked when the message comes, against the origin of the
@@ -445,11 +497,18 @@ documents share no object, whatever their origins: what one knows of another goe
   by the same keys: `indexedDB.open` throws a `SecurityError` in a sandboxed frame with no origin.
 - **Failures stay in their frame**: an error a frame's script does not catch is a line of the Console, and the
   other documents go on. A script that never ends is stopped after its two seconds, as a page's is; the window
-  waits meanwhile, since the documents of a window run one after the other, and the others then go on. A frame
-  whose drawing breaks light is emptied and its engine closed.
+  waits meanwhile, since the documents of a window run one after the other, and the others then go on. Between
+  kin the two seconds are those of the script that was started, whichever document's function spins: the Console
+  line ("ran too long") names the document whose script it was, and the timers of them all go on after. Kin
+  share their engine's memory limit, one document's worth for them all. A frame whose drawing breaks light is
+  emptied and its scripts closed.
+- **Dialogs** (`alert`, `confirm`, `prompt`): the script that asks holds its engine, so nothing of its kin runs
+  until it is answered, as nothing of its tab does. A kin removed or sent elsewhere meanwhile is gone for the
+  page at once, and its scripts are closed when the answer came; one that would start waits for it too.
 - **What it costs** (measured, Apple silicon): about 3.3 MB and 7 ms for each frame that runs scripts, 10 µs of
-  each frame drawn after; a page of 64 such frames takes 175 MB and 0.6 s more than one without scripts. Engines
-  are closed when the frame is removed, shows something else, its tab leaves the page or its window closes.
+  each frame drawn after; a page of 64 such frames takes 175 MB and 0.6 s more than one without scripts (measured
+  with an engine a frame; kin now share one). A document's scripts are closed when its frame is removed, shows
+  something else, its tab leaves the page or its window closes, and an engine with the last document in it.
 - **The developer tools** are yours, so they read every frame, and nothing of it reaches a page's scripts.
   The Inspector opens an `iframe` on its document, picks and outlines what is in one, and shows its rules and
   its box; `$0` is the selected element in the document it is of. The Warnings list each frame's as its own. The
@@ -459,8 +518,10 @@ documents share no object, whatever their origins: what one knows of another goe
 - **Not done**: `close()` and `blur()` on a frame do nothing, `window.open` opens nothing and a page's script
   opens no tab. An `iframe` gets its window when it is in its document; one beyond the 64 has none.
 
-**The boundary and its limits.** The frames of a tab, and every tab, run in one process: an isolate is a wall
-inside V8, not the operating system's. A bug in V8 that escapes an isolate reaches everything light holds, and
+**The boundary and its limits.** Documents of different origins are in different isolates; those of one origin
+and one storage place share one, where V8 keeps each document's globals from the others and light hands a
+window across only after Go said the two are kin. The frames of a tab, and every tab, run in one process: an
+isolate is a wall inside V8, not the operating system's. A bug in V8 that escapes an isolate reaches everything light holds, and
 light does nothing against Spectre: the documents of a process share an address space, so `SharedArrayBuffer`
 is not given to pages, `performance.now()` is told in steps of 100 µs and `crossOriginIsolated` is `false`
 (`WebAssembly.Memory` can still be shared within one document, which has no worker to share it with). Neither
@@ -656,9 +717,9 @@ What does not:
   `integrity`, no `referrerpolicy` (a module says the page as its referrer), no import map with a `src`, and an
   import map counts whenever it comes, the first to name a specifier kept. A `modulepreload` fetches its module,
   not what it imports. The page's address, not its `<base>`, is what an inline module's specifiers are read from.
-- An `iframe`'s document runs its scripts in an engine of its own, so the page reaches its window and never its
-  document: `contentDocument` and `frameElement` are `null` for every frame, the page's own origin included
-  (see [Scripts in frames](#scripts-in-frames)). Its `src`,
+- An `iframe`'s document of another origin runs its scripts in another engine, so the page reaches its window
+  and never its document: `contentDocument` is `null` there, and is the frame's document for a frame of the
+  page's own origin (see [Scripts in frames](#scripts-in-frames)). Its `src`,
   `srcdoc`, `name`, `width`, `height` and `sandbox` reflect, a `src` or a `srcdoc` a script sets is followed, and
   the element hears `load` when a document, or light's notice in place of one, shows in it, and `error` when light
   left it empty (see [Frames](#frames)); a browser says `load` there too.
@@ -706,10 +767,12 @@ What does not:
   its scripts such a page is a document of XML: `contentType` says its type, `createElement` keeps the case,
   `tagName` and attribute names are as written, `createCDATASection` works, `innerHTML`, `outerHTML` and
   `insertAdjacentHTML` read and write XML (markup that is not well-formed is a `SyntaxError` and changes
-  nothing), and `document.write` does nothing, as in every page. What is missing: the prefix an element or
-  attribute was written with is not kept (`prefix` is `null` but for an element a script made with one, and
-  what is written back declares each namespace without a prefix); a doctype's internal subset is skipped, so
-  the entities it declares are not known; `xml:space` and the `xml-stylesheet` instruction do nothing; a
+  nothing), and `document.write` does nothing, as in every page. An element and an attribute keep the prefix they
+  were written with (`prefix`, `tagName`, `name`), and what is written back (`XMLSerializer`, `outerHTML`) is
+  written by the DOM Parsing standard's rules: the prefix kept where it still names its namespace, a declared one
+  else, a generated `ns1`, `ns2`… where none does, a default namespace declared again where it changes, an
+  element of HTML that holds nothing as `<p></p>` and a void one as `<br />`. What is missing: a doctype's
+  internal subset is skipped, so the entities it declares are not known; `xml:space` and the `xml-stylesheet` instruction do nothing; a
   selector of a name matches no XHTML element whose name has capitals; a page sent as `application/xml` or
   `text/xml` is still shown as text, and an SVG one as a picture.
 - **Documents a script makes** are whole: `document.implementation.createHTMLDocument`, `createDocument` and
@@ -724,9 +787,9 @@ What does not:
   `null`): nothing of it is laid out, no picture, sheet or frame of it is fetched, and none of its scripts or
   `on…` attributes runs, wherever they were made or read; a script read into one never runs, even moved into the
   page. A document holds what the DOM lets it hold (one element, one doctype before it, no text), and
-  `lookupNamespaceURI`, `lookupPrefix` and `isDefaultNamespace` answer from the `xmlns` attributes. What is
-  missing: an `Attr` is no node and has no document; what a `template` holds stays the page's; `XMLSerializer`
-  writes no prefix; an `iframe`'s `contentDocument` is `null` ([Scripts in frames](#scripts-in-frames)); a `Range`
+  `lookupNamespaceURI`, `lookupPrefix` and `isDefaultNamespace` answer from the elements' own namespaces and the
+  attributes that declare one. What is missing: what a `template` holds stays the page's; an `iframe`'s
+  `contentDocument` is `null` ([Scripts in frames](#scripts-in-frames)); a `Range`
   builds markup and little else; `HTMLDocument` is `Document` itself.
 - **XPath** is XPath 1.0, whole: `document.evaluate`, `createExpression` and `createNSResolver`, `XPathEvaluator`,
   `XPathExpression`, and `XPathResult` in its ten types, with the standard's errors (a `SyntaxError` for what is
@@ -736,15 +799,37 @@ What does not:
   document is matched as browsers match it: a name without a prefix finds HTML elements whatever its case and no
   `svg` or MathML element (`//svg:path` with a resolver, or `//*[local-name() = "path"]`, does), an attribute's
   name is lower-cased, and `lang()` reads the `xml:lang` of the XML namespace, which only an `svg` or a MathML
-  element has. A `$variable` is a `SyntaxError`: nothing binds one. What differs from a browser: the doctype is
-  no node (`/node()` is the `html` element alone); an attribute found is an `Attr` XPath keeps, the same object
-  each time it is found, but not one of those `attributes` gives; a string is measured in characters, not in
-  UTF-16 units; a number is written without an exponent, however large; an element given as a resolver knows no
-  prefix (pass a function); the `result` argument is never reused; an iterator goes invalid on a change made
+  element has. A `$variable` is a `SyntaxError`: nothing binds one. An attribute found is the `Attr` its element
+  has (`attributes`, `getAttributeNode`), a document a script made or an `XMLHttpRequest` answered is walked from
+  its own root, and a resolver is a function or anything with a `lookupNamespaceURI`, a node included. What
+  differs from a browser: the doctype is no node (`/node()` is the `html` element alone); a string is measured in
+  characters, not in UTF-16 units; a number is written without an exponent, however large; the `result` argument
+  is never reused; an iterator goes invalid on a change made
   through the DOM to the tree it was evaluated in. Each node looked at is a call into light, so XPath is slower
   than in a browser: `//div[@class="x"]//a[position() < 3]` over a page of 10,000 nodes takes about 20 ms, and an
-  expression that must walk every text node about 120 ms. Next to check it against: the Web Platform Tests of
-  `domxpath/`.
+  expression that must walk every text node about 120 ms. The Web Platform Tests of `domxpath/` are in
+  `task wpt`'s subset.
+- **Attributes** are nodes: an `Attr` is the same object each time its element gives it (`attributes[i]`,
+  `getAttributeNode`, `getAttributeNodeNS`) for as long as it is on it, with `ownerElement`, `ownerDocument`,
+  `namespaceURI`, `prefix`, `localName`, `name`, `value` and `specified`; `createAttribute` and
+  `createAttributeNS` make one, `setAttributeNode`, `setAttributeNodeNS` and `removeAttributeNode` move it (an
+  `InUseAttributeError` for one another element has), and `attributes` is a whole `NamedNodeMap` (by index, by
+  name, `getNamedItem`, `setNamedItem`, `removeNamedItem` and their `NS` forms). Attributes are told apart by
+  namespace and local name, `getAttribute` and `setAttribute` reach the first of a qualified name, and a
+  mutation record names the namespace. Only an attribute without a namespace is the element's own (`style`,
+  `src`, `value`…).
+- **Token lists**: `classList`, a link's, an anchor's and a form's `relList`, a link's `sizes`, an iframe's
+  `sandbox` and an output's `htmlFor` are one `DOMTokenList` each, the same object at every read, live with its
+  attribute both ways, to the DOM standard: the ordered set, `add`, `remove`, `toggle`, `replace`, `contains`,
+  `item` and indexes, `length`, `value`, `supports` (a `TypeError` where the attribute has no set of known
+  tokens), `forEach`, `keys`, `values`, `entries`, a `SyntaxError` for an empty token and an
+  `InvalidCharacterError` for one with a space, and `el.classList = "a b"` sets its value.
+- **Reflected attributes**: the properties of HTML's elements that stand for an attribute come from one table
+  (`internal/dom/js/36-reflection.js`), by kind as HTML's "reflect" rules say: text, a URL resolved against the
+  document, a flag, a signed or unsigned number with its range, default and fallback, a number clamped to a
+  range, a real number, and a keyword of a known set with its missing and invalid defaults. The global ones are
+  on `HTMLElement`, the others on each element's interface, obsolete ones included (`HTMLMarqueeElement`,
+  `HTMLFrameSetElement`, `HTMLDirectoryElement`…); an unknown name is an `HTMLUnknownElement`.
 - **IndexedDB** is the Indexed Database API 3.0: `indexedDB` (`open`, `deleteDatabase`, `databases()`, `cmp`),
   `IDBDatabase`, `IDBTransaction` (`commit()`, `abort()`, `durability`), `IDBObjectStore`, `IDBIndex` (unique,
   `multiEntry`), `IDBCursor` and `IDBCursorWithValue` in the four directions, `IDBKeyRange`, the requests and
@@ -840,7 +925,7 @@ actions and screenshots work.
 
 With a window on screen, your own mouse and keys reach the page too.
 
-Two more options are a test runner's, and are refused without `--webdriver`:
+Three more options are a test runner's, and are refused without `--webdriver`:
 
 - `--host-map "web-platform.test=127.0.0.1;not-web-platform.test=127.0.0.1"`: names, and every name under them,
   that light finds at an address of this machine, where it dials. The system's hosts file is not read for them and
@@ -848,6 +933,9 @@ Two more options are a test runner's, and are refused without `--webdriver`:
   it looks at the address a name was dialled at, so a page of the Internet still does not reach a mapped name.
 - `--trust-ca FILE`: a certificate authority (PEM) trusted beside the system's, by this run's requests only. Every
   certificate is still checked, against its name and its dates; nothing is added to the system's trust store.
+- `--script-budget DURATION` (`10s`): how long one script of a page may run before light stops it, in place of the
+  two seconds of every page. A test is one long task more often than a page is; nothing changes for a light
+  nothing drives.
 
 ## Web platform tests
 

@@ -3,18 +3,16 @@
 // An expression is read once into a small tree, each part knowing the
 // type of its value, so what XPath refuses is refused before any node
 // is looked at. A node-set is an array of nodes in document order, an
-// attribute the one Attr light keeps for it here. The names of an HTML
+// attribute its element's own Attr. The names of an HTML
 // document's elements and attributes are matched as browsers match
 // them: in lower case, whatever the expression's.
 
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
-const attrNamespaces = { xlink: "http://www.w3.org/1999/xlink", xml: XML_NS, xmlns: XMLNS_NS };
 const xpathKinds = ["node", "text", "comment", "processing-instruction"];
 const xpathAxes = ["ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self",
   "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
 const xpathReverse = new Set(["ancestor", "ancestor-or-self", "preceding", "preceding-sibling"]);
-const asciiLower = (name) => name.replace(/[A-Z]/g, (c) => c.toLowerCase());
 
 // ---- its words
 
@@ -79,7 +77,7 @@ const textOfNumber = (number) => {
 };
 const stringValue = (node) => {
   if (node instanceof Attr) return node.value;
-  if (node !== document) return host("text", node[REF]);
+  if (!(node instanceof Document)) return host("text", node[REF]);
   return childrenOf(node, true).map((child) => host("text", child[REF])).join("");
 };
 const xpathString = (value) => {
@@ -139,33 +137,17 @@ const xpathCompares = (op, a, b) => {
 
 // ---- the tree, as XPath walks it
 
-// attributeOf is the one Attr of an attribute of an element: given when
-// a script handed its own as a context.
-const xpathAttrs = new WeakMap();
-const attributeOf = (element, name, value, given) => {
-  let kept = xpathAttrs.get(element);
-  if (!kept) xpathAttrs.set(element, kept = new Map());
-  const attr = given || kept.get(name) || new Attr(element, name, value);
-  if (kept.get(name) !== attr) {
-    kept.set(name, attr);
-    const colon = element[NS] ? name.indexOf(":") : -1;
-    const prefix = colon > 0 && name.slice(0, colon) in attrNamespaces ? name.slice(0, colon) : null;
-    attr.nodeType = 2;
-    attr.prefix = prefix;
-    attr.localName = prefix === null ? name : name.slice(colon + 1);
-    attr.namespaceURI = prefix !== null ? attrNamespaces[prefix] : element[NS] && name === "xmlns" ? XMLNS_NS : null;
-  }
-  attr.value = attr.nodeValue = value;
-  return attr;
-};
-const attributesOf = (element) => host("attrs", element[REF])
-  .map(([name, value]) => attributeOf(element, name, value)).filter((attr) => attr.namespaceURI !== XMLNS_NS);
+// An element's attributes are its own nodes (38-attrs.js); those that
+// declare a namespace are none of XPath's.
+const attributesOf = (element) => attrsIn(element)
+  .filter((attr) => attr.namespaceURI !== XMLNS_NS && !(element[NS] && attr.name === "xmlns"));
 
-const holdsNodes = (node) => node === document || node instanceof Element || node instanceof DocumentFragment;
+const holdsNodes = (node) => node instanceof Document || node instanceof Element || node instanceof DocumentFragment;
 // The document type is no node of XPath's.
 const childrenOf = (node, elements = false) => {
-  if (node === document) {
-    return host("top").map(wrap).filter((child) => (elements ? child instanceof Element : !(child instanceof DocumentType)));
+  if (node instanceof Document) {
+    return (node === document ? host("top").map(wrap) : kidsOf(node))
+      .filter((child) => (elements ? child instanceof Element : !(child instanceof DocumentType)));
   }
   return holdsNodes(node) ? host("children", node[REF], elements).map(wrap) : [];
 };
@@ -247,7 +229,7 @@ const xpathForget = () => {
 const rootOf = (node) => {
   if (xpathRoot === null) {
     xpathRoot = elementOf(node);
-    for (let up = parentOf(xpathRoot); up; up = parentOf(up)) xpathRoot = up;
+    for (let up = xpathRoot && parentOf(xpathRoot); up; up = parentOf(up)) xpathRoot = up;
   }
   return xpathRoot;
 };
@@ -286,7 +268,7 @@ const inOrder = (nodes) => {
 const apart = (nodes) => {
   for (let i = 1; i < nodes.length; i++) {
     const before = nodes[i - 1], node = nodes[i];
-    if (node instanceof Attr || (holdsNodes(before) && (before === document || host("contains", before[REF], node[REF])))) {
+    if (node instanceof Attr || (holdsNodes(before) && (before instanceof Document || host("contains", before[REF], node[REF])))) {
       return false;
     }
   }
@@ -295,6 +277,9 @@ const apart = (nodes) => {
 
 // ---- steps
 
+// asWritten reports whether an element is matched by its name as it
+// is written: one that is not HTML's, or is in a document of XML.
+const asWritten = (element) => Boolean(element[NS] || inXML(element));
 // xpathMatcher is a node test, for the nodes of an axis.
 const xpathMatcher = (axis, { kind, local, lower, ns }) => {
   if (kind === "node") return () => true;
@@ -303,11 +288,11 @@ const xpathMatcher = (axis, { kind, local, lower, ns }) => {
   if (kind !== "name" || axis === "namespace") return () => false;
   if (axis === "attribute") {
     if (local === "*") return (attr) => ns === null || attr.namespaceURI === ns;
-    return (attr) => (ns === null && attr.namespaceURI === null && !attr.ownerElement[NS] ? attr.localName === lower
+    return (attr) => (ns === null && attr.namespaceURI === null && !asWritten(attr.ownerElement) ? attr.localName === lower
       : attr.localName === local && attr.namespaceURI === ns);
   }
   if (local === "*") return (node) => node instanceof Element && (ns === null || node.namespaceURI === ns);
-  return (node) => node instanceof Element && (node[NS] ? node[TAG] === local && node.namespaceURI === ns
+  return (node) => node instanceof Element && (asWritten(node) ? node[TAG] === local && node.namespaceURI === ns
     : node[TAG] === lower && (ns === null || ns === HTML_NS));
 };
 // A step also knows the shorter ways to its nodes: the elements under
@@ -366,9 +351,9 @@ const steppedFrom = (step, node) => {
   if (step.selector && holdsNodes(node)) {
     nodes = host("query", node[REF], step.selector, true).map(wrap).filter(step.matches);
     if (step.axis === "descendant-or-self" && step.matches(node)) nodes.unshift(node);
-  } else if (step.attribute && node instanceof Element && !node[NS]) {
-    const value = host("attr", node[REF], step.attribute);
-    nodes = value === null ? [] : [attributeOf(node, step.attribute, value)];
+  } else if (step.attribute && node instanceof Element && !asWritten(node)) {
+    const attr = attrNamed(node, step.attribute);
+    nodes = attr === null ? [] : [attr];
   } else if (step.axis === "child") {
     nodes = childrenOf(node, step.elements).filter(step.matches);
   } else {
@@ -399,7 +384,7 @@ const xpathFunctions = {
     const root = rootOf(node);
     const found = [];
     for (const id of new Set(ids.filter(Boolean))) {
-      if (root === document) found.push(document.getElementById(id));
+      if (root instanceof Document) found.push(root.getElementById(id));
       else if (root instanceof Element && root.id === id) found.push(root);
       else if (!(root instanceof CharacterData)) found.push(root.querySelector(`[id="${CSS.escape(id)}"]`));
     }
@@ -410,7 +395,7 @@ const xpathFunctions = {
   "namespace-uri": ["string", "nodes?", (node, position, size, nodes = [node]) => firstNamed(nodes, (n) => (
     n instanceof Element || n instanceof Attr ? n.namespaceURI || "" : ""))],
   name: ["string", "nodes?", (node, position, size, nodes = [node]) => firstNamed(nodes, (n) => (n instanceof Element
-    ? n[TAG] : n instanceof Attr ? n.name : ""))],
+    ? (n.prefix ? n.prefix + ":" : "") + n[TAG] : n instanceof Attr ? n.name : ""))],
   string: ["string", "any?", (node, position, size, value = [node]) => xpathString(value)],
   concat: ["string", "string string string*", (node, position, size, ...texts) => texts.join("")],
   "starts-with": ["boolean", "string string", (node, position, size, text, start) => text.startsWith(start)],
@@ -450,7 +435,7 @@ const xpathFunctions = {
     for (let at = elementOf(node); at; at = at.parentNode) {
       const said = at instanceof Element && attributesOf(at).find((a) => a.namespaceURI === XML_NS && a.localName === "lang");
       if (!said) continue;
-      const lang = said.value.toLowerCase(), want = wanted.toLowerCase();
+      const lang = asciiLower(said.value), want = asciiLower(wanted);
       return lang === want || lang.startsWith(want + "-");
     }
     return false;
@@ -478,12 +463,14 @@ const xpathTree = (source, resolver) => {
   const take = (type) => accept(type) || fail(`'${type}' is missing`);
   const namespace = (prefix) => {
     let uri = null;
-    if (typeof resolver === "function") uri = resolver(prefix);
-    else if (resolver && typeof resolver.lookupNamespaceURI === "function") uri = resolver.lookupNamespaceURI(prefix);
-    if (uri === null || uri === undefined || uri === "") {
-      throw new DOMException(`'${source}' has a prefix, '${prefix}', that names no namespace.`, "NamespaceError");
+    try {
+      if (typeof resolver === "function") uri = resolver(prefix);
+      else if (resolver !== null && resolver !== undefined) uri = resolver.lookupNamespaceURI(prefix);
+      if (uri !== null && uri !== undefined) return typeof uri === "string" ? uri : `${uri}`;
+    } catch (error) {
+      report(error);
     }
-    return String(uri);
+    throw new DOMException(`'${source}' has a prefix, '${prefix}', that names no namespace.`, "NamespaceError");
   };
   const nodes = (e, what) => (e.returns === "nodes" ? e : fail(`${what} is not a node-set`));
 
@@ -638,7 +625,7 @@ const xpathValue = (e, node, position, size) => {
     }
     case "call": return e.run(node, position, size, ...e.args.map((arg, i) => e.as[i](of(arg))));
     case "path": {
-      let nodes = e.start ? of(e.start) : [e.absolute ? rootOf(node) : node];
+      let nodes = e.start ? of(e.start) : [e.absolute ? rootOf(node) : node].filter(Boolean);
       for (const filter of e.filters) nodes = sifted(nodes, filter);
       for (const step of e.steps) nodes = stepped(step, nodes);
       return nodes;
@@ -732,12 +719,11 @@ define(XPathResult.prototype, xpathTypes);
 // xpathResult evaluates a tree from a context node: a node of the
 // page's, or an Attr of one of its elements.
 const xpathResult = (tree, context, type) => {
-  const attribute = context instanceof Attr && context.ownerElement instanceof Element;
+  const attribute = context instanceof Attr;
   if (!attribute && (!(context instanceof Node) || context[REF] === undefined)) throw new TypeError("The context is not a Node.");
   if (context instanceof DocumentType) throw new DOMException("A document type is no context of XPath's.", "NotSupportedError");
   type = type === undefined ? ANY_TYPE : Number(type);
   if (!Object.values(xpathTypes).includes(type)) throw new DOMException(`${type} is no type of result.`, "NotSupportedError");
-  if (attribute) context = attributeOf(context.ownerElement, context.name, context.value, context);
   xpathForget();
   try {
     return new XPathResult(token, xpathValue(tree, context, 1, 1), type, context);

@@ -17,21 +17,13 @@ class HTMLElement extends Element {
   get offsetTop() { return Math.round(host("box", this[REF])[1] + window.scrollY); }
   get offsetParent() { return this === document.body || !this.isConnected ? null : document.body; }
   get isContentEditable() { return false; }
-  get contentEditable() { return this.getAttribute("contenteditable") || "inherit"; }
-  set contentEditable(value) { this.setAttribute("contenteditable", value); }
   focus() { host("focus", this[REF]); }
   blur() { host("blur", this[REF]); }
   click() {
     const event = new MouseEvent("click", { bubbles: true, cancelable: true, composed: true });
     if (dispatch(this, event)) host("activate", this[REF]);
   }
-  get nonce() { return this.getAttribute("nonce") || ""; }
-  set nonce(value) { this.setAttribute("nonce", value); }
 }
-reflect(HTMLElement.prototype, {
-  title: "title", lang: "lang", dir: "dir", hidden: ["hidden", false], tabIndex: ["tabindex", -1],
-  accessKey: "accesskey", draggable: ["draggable", false], role: "role", inert: ["inert", false],
-});
 withHandlers(HTMLElement.prototype);
 class HTMLUnknownElement extends HTMLElement {}
 
@@ -41,25 +33,12 @@ const absolute = (reference) => {
   const parsed = host("url", String(reference), document.baseURI);
   return parsed ? parsed.href : String(reference);
 };
-// located makes a property an address, absolute when read.
-const located = (prototype, properties) => {
-  for (const name of Object.keys(properties)) {
-    const attribute = properties[name];
-    Object.defineProperty(prototype, name, {
-      get() { return absolute(this.getAttribute(attribute)); },
-      set(value) { this.setAttribute(attribute, value); },
-      configurable: true, enumerable: true,
-    });
-  }
-};
 // formOf is the form a control is in.
 const formOf = { get() { return this.closest("form"); }, configurable: true };
 
 class HTMLAnchorElement extends HTMLElement {
   toString() { return this.href; }
 }
-located(HTMLAnchorElement.prototype, { href: "href" });
-reflect(HTMLAnchorElement.prototype, { target: "target", rel: "rel", download: "download", hreflang: "hreflang", type: "type" });
 for (const part of ["protocol", "host", "hostname", "port", "pathname", "search", "hash", "origin"]) {
   Object.defineProperty(HTMLAnchorElement.prototype, part, {
     get() {
@@ -82,8 +61,6 @@ class HTMLImageElement extends HTMLElement {
   get currentSrc() { return absolute(host("shownSrc", this[REF])); }
   decode() { return Promise.resolve(); }
 }
-located(HTMLImageElement.prototype, { src: "src" });
-reflect(HTMLImageElement.prototype, { alt: "alt", srcset: "srcset", sizes: "sizes", loading: "loading", crossOrigin: "crossorigin" });
 
 // valued is the value, the state and the selection of a form control,
 // which ui keeps apart from its attributes.
@@ -92,12 +69,8 @@ const valued = {
     get() { return host("value", this[REF]); },
     set(value) { host("setValue", this[REF], value === null ? "" : String(value)); },
   },
-  defaultValue: {
-    get() { return this.getAttribute("value") || ""; },
-    set(value) { this.setAttribute("value", value); },
-  },
   form: formOf,
-  labels: { get() { return this.id ? document.querySelectorAll(`label[for="${CSS.escape(this.id)}"]`) : new NodeList(); } },
+  labels: { get() { return this.id ? document.querySelectorAll(`label[for="${CSS.escape(this.id)}"]`) : nodeList([]); } },
   validity: { get() { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, customError: false }; } },
   validationMessage: { get() { return ""; } },
   willValidate: { get() { return false; } },
@@ -111,15 +84,10 @@ const valuedMethods = {
   select() { host("select", this[REF], 0, -1); },
   setSelectionRange(from, to) { host("select", this[REF], Number(from) || 0, Number(to) || 0); },
 };
-const control = { name: "name", disabled: ["disabled", false], required: ["required", false], autofocus: ["autofocus", false] };
 
 class HTMLInputElement extends HTMLElement {
-  get type() { return (this.getAttribute("type") || "text").toLowerCase(); }
-  set type(value) { this.setAttribute("type", value); }
   get checked() { return host("checked", this[REF]); }
   set checked(on) { host("setChecked", this[REF], Boolean(on)); }
-  get defaultChecked() { return this.hasAttribute("checked"); }
-  set defaultChecked(on) { this.toggleAttribute("checked", Boolean(on)); }
   get valueAsNumber() { return this.value === "" ? NaN : Number(this.value); }
   set valueAsNumber(value) { this.value = String(value); }
   get files() { return null; }
@@ -131,12 +99,6 @@ class HTMLInputElement extends HTMLElement {
 }
 accessors(HTMLInputElement.prototype, valued);
 define(HTMLInputElement.prototype, valuedMethods);
-reflect(HTMLInputElement.prototype, {
-  ...control, placeholder: "placeholder", readOnly: ["readonly", false], min: "min", max: "max", step: "step",
-  pattern: "pattern", maxLength: ["maxlength", -1], minLength: ["minlength", -1], size: ["size", 20],
-  autocomplete: "autocomplete", multiple: ["multiple", false], accept: "accept", alt: "alt",
-});
-located(HTMLInputElement.prototype, { src: "src" });
 
 class HTMLTextAreaElement extends HTMLElement {
   get type() { return "textarea"; }
@@ -147,45 +109,36 @@ define(HTMLTextAreaElement.prototype, valuedMethods);
 accessors(HTMLTextAreaElement.prototype, {
   defaultValue: { get() { return this.textContent; }, set(value) { this.textContent = value; } },
 });
-reflect(HTMLTextAreaElement.prototype, {
-  ...control, placeholder: "placeholder", readOnly: ["readonly", false], rows: ["rows", 2], cols: ["cols", 20],
-  maxLength: ["maxlength", -1], wrap: "wrap",
-});
 
-class HTMLButtonElement extends HTMLElement {
-  get type() {
-    const type = (this.getAttribute("type") || "submit").toLowerCase();
-    return ["submit", "reset", "button"].includes(type) ? type : "submit";
-  }
-  set type(value) { this.setAttribute("type", value); }
-}
+class HTMLButtonElement extends HTMLElement {}
 accessors(HTMLButtonElement.prototype, { form: formOf });
-reflect(HTMLButtonElement.prototype, { ...control, value: "value" });
 define(HTMLButtonElement.prototype, valuedMethods);
 
 class HTMLSelectElement extends HTMLElement {
   get type() { return this.multiple ? "select-multiple" : "select-one"; }
-  get options() { return HTMLCollection.from(this.querySelectorAll("option")); }
+  get options() {
+    return keptList(this, "options", () => liveList(HTMLOptionsCollection, () => foundIn(this, "option"), { select: this }));
+  }
   get length() { return this.options.length; }
   get selectedIndex() { return host("selected", this[REF]); }
   set selectedIndex(i) { host("setSelected", this[REF], Number(i)); }
   get selectedOptions() {
-    const chosen = this.options[this.selectedIndex];
-    return HTMLCollection.from(chosen ? [chosen] : []);
+    return keptList(this, "selectedOptions", () => liveList(HTMLCollection, () => {
+      const chosen = this.options[this.selectedIndex];
+      return chosen ? [chosen] : [];
+    }));
   }
   get value() {
     const chosen = this.options[this.selectedIndex];
     return chosen ? chosen.value : "";
   }
   set value(value) {
-    const options = this.options;
-    this.selectedIndex = options.findIndex((o) => o.value === String(value));
+    this.selectedIndex = itemsOf(this.options).findIndex((o) => o.value === String(value));
   }
   item(i) { return this.options.item(i); }
   add(option, before) { this.insertBefore(option, before instanceof Node ? before : null); }
 }
 accessors(HTMLSelectElement.prototype, { form: formOf });
-reflect(HTMLSelectElement.prototype, { ...control, multiple: ["multiple", false], size: ["size", 0] });
 define(HTMLSelectElement.prototype, valuedMethods);
 
 class HTMLOptionElement extends HTMLElement {
@@ -199,7 +152,7 @@ class HTMLOptionElement extends HTMLElement {
   get label() { return this.getAttribute("label") || this.text; }
   get index() {
     const select = this.closest("select");
-    return select ? select.options.indexOf(this) : 0;
+    return select ? itemsOf(select.options).indexOf(this) : 0;
   }
   get selected() {
     const select = this.closest("select");
@@ -210,15 +163,14 @@ class HTMLOptionElement extends HTMLElement {
     if (select && on) select.selectedIndex = this.index;
     else this.toggleAttribute("selected", Boolean(on));
   }
-  get defaultSelected() { return this.hasAttribute("selected"); }
 }
 accessors(HTMLOptionElement.prototype, { form: formOf });
-reflect(HTMLOptionElement.prototype, { disabled: ["disabled", false] });
 
 class HTMLFormElement extends HTMLElement {
   get elements() {
-    const controls = this.querySelectorAll("input, select, textarea, button, fieldset, object, output");
-    return HTMLFormControlsCollection.from(controls.filter((n) => n.getAttribute("type") !== "image"));
+    return keptList(this, "elements", () => liveList(HTMLFormControlsCollection, () =>
+      foundIn(this, "input, select, textarea, button, fieldset, object, output")
+        .filter((n) => !(n[TAG] === "input" && ownAttr(n, "type") === "image"))));
   }
   get length() { return this.elements.length; }
   submit() { host("submit", this[REF], 0); }
@@ -240,11 +192,6 @@ byName(HTMLFormElement.prototype, (form, name) => {
   const control = form.elements.namedItem(name);
   return control || form.querySelector(`img[name="${CSS.escape(name)}"], img[id="${CSS.escape(name)}"]`);
 });
-located(HTMLFormElement.prototype, { action: "action" });
-reflect(HTMLFormElement.prototype, {
-  method: ["method", "get"], name: "name", target: "target", enctype: "enctype", noValidate: ["novalidate", false],
-  acceptCharset: "accept-charset", autocomplete: "autocomplete",
-});
 
 class HTMLLabelElement extends HTMLElement {
   get control() {
@@ -253,7 +200,6 @@ class HTMLLabelElement extends HTMLElement {
   }
 }
 accessors(HTMLLabelElement.prototype, { form: formOf });
-reflect(HTMLLabelElement.prototype, { htmlFor: "for" });
 
 class HTMLTemplateElement extends HTMLElement {
   get content() { return wrap(host("content", this[REF])); }
@@ -263,31 +209,19 @@ class HTMLScriptElement extends HTMLElement {
   set text(source) { this.textContent = source; }
   static supports(type) { return type === "classic" || type === "module" || type === "importmap"; }
 }
-located(HTMLScriptElement.prototype, { src: "src" });
-reflect(HTMLScriptElement.prototype, {
-  type: "type", async: ["async", false], defer: ["defer", false], noModule: ["nomodule", false],
-  crossOrigin: "crossorigin", integrity: "integrity", charset: "charset", referrerPolicy: "referrerpolicy",
-});
 class HTMLStyleElement extends HTMLElement {
   get sheet() { return null; }
 }
-reflect(HTMLStyleElement.prototype, { media: "media", type: "type" });
 class HTMLLinkElement extends HTMLElement {
   get sheet() { return null; }
-  get relList() { return new DOMTokenList(this, "rel"); }
 }
-located(HTMLLinkElement.prototype, { href: "href" });
-reflect(HTMLLinkElement.prototype, { rel: "rel", media: "media", type: "type", as: "as", crossOrigin: "crossorigin" });
 class HTMLMetaElement extends HTMLElement {}
-reflect(HTMLMetaElement.prototype, { name: "name", content: "content", httpEquiv: "http-equiv" });
 class HTMLTitleElement extends HTMLElement {
   get text() { return this.textContent; }
   set text(value) { this.textContent = value; }
 }
 class HTMLBaseElement extends HTMLElement {}
-located(HTMLBaseElement.prototype, { href: "href" });
 class HTMLDetailsElement extends HTMLElement {}
-reflect(HTMLDetailsElement.prototype, { open: ["open", false] });
 class HTMLDialogElement extends HTMLElement {
   show() { this.open = true; }
   showModal() { this.open = true; }
@@ -297,26 +231,17 @@ class HTMLDialogElement extends HTMLElement {
     dispatch(this, new Event("close"));
   }
 }
-reflect(HTMLDialogElement.prototype, { open: ["open", false] });
 class HTMLCanvasElement extends HTMLElement {
   getContext() { return null; }
   toDataURL() { return "data:,"; }
 }
-reflect(HTMLCanvasElement.prototype, { width: ["width", 300], height: ["height", 150] });
 // An iframe's window is the facade of 57-windows.js, whatever its
 // document's origin: light runs each frame's scripts in an engine of its
 // own, so a page reaches no document but its own.
 class HTMLIFrameElement extends HTMLElement {
   get contentWindow() { return windowOf(host("window", "of", this[REF])); }
-  get contentDocument() { return null; }
-  get sandbox() {
-    if (!this._sandbox) define(this, { _sandbox: new DOMTokenList(this, "sandbox") });
-    return this._sandbox;
-  }
-  set sandbox(value) { this.setAttribute("sandbox", value); }
+  get contentDocument() { return kinDocument(host("window", "of", this[REF])); }
 }
-located(HTMLIFrameElement.prototype, { src: "src" });
-reflect(HTMLIFrameElement.prototype, { srcdoc: "srcdoc", name: "name", width: "width", height: "height" });
 class HTMLMediaElement extends HTMLElement {
   play() { return Promise.reject(new DOMException("light plays no media.", "NotSupportedError")); }
   pause() {}
@@ -324,20 +249,20 @@ class HTMLMediaElement extends HTMLElement {
   canPlayType() { return ""; }
   get paused() { return true; }
 }
-located(HTMLMediaElement.prototype, { src: "src" });
 class HTMLVideoElement extends HTMLMediaElement {}
 class HTMLAudioElement extends HTMLMediaElement {}
 class HTMLTableElement extends HTMLElement {
-  get rows() { return HTMLCollection.from(this.querySelectorAll("tr")); }
-  get tBodies() { return HTMLCollection.from(this.querySelectorAll("tbody")); }
+  get rows() { return keptList(this, "rows", () => liveList(HTMLCollection, () => foundIn(this, "tr"))); }
+  get tBodies() { return keptList(this, "tBodies", () => liveList(HTMLCollection, () => foundIn(this, "tbody"))); }
 }
 class HTMLTableRowElement extends HTMLElement {
-  get cells() { return HTMLCollection.from(this.children.filter((c) => /^t[dh]$/.test(c.localName))); }
+  get cells() {
+    return keptList(this, "cells", () => liveList(HTMLCollection, () =>
+      itemsOf(this.children).filter((c) => /^t[dh]$/.test(c.localName))));
+  }
 }
 class HTMLTableCellElement extends HTMLElement {}
-reflect(HTMLTableCellElement.prototype, { colSpan: ["colspan", 1], rowSpan: ["rowspan", 1] });
 class HTMLProgressElement extends HTMLElement {}
-reflect(HTMLProgressElement.prototype, { value: ["value", 0], max: ["max", 1] });
 
 const named = (...names) => names.map((name) => ({ [name]: class extends HTMLElement {} })[name]);
 const [HTMLDivElement, HTMLSpanElement, HTMLParagraphElement, HTMLHeadingElement, HTMLUListElement, HTMLOListElement,
@@ -403,11 +328,14 @@ const validLocal = (name) => /^[A-Za-z][^\t\n\f\r \0/>]*$/.test(name) || /^[:_\u
 const validPrefix = (prefix) => prefix !== "" && !/[\t\n\f\r \0/>]/.test(prefix);
 const xmlNameStart = ":A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C\\u200D\\u2070-\\u218F" +
   "\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\uD800-\\uDB7F\\uDC00-\\uDFFF";
+const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const xmlName = new RegExp(`^[${xmlNameStart}][-.0-9\\u00B7\\u0300-\\u036F\\u203F\\u2040${xmlNameStart}]*$`);
 const invalid = (what, name) => { throw new DOMException(`The ${what} provided ('${name}') is not a valid name.`, "InvalidCharacterError"); };
-// qualified is a qualified name in a namespace as light keeps it: the
-// namespace as the tree names it, and the local name.
-const qualified = (uri, name) => {
+// namedIn is a qualified name checked against its namespace: the
+// namespace, the prefix and the local name. qualified is one as light
+// keeps an element's: the namespace as the tree names it, and the
+// local name.
+const namedIn = (uri, name) => {
   uri = uri === null || uri === undefined || uri === "" ? null : String(uri);
   name = String(name);
   const colon = name.indexOf(":");
@@ -418,7 +346,11 @@ const qualified = (uri, name) => {
     ((name === "xmlns" || prefix === "xmlns") !== (uri === XMLNS_NAMESPACE))) {
     throw new DOMException(`The namespace '${uri}' does not go with the name '${name}'.`, "NamespaceError");
   }
-  return [spaceOf(uri), local, prefix];
+  return [uri, prefix, local];
+};
+const qualified = (uri, name) => {
+  const [space, prefix, local] = namedIn(uri, name);
+  return [spaceOf(space), local, prefix];
 };
 
 class Document extends Node {
@@ -447,7 +379,9 @@ class Document extends Node {
   get ownerDocument() { return null; }
   get isConnected() { return true; }
   get parentNode() { return null; }
-  get children() { return HTMLCollection.from(this.childNodes.filter((n) => n instanceof Element)); }
+  get children() {
+    return keptList(this, "children", () => liveList(HTMLCollection, () => kidsOf(this).filter((n) => n instanceof Element)));
+  }
   get firstElementChild() { return this.documentElement; }
   get lastElementChild() { return this.documentElement; }
   get childElementCount() { return this.children.length; }
@@ -460,7 +394,7 @@ class Document extends Node {
   get body() { return wrap(host("document", "parts", this[REF])[2]); }
   set body(_) {}
   get scrollingElement() { return this[PAGE] ? this.documentElement : null; }
-  get defaultView() { return this[PAGE] ? window : null; }
+  get defaultView() { return this[PAGE] ? kinView() : null; }
   get location() { return this[PAGE] ? window.location : null; }
   set location(address) { if (this[PAGE]) window.location.href = address; }
   get URL() { return this[PAGE] ? window.location.href : infoOf(this)[2] || "about:blank"; }
@@ -478,7 +412,7 @@ class Document extends Node {
   get inputEncoding() { return "UTF-8"; }
   get compatMode() { return this[PAGE] || infoOf(this)[1] || this.doctype ? "CSS1Compat" : "BackCompat"; }
   get contentType() { return infoOf(this)[0]; }
-  get doctype() { return this.childNodes.find((n) => n instanceof DocumentType) || null; }
+  get doctype() { return kidsOf(this).find((n) => n instanceof DocumentType) || null; }
   get hidden() { return !this[PAGE]; }
   get visibilityState() { return this[PAGE] ? "visible" : "hidden"; }
   get fullscreenElement() { return null; }
@@ -505,12 +439,15 @@ class Document extends Node {
   set cookie(text) { if (this[PAGE]) host("setCookie", String(text)); }
   get activeElement() { return (this[PAGE] && wrap(host("active"))) || this.body; }
   hasFocus() { return Boolean(this[PAGE]); }
-  get scripts() { return HTMLCollection.from(this.querySelectorAll("script")); }
-  get forms() { return HTMLCollection.from(this.querySelectorAll("form")); }
-  get images() { return HTMLCollection.from(this.querySelectorAll("img")); }
-  get links() { return HTMLCollection.from(this.querySelectorAll("a[href]")); }
-  get anchors() { return HTMLCollection.from(this.querySelectorAll("a[name]")); }
-  get all() { return HTMLCollection.from(this.querySelectorAll("*")); }
+  get scripts() { return selected(this, "scripts", "script"); }
+  get forms() { return selected(this, "forms", "form"); }
+  get images() { return selected(this, "images", "img"); }
+  get embeds() { return selected(this, "embeds", "embed"); }
+  get plugins() { return selected(this, "embeds", "embed"); }
+  get links() { return selected(this, "links", "a[href], area[href]"); }
+  get anchors() { return selected(this, "anchors", "a[name]"); }
+  get all() { return selected(this, "all", "*", HTMLAllCollection); }
+  get applets() { return keptList(this, "applets", () => liveList(HTMLCollection, () => [])); }
   get implementation() {
     if (!this._implementation) define(this, { _implementation: new DOMImplementation(token, this) });
     return this._implementation;
@@ -522,11 +459,12 @@ class Document extends Node {
   getElementsByTagName(tag) { return tagged(this, tag); }
   getElementsByTagNameNS(uri, tag) { return tagged(this, tag, uri === "*" ? "*" : spaceOf(uri)); }
   getElementsByClassName(names) {
-    const classes = String(names).split(/\s+/).filter(Boolean);
-    if (!classes.length) return new HTMLCollection();
-    return HTMLCollection.from(this.querySelectorAll(classes.map((c) => "." + CSS.escape(c)).join("")));
+    return classed(this, names);
   }
-  getElementsByName(name) { return this.querySelectorAll(`[name="${CSS.escape(String(name))}"]`); }
+  getElementsByName(name) {
+    const selector = `[name="${CSS.escape(String(name))}"]`;
+    return liveList(NodeList, () => foundIn(this, selector).filter((n) => n instanceof HTMLElement));
+  }
   // An element a document of HTML makes is named in lower case, and one
   // a document of XML makes as it is written: in HTML's namespace for
   // XHTML, in none for another type.
@@ -534,7 +472,7 @@ class Document extends Node {
     tag = String(tag);
     if (!validLocal(tag)) invalid("tag name", tag);
     const [media, xml] = infoOf(this);
-    return wrap(host("create", xml ? tag : tag.toLowerCase(), !xml || media === "application/xhtml+xml" ? "" : NO_NS, this[REF]));
+    return wrap(host("create", xml ? tag : asciiLower(tag), !xml || media === "application/xhtml+xml" ? "" : NO_NS, this[REF]));
   }
   createElementNS(uri, name) {
     const [space, local, prefix] = qualified(uri, name);
@@ -553,18 +491,9 @@ class Document extends Node {
   createProcessingInstruction(target, text) {
     target = String(target);
     text = String(text);
-    if (!xmlName.test(target)) invalid("target", target);
+    if (!xmlName.test(target) || loneSurrogate.test(target)) invalid("target", target);
     if (text.includes("?>")) throw new DOMException("A processing instruction cannot hold '?>'.", "InvalidCharacterError");
     return wrap(host("document", "pi", target, text, this[REF]));
-  }
-  createAttribute(name) {
-    name = String(name);
-    if (name === "" || /[\t\n\f\r \0/=>]/.test(name)) invalid("attribute name", name);
-    return new Attr(null, infoOf(this)[1] ? name : name.toLowerCase(), "");
-  }
-  createAttributeNS(uri, name) {
-    qualified(uri, name);
-    return new Attr(null, String(name), "");
   }
   createEvent(kind) {
     const constructors = { customevent: CustomEvent, mouseevent: MouseEvent, mouseevents: MouseEvent,
@@ -582,6 +511,7 @@ class Document extends Node {
   }
   adoptNode(node) {
     if (node instanceof Document) throw new DOMException("The node provided is of type '#document', which may not be adopted.", "NotSupportedError");
+    if (node instanceof Attr) return attrAdopted(this, node);
     const ref = refOf(node);
     detach(node);
     host("document", "adopt", this[REF], ref);
@@ -687,7 +617,7 @@ class TreeWalker {
     return null;
   }
   firstChild() {
-    for (const child of this.currentNode.childNodes) {
+    for (const child of kidsOf(this.currentNode)) {
       if (this._accepts(child) === FILTER_ACCEPT) {
         this.currentNode = child;
         return child;

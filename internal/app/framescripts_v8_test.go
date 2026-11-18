@@ -56,7 +56,7 @@ func (s *shown) becomes(from, expression, want string) {
 }
 
 func TestTheScriptsOfAFramesDocumentRun(t *testing.T) {
-	base := script.Live()
+	base, baseContexts := script.Live(), script.Contexts()
 	f, transport := framingOf(t, map[string]answer{
 		"site.test/": html(`<body style="margin:0"><iframe id="one" src="https://other.test/inner" width="400"
 			height="120"></iframe><iframe id="plain" src="/plain"></iframe>
@@ -108,8 +108,9 @@ func TestTheScriptsOfAFramesDocumentRun(t *testing.T) {
 		t.Errorf("a sandboxed frame without allow-scripts shows %q; its script asked: %t", got, f.came("site.test/ran2"))
 	}
 	s.framedText("plain")
-	if got := script.Live() - base; got != 3 {
-		t.Errorf("%d engines run, want 3: the page's and those of the two frames that have scripts", got)
+	if engines, documents := script.Live()-base, script.Contexts()-baseContexts; engines != 2 || documents != 3 {
+		t.Errorf("%d engines run %d documents, want 2 and 3: the page's, and one for the two frames of another site "+
+			"that have scripts, which are of one origin", engines, documents)
 	}
 	for at, want := range map[string]map[string]string{
 		"other.test/data": {"Origin": "", "Referer": "https://other.test/inner", "Sec-Fetch-Site": "same-origin",
@@ -379,7 +380,7 @@ func TestAFramesScriptsSendOtherFramesOnlyWhereTheyMay(t *testing.T) {
 }
 
 func TestAFrameThatFailsLeavesTheOthersRunning(t *testing.T) {
-	base := script.Live()
+	base, baseContexts := script.Live(), script.Contexts()
 	const ticking = `<script>window.ticks = 0; setInterval(() => { ticks++; }, 5);</script>`
 	_, transport := framingOf(t, map[string]answer{
 		"site.test/": html(`<iframe id="throws" src="https://other.test/throws"></iframe>
@@ -399,8 +400,8 @@ func TestAFrameThatFailsLeavesTheOthersRunning(t *testing.T) {
 	s.until("the frame that throws threw", func() bool { return s.consoleSays(console.Error, "thrown in a frame") })
 	s.frameAt("breaks").page.Doc.Body().Append(breaking())
 	s.until("the frame that broke light was emptied", func() bool { return s.consoleSays(console.Error, "drawn wrong") })
-	if got := script.Live() - base; got != 4 {
-		t.Errorf("%d engines run once a frame broke light, want 4", got)
+	if engines, documents := script.Live()-base, script.Contexts()-baseContexts; engines != 3 || documents != 4 {
+		t.Errorf("%d engines run %d documents once a frame broke light, want 3 and 4", engines, documents)
 	}
 	before := map[string]string{}
 	for _, id := range []string{"", "throws", "spins", "fine"} {
@@ -425,7 +426,7 @@ func TestAFrameThatFailsLeavesTheOthersRunning(t *testing.T) {
 }
 
 func TestFramesThatComeAndGoLeaveNoEngineBehind(t *testing.T) {
-	base := script.Live()
+	base, baseContexts := script.Live(), script.Contexts()
 	_, transport := framingOf(t, map[string]answer{
 		"site.test/": html(`<p id="said"></p><script>
 			addEventListener("message", (e) => { document.getElementById("said").textContent = e.data; });
@@ -448,14 +449,15 @@ func TestFramesThatComeAndGoLeaveNoEngineBehind(t *testing.T) {
 		s.does("", `add(`+itoa(n)+`)`)
 		s.until("the frame said it was ready", func() bool { return s.pageText("said") == "ready "+itoa(n) })
 		s.running("deep")
-		if got := script.Live() - base; got != 3 {
-			t.Fatalf("round %d: %d engines run, want 3", n, got)
+		if engines, documents := script.Live()-base, script.Contexts()-baseContexts; engines != 2 || documents != 3 {
+			t.Fatalf("round %d: %d engines run %d documents, want 2 and 3", n, engines, documents)
 		}
 		s.does("", `drop()`)
 		s.frame()
 		s.frame()
-		if got := script.Live() - base; got != 1 {
-			t.Fatalf("round %d: %d engines run once the frame was removed, want the page's alone", n, got)
+		if engines, documents := script.Live()-base, script.Contexts()-baseContexts; engines != 1 || documents != 1 {
+			t.Fatalf("round %d: %d engines run %d documents once the frame was removed, want the page's alone", n, engines,
+				documents)
 		}
 	}
 	cycle(0)
@@ -481,8 +483,8 @@ func TestFramesThatComeAndGoLeaveNoEngineBehind(t *testing.T) {
 	s.running("made", "deep")
 	s.OpenInNewTab(tabs.Home)
 	s.frame()
-	if got := script.Live() - base; got != 3 {
-		t.Errorf("%d engines are kept for a tab that is not shown, want 3", got)
+	if engines, documents := script.Live()-base, script.Contexts()-baseContexts; engines != 2 || documents != 3 {
+		t.Errorf("%d engines and %d documents are kept for a tab that is not shown, want 2 and 3", engines, documents)
 	}
 	s.shut()
 	if got := script.Live() - base; got != 0 {

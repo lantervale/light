@@ -71,8 +71,10 @@ type Tree struct {
 	Submit func(form, submitter *ui.Node)
 	// handlers is whether an element of the page has a script's handler.
 	handlers bool
-	// xml is a page read by XML's rules (documents.go).
-	xml bool
+	// xml is a page read by XML's rules (documents.go), and prefixes
+	// what its elements were written with.
+	xml      bool
+	prefixes Prefixes
 }
 
 // Scripted reports whether the page has anything for a script engine to
@@ -491,15 +493,9 @@ func (t *Tree) SetData(n *html.Node, data string) {
 	}
 }
 
-// called reports whether a is the attribute scripts know by name: its
-// key, after its namespace when it has one (xlink:href).
-func called(a html.Attribute, name string) bool {
-	if a.Namespace == "" {
-		return a.Key == name
-	}
-	return len(name) == len(a.Namespace)+1+len(a.Key) && strings.HasPrefix(name, a.Namespace+":") &&
-		strings.HasSuffix(name, a.Key)
-}
+// called reports whether a is the attribute scripts know by name: the
+// one its markup writes (xlink:href).
+func called(a html.Attribute, name string) bool { return QualifiedAttr(a) == name }
 
 // Attr is n's attribute name, and whether it has one. What ui sets
 // itself as the page is used, a details' open, is read from it.
@@ -535,6 +531,11 @@ func (t *Tree) SetAttr(n *html.Node, name, value string) {
 func (t *Tree) RemoveAttr(n *html.Node, name string) {
 	n.Attr = slices.DeleteFunc(n.Attr, func(a html.Attribute) bool { return called(a, name) })
 	t.redraw(n)
+	t.unset(n, name)
+}
+
+// unset takes an attribute n lost off what ui has of it.
+func (t *Tree) unset(n *html.Node, name string) {
 	u := t.shown[n]
 	switch {
 	case u == nil:

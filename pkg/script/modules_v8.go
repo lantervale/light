@@ -85,10 +85,18 @@ func (c *context) importing() error {
 	if err != nil {
 		return err
 	}
-	call := v8.NewFunctionTemplateWithError(c.iso, c.imported).GetFunction(c.ctx)
-	resolve := v8.NewFunctionTemplateWithError(c.iso, c.resolved).GetFunction(c.ctx)
-	defer call.Release()
-	defer resolve.Release()
+	asked, answered := v8.NewFunctionTemplateWithError(c.iso, c.imported).GetFunction(c.ctx),
+		v8.NewFunctionTemplateWithError(c.iso, c.resolved).GetFunction(c.ctx)
+	defer asked.Release()
+	defer answered.Release()
+	call, err := c.fenced(asked)
+	if err != nil {
+		return err
+	}
+	resolve, err := c.fenced(answered)
+	if err != nil {
+		return err
+	}
 	_, err = fn.Call(v8.Undefined(c.iso), call, resolve)
 	return err
 }

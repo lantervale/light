@@ -246,7 +246,7 @@ func TestDOMParserReadsADocumentByItsType(t *testing.T) {
 			x.serializeToString((p => { p.innerHTML = "a<br>b"; p.title = '"<'; return p })(document.createElement("p"))),
 			x.serializeToString(document.createTextNode("a<b")),
 			x.serializeToString(document.implementation.createDocumentType("html", "p", "s"))].join("|"))(new XMLSerializer())`,
-			`<r a="1"><b/>t<![CDATA[<]]><!--c--></r>|<p xmlns="http://www.w3.org/1999/xhtml" title="&quot;&lt;">a<br/>b</p>|` +
+			`<r a="1"><b/>t<![CDATA[<]]><!--c--></r>|<p xmlns="http://www.w3.org/1999/xhtml" title="&quot;&lt;">a<br />b</p>|` +
 				`a&lt;b|<!DOCTYPE html PUBLIC "p" "s">`},
 		{"markup in an XML document", `(d => { const r = d.documentElement; r.innerHTML = '<a x="1">t</a><b/>';
 			const read = [r.childNodes.length, r.firstChild.localName, r.firstChild.namespaceURI, r.firstChild.ownerDocument
@@ -441,7 +441,7 @@ func TestAPageOfXHTMLIsAnXMLDocumentToItsScripts(t *testing.T) {
 			box.lastChild.namespaceURI, box.lastChild.firstChild.localName].join() })(document.getElementById("box"))`,
 			"2,http://www.w3.org/1999/xhtml,3,ab & c,http://www.w3.org/2000/svg,g"},
 		{"and written as XML", `document.getElementById("box").innerHTML`,
-			`<p xmlns="http://www.w3.org/1999/xhtml">a<br/>b &amp; c</p><svg xmlns="http://www.w3.org/2000/svg"><g/></svg>`},
+			`<p xmlns="http://www.w3.org/1999/xhtml">a<br />b &amp; c</p><svg xmlns="http://www.w3.org/2000/svg"><g/></svg>`},
 		{"markup that is not well-formed is refused whole", `(box => { const tries = ["<p>open", "a<br>b", "&nbsp;x",
 			"<x:y/>", "<ev:y/>"].map((markup) => {
 			try { box.innerHTML = markup; return "read" } catch (e) { return e.name } });
@@ -450,7 +450,7 @@ func TestAPageOfXHTMLIsAnXMLDocumentToItsScripts(t *testing.T) {
 		{"outerHTML and insertAdjacentHTML", `(box => { box.innerHTML = "<i/>"; box.firstChild.outerHTML = "<b>o</b><u/>";
 			box.insertAdjacentHTML("beforeend", "<s/>"); return [box.innerHTML.replace(/ xmlns="[^"]*"/g, ""),
 			box.firstChild.outerHTML].join() })(document.getElementById("box"))`,
-			`<b>o</b><u/><s/>,<b xmlns="http://www.w3.org/1999/xhtml">o</b>`},
+			`<b>o</b><u></u><s></s>,<b xmlns="http://www.w3.org/1999/xhtml">o</b>`},
 		{"createCDATASection and a processing instruction", `(box => { box.textContent = "";
 			box.appendChild(document.createCDATASection("<x>"));
 			return [box.firstChild.nodeType, box.innerHTML, document.createProcessingInstruction("t", "d").target].join() })(

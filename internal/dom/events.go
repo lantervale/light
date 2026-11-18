@@ -132,6 +132,9 @@ func (r *Runtime) submit(form, submitter *ui.Node) {
 // send sends form as the user asked, and tells the console of one
 // light does not send.
 func (r *Runtime) send(form, submitter *ui.Node) {
+	if !r.sends("", true) {
+		return
+	}
 	if err := r.tree.Send(form, submitter); err != nil {
 		r.unsent(err)
 	}
@@ -152,6 +155,7 @@ func (r *Runtime) submitForm(form *ui.Node, a arguments) (any, error) {
 	switch {
 	case err != nil:
 		r.unsent(err)
+	case !r.sends(sent.Address, true):
 	case sent.Form != nil && r.host.Post != nil:
 		r.host.Post(sent)
 	case sent.Form == nil && r.host.Navigate != nil:
@@ -235,7 +239,7 @@ func (r *Runtime) activated(n *ui.Node, _ arguments) (any, error) {
 		return nothing()
 	}
 	href, _ := n.Attr("href")
-	if to := r.resolve(href); to != "" && !strings.HasPrefix(strings.TrimSpace(href), "#") {
+	if to := r.resolve(href); to != "" && !strings.HasPrefix(strings.TrimSpace(href), "#") && r.sends(to, false) {
 		r.host.Navigate(to, false)
 	}
 	return nothing()

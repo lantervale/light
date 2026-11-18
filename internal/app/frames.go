@@ -11,6 +11,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 
+	"github.com/lantervale/light/internal/dom"
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/content"
@@ -46,6 +47,8 @@ type frame struct {
 	live, admitted bool
 	key            string
 	sandbox        frames.Sandbox
+	// warned is the sandbox attribute the console was last warned of.
+	warned string
 	// page is the document it shows, nil for none, and load the one on
 	// its way.
 	page *web.Page
@@ -122,6 +125,9 @@ type framed struct {
 	// their number, and lastPort the number given last (frameports.go).
 	ports    map[int]*end
 	lastPort int
+	// kin are the documents of the page that share an engine, by what
+	// names them (framekin.go).
+	kin map[string]*dom.Kin
 }
 
 // frames are the frames of a page of the tab, made when first asked.
@@ -390,6 +396,11 @@ func (s *Screen) navigate(f *frame, q wanted) {
 	f.sandbox = frames.ParseSandbox(box, sandboxed)
 	if f.parent != nil {
 		f.sandbox = f.sandbox.Under(f.parent.sandbox)
+	}
+	if own := frames.ParseSandbox(box, sandboxed); own.On && own.Runs() && !own.Opaque() && box != f.warned {
+		f.warned = box
+		set.session.said.Add(console.Line{Level: console.Warn, Text: "An iframe which has both allow-scripts and " +
+			"allow-same-origin for its sandbox attribute can escape its sandboxing."})
 	}
 	kind := frames.Shown(q.ref, q.isInline)
 	if q.form != nil {
@@ -679,8 +690,10 @@ func (s *Screen) target(f *frame, target, address string) (*frame, bool) {
 			return f, true
 		}
 	}
-	f.set.session.said.Add(console.Line{Level: console.Error, Text: "Blocked opening '" + address + "' in a new " +
-		"window because the request was made in a sandboxed frame whose 'allow-popups' permission is not set."})
+	if !f.sandbox.On || !f.sandbox.Popups {
+		f.set.session.said.Add(console.Line{Level: console.Error, Text: "Blocked opening '" + address + "' in a new " +
+			"window because the request was made in a sandboxed frame whose 'allow-popups' permission is not set."})
+	}
 	return nil, false
 }
 
