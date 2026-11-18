@@ -1,0 +1,295 @@
+// Package netlog records the HTTP requests made through its Transport,
+// as a browser's network panel lists them: one row per request, each hop
+// of a redirect its own, with what was asked, what was answered, how much
+// and how long. A request is recorded in the Log its context carries
+// (With), from any goroutine.
+package netlog
+
+import (
+	"net/http"
+	"net/url"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+)
+
+// PreviewCap is how much of an answer's body a row keeps to be looked at.
+const PreviewCap = 256 << 10
+
+// Type is what a request fetched, as the panel groups them.
+type Type string
+
+const (
+	// Any is no type: every row passes a filter by it.
+	Any        Type = ""
+	Document   Type = "document"
+	Stylesheet Type = "stylesheet"
+	Image      Type = "image"
+	Font       Type = "font"
+	Other      Type = "other"
+)
+
+// TypeOf is the type of an answer of that media type, wanted when it
+// declares none, as a redirect or a failure does.
+func TypeOf(media string, wanted Type) Type {
+	switch {
+	case media == "":
+		return wanted
+	case media == "text/html" || media == "application/xhtml+xml":
+		return Document
+	case media == "text/css":
+		return Stylesheet
+	case strings.HasPrefix(media, "image/"):
+		return Image
+	case strings.HasPrefix(media, "font/") || strings.HasPrefix(media, "application/font"):
+		return Font
+	}
+	return Other
+}
+
+// Row is one request and its answer so far.
+type Row struct {
+	// ID numbers the rows of a Log from 1, in the order they were asked.
+	ID              int
+	Address, Method string
+	// Status is the answer's code and Reason its phrase, 0 and "" until
+	// it comes, and for a request that got none.
+	Status int
+	Reason string
+	// Err is why there is no answer, or why its body stopped: "cancelled"
+	// for a request stopped on purpose.
+	Err   string
+	Media string
+	// Type is what the answer is, by its media type; what was wanted
+	// while there is none, and for an error status, whose body is the
+	// server's word about it.
+	Type Type
+	// Initiator is who asked, as With named it.
+	Initiator string
+	// Size is the body's bytes read so far, as the client got them: after
+	// the transport undid a gzip encoding.
+	Size    int64
+	Started time.Time
+	// Took is how long the request has taken, to the end of its body once
+	// Done.
+	Took time.Duration
+	Done bool
+	// Remote is the address of the server's end of the connection.
+	Remote            string
+	Request, Response http.Header
+	// Preview is the first PreviewCap bytes of the body, Truncated when
+	// it went on.
+	Preview   []byte
+	Truncated bool
+	// From is the row whose redirect this request follows, 0 for none.
+	From int
+}
+
+// Failed reports whether the request got no answer, or an error status.
+func (r Row) Failed() bool { return r.Err != "" || r.Status >= http.StatusBadRequest }
+
+// Name is the last part of the row's address, with its query, or its host
+// for the root of a site.
+func (r Row) Name() string {
+	u, err := url.Parse(r.Address)
+	if err != nil || u.Host == "" {
+		return r.Address
+	}
+	trimmed := strings.TrimSuffix(u.Path, "/")
+	if trimmed == "" {
+		return u.Host
+	}
+	name := trimmed[strings.LastIndex(trimmed, "/")+1:] + u.Path[len(trimmed):]
+	if u.RawQuery != "" {
+		name += "?" + u.RawQuery
+	}
+	return name
+}
+
+// Log is the rows of one tab, oldest first, never more than its cap.
+type Log struct {
+	// mu guards every field below: requests end on their own goroutines
+	// while the panel reads.
+	mu      sync.Mutex
+	rows    []*Row
+	last    int
+	limit   int
+	dropped int
+	version uint64
+	// hops are the rows of redirects not yet followed, by their answer.
+	hops map[*http.Response]int
+}
+
+// New is an empty log keeping the last limit rows.
+func New(limit int) *Log { return &Log{limit: limit, hops: map[*http.Response]int{}} }
+
+// Rows is a copy of the rows as they stand.
+func (l *Log) Rows() []Row {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]Row, len(l.rows))
+	for i, r := range l.rows {
+		out[i] = *r
+	}
+	return out
+}
+
+// Row is the row numbered id, false once it is dropped or cleared.
+func (l *Log) Row(id int) (Row, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range l.rows {
+		if r.ID == id {
+			return *r, true
+		}
+	}
+	return Row{}, false
+}
+
+// Dropped is how many rows went past the cap since the log was cleared.
+func (l *Log) Dropped() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.dropped
+}
+
+// Version changes whenever a row does, so a reader knows to read again.
+func (l *Log) Version() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.version
+}
+
+// Clear empties the log. Requests on their way stay out of it.
+func (l *Log) Clear() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.rows, l.dropped = nil, 0
+	clear(l.hops)
+	l.version++
+}
+
+// add starts a row for a request and gives it to change.
+func (l *Log) add(r Row, follows *http.Response) *Row {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.last++
+	r.ID = l.last
+	if follows != nil {
+		r.From = l.hops[follows]
+		delete(l.hops, follows)
+	}
+	row := &r
+	l.rows = append(l.rows, row)
+	l.trim()
+	l.version++
+	return row
+}
+
+// trim drops the oldest rows past the cap, and counts them.
+func (l *Log) trim() {
+	if over := len(l.rows) - l.limit; over > 0 {
+		l.rows = slices.Delete(l.rows, 0, over)
+		l.dropped += over
+	}
+}
+
+// Limit is how many rows are kept.
+func (l *Log) Limit() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.limit
+}
+
+// SetLimit changes how many rows are kept, dropping the oldest past it.
+func (l *Log) SetLimit(limit int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.limit = limit
+	l.trim()
+	l.version++
+}
+
+// change changes a row under the log's lock.
+func (l *Log) change(row *Row, how func(r *Row)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	how(row)
+	l.version++
+}
+
+// redirected notes that resp, row's answer, sends the request elsewhere.
+func (l *Log) redirected(row *Row, resp *http.Response) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.hops[resp] = row.ID
+}
+
+// Chain is the hops of the redirect the row numbered id is part of, first
+// to last: that row alone when nothing redirected to it or from it.
+func Chain(rows []Row, id int) []Row {
+	byID := map[int]Row{}
+	next := map[int]int{}
+	for _, r := range rows {
+		byID[r.ID] = r
+		if r.From != 0 {
+			next[r.From] = r.ID
+		}
+	}
+	first := id
+	for byID[first].From != 0 {
+		if _, ok := byID[byID[first].From]; !ok {
+			break
+		}
+		first = byID[first].From
+	}
+	var chain []Row
+	for at, ok := first, true; ok; at, ok = next[at], next[at] != 0 {
+		if r, found := byID[at]; found {
+			chain = append(chain, r)
+		}
+	}
+	return chain
+}
+
+// Filter is the rows whose address holds text, whatever its case, and
+// whose type is kind; Other also takes fonts, as the panel's last chip.
+func Filter(rows []Row, text string, kind Type) []Row {
+	text = strings.ToLower(text)
+	var out []Row
+	for _, r := range rows {
+		typed := kind == Any || r.Type == kind || kind == Other && r.Type == Font
+		if typed && strings.Contains(strings.ToLower(r.Address), text) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// Total sums rows up.
+type Total struct {
+	Requests int
+	Bytes    int64
+	// Took is from the first request to the end of the last answer.
+	Took time.Duration
+}
+
+func Totals(rows []Row) Total {
+	var t Total
+	var first, last time.Time
+	for _, r := range rows {
+		t.Requests++
+		t.Bytes += r.Size
+		if first.IsZero() || r.Started.Before(first) {
+			first = r.Started
+		}
+		if end := r.Started.Add(r.Took); r.Done && end.After(last) {
+			last = end
+		}
+	}
+	if last.After(first) {
+		t.Took = last.Sub(first)
+	}
+	return t
+}

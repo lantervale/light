@@ -1,0 +1,27 @@
+version: '3'
+
+includes:
+    claude: .tk/claude/Taskfile.yaml #!tk
+    default: .tk/default/Taskfile.yaml #!tk
+    git: .tk/git/Taskfile.yaml #!tk
+    golangci: .tk/golangci/Taskfile.yaml #!tk
+    install: .tk/install/Taskfile.yaml #!tk
+    license: .tk/license/Taskfile.yaml #!tk
+    trufflehog: .tk/trufflehog/Taskfile.yaml #!tk
+
+dotenv:
+  - .env
+  - PROJECT
+  - .env.default
+
+tasks:
+  run:
+    desc: Run light (needs ember's WebGPU library, once - cd ../ember && task wgpu)
+    cmds:
+      - go run ./cmd/light {{.CLI_ARGS}}
+
+  test:
+    desc: Vet and test light (no GPU, no network)
+    cmds:
+      - go vet ./...
+      - go test ./...

@@ -1,4 +1,4 @@
-module github.com/lantervale/explorer
+module github.com/lantervale/light
 
 go 1.27.0
 
