@@ -334,6 +334,7 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 		Fetch:   func(q dom.Request, done func(dom.Response)) func() { return s.fetchFor(session, live, q, done) },
 		Cookies: s.jar.Page(live.address),
 		Storage: func(area string) dom.Storage { return s.storageIn(session, "", originOf(live.page.Address), area) },
+		Bases:   s.pageDatabases(live),
 		Windows: &windows{s: s, set: s.framesOf(tab, live.page)},
 		Viewport: func() (float32, float32) {
 			if s.host == nil {

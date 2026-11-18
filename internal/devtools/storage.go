@@ -2,12 +2,14 @@ package devtools
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/cookies"
+	"github.com/lantervale/light/pkg/idb"
 )
 
 const storageTab = "storage"
@@ -20,6 +22,8 @@ type Stored struct {
 	Cookies []cookies.Cookie
 	// Local is the site's localStorage, a key and its value each.
 	Local [][2]string
+	// Databases are the site's IndexedDB databases.
+	Databases []idb.Info
 }
 
 //nolint:gochecknoinits // the registration of the Storage tab
@@ -61,9 +65,37 @@ func newStorage(p *Panel) Tool {
 			if len(kept.Local) == 0 {
 				list.Append(ui.Div(ui.Class("dt-none"), ui.Text("The site stores nothing.")))
 			}
+			list.Append(ui.H4(ui.Text("IndexedDB")))
+			for _, db := range kept.Databases {
+				list.Append(pair(db.Name, "version "+strconv.FormatUint(db.Version, 10)))
+				for _, st := range db.Stores {
+					list.Append(stored(st))
+				}
+			}
+			if len(kept.Databases) == 0 {
+				list.Append(ui.Div(ui.Class("dt-none"), ui.Text("The site has no database.")))
+			}
 			p.SetFoot(fmt.Sprintf("%s keeps %d cookies for this page and %d keys", kept.Site, len(kept.Cookies),
 				len(kept.Local)))
 		}}
+}
+
+// stored is an object store of a database: its name, how many records
+// it holds and its indexes.
+func stored(st idb.StoreInfo) *ui.Node {
+	held := strconv.Itoa(st.Count) + " records"
+	if st.Count == 1 {
+		held = "1 record"
+	}
+	row := pair(st.Name, held)
+	names := make([]string, len(st.Indexes))
+	for i, x := range st.Indexes {
+		names[i] = x.Name
+	}
+	if len(names) > 0 {
+		row.Append(ui.Span(ui.Class("dt-about"), ui.Text("indexes "+strings.Join(names, ", "))))
+	}
+	return row
 }
 
 // about is a cookie's attributes in a line.

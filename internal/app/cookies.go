@@ -104,5 +104,6 @@ func (s *Screen) storedBy() devtools.Stored {
 		value, _ := area.Get(key)
 		kept.Local = append(kept.Local, [2]string{key, value})
 	}
+	kept.Databases = s.databasesIn("", origin).Databases()
 	return kept
 }

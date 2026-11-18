@@ -89,6 +89,8 @@ func (r *Runtime) table() map[string]op {
 		"text8":      decoded,
 		"body":       r.answered,
 		"random":     random,
+		// the site's databases (indexeddb.go)
+		"idb": r.idb,
 		// the other windows (windows.go)
 		"window":  r.window,
 		"origin":  func(arguments) (any, error) { return r.origin(), nil },

@@ -431,6 +431,7 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 		Steps:   set.tab.Len,
 		Fetch:   func(q dom.Request, done func(dom.Response)) func() { return s.fetchInFrame(f, live, q, done) },
 		Storage: func(area string) dom.Storage { return s.frameStorage(f, origin, area) },
+		Bases:   s.frameDatabases(f, origin),
 		Viewport: func() (float32, float32) {
 			if f.gone || f.in.Doc == nil {
 				return 0, 0

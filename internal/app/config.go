@@ -207,6 +207,7 @@ func configBody(s *Screen) []*ui.Node {
 		s.checkSetting("set-third-party-cookies", "Those of other sites than the page's too",
 			func(c *config.Config) *bool { return &c.ThirdPartyCookies }),
 		s.clearCookiesSetting(),
+		s.clearDatabasesSetting(),
 		ui.H2(ui.Text("Network")),
 		s.checkSetting("set-local-network", "Let pages reach this machine and the local network",
 			func(c *config.Config) *bool { return &c.LocalNetwork }),

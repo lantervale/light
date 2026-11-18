@@ -20,6 +20,7 @@ import (
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/idb"
 	"github.com/lantervale/light/pkg/script"
 )
 
@@ -169,6 +170,10 @@ type Host struct {
 	Origin    func() string
 	Sandboxed Sandboxed
 	Windows   Windows
+	// Bases is the IndexedDB databases of the page's site, asked for
+	// when a script first uses them; without them, they last as long
+	// as the page.
+	Bases func() *idb.Site
 }
 
 // Runtime is one page's scripts and what they see of the page.
@@ -224,7 +229,9 @@ type Runtime struct {
 	swept   time.Time
 	// activation is the click a script was told of last (events.go).
 	activation activation
-	closed     bool
+	// bases is the page's use of its site's databases (indexeddb.go).
+	bases  bases
+	closed bool
 }
 
 // New makes the Runtime of page, loaded with its scripts (web.Loader's
@@ -485,6 +492,7 @@ func (r *Runtime) Close() {
 			cancel()
 		}
 	}
+	r.unbased()
 	r.tree.Activate, r.tree.Heard, r.tree.Submit = nil, nil, nil
 	r.entry.Release()
 	r.ctx.Close()

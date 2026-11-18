@@ -259,4 +259,4 @@ const calls = {
   // console: $0, null for none.
   inspect(ref) { define(window, { $0: wrap(ref) }); },
 };
-return function light(call, ...args) { return calls[call](...args); };
+return entered(function light(call, ...args) { return calls[call](...args); });

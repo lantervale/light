@@ -18,6 +18,7 @@ import (
 	"github.com/lantervale/light/pkg/downloads"
 	"github.com/lantervale/light/pkg/fetch"
 	"github.com/lantervale/light/pkg/history"
+	"github.com/lantervale/light/pkg/idb"
 	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/localnet"
 	"github.com/lantervale/light/pkg/netlog"
@@ -61,6 +62,9 @@ type Profile struct {
 	// file.
 	sites  *storage.Store
 	stored *store
+	// bases is the IndexedDB databases of every site, which writes its
+	// own files.
+	bases *idb.Store
 	// jar is the cookies every request shares, and jarFile its file.
 	jar     *cookies.Jar
 	jarFile *store
@@ -132,6 +136,7 @@ func (p *Profile) restore() {
 	p.settings = &store{name: configFile, write: func(path string) error { return config.Save(path, p.config) }}
 	p.history = &store{name: historyFile, write: func(path string) error { return history.Save(path, p.visits) }}
 	p.sites = storage.New()
+	p.bases = idb.New(p.opts.Dir)
 	p.stored = &store{name: storageFile, write: func(path string) error { return p.sites.Save(path) }}
 	p.jar = cookies.New()
 	p.guard = &localnet.Guard{Base: p.opts.Transport, Space: p.opts.Space}
@@ -257,5 +262,5 @@ func (p *Profile) Close() error {
 		p.jarFile.touch()
 	}
 	return errors.Join(p.settings.flush(p.opts.Dir), p.history.flush(p.opts.Dir), p.saved.flush(p.opts.Dir),
-		p.stored.flush(p.opts.Dir), p.jarFile.flush(p.opts.Dir))
+		p.stored.flush(p.opts.Dir), p.jarFile.flush(p.opts.Dir), p.bases.Close())
 }
