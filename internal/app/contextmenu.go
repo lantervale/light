@@ -163,7 +163,7 @@ func (s *Screen) linkEntries(link string) []menu.Entry {
 
 func (s *Screen) addressEntries(opens, copies, address string) []menu.Entry {
 	return []menu.Entry{
-		{Label: opens, Do: func() { s.OpenInNewTab(address) }},
+		{Label: opens, Do: func() { s.openBehind(address) }},
 		{Label: copies, Do: func() { s.win.SetClipboard(address) }},
 	}
 }

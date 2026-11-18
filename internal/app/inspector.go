@@ -18,7 +18,7 @@ func (s *Screen) inspectorHost() inspector.Host {
 		Page:     s.inspected,
 		Input:    func() *input.State { return s.win.Input() },
 		Selected: func(*ui.Node) { s.name() },
-		Source:   func(address string, _ int) { s.OpenInNewTab(tabs.SourceOf(address)) },
+		Source:   func(address string, _ int) { s.openBehind(tabs.SourceOf(address)) },
 	}
 }
 

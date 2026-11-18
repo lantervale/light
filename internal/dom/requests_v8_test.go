@@ -400,10 +400,10 @@ func TestSendBeaconAndRequestsThatOutliveThePage(t *testing.T) {
 		}
 	}
 	if want := []string{
-		`POST https://stats.test/collect cors include true "seen=1" "text/plain;charset=UTF-8"`,
+		`POST https://stats.test/collect no-cors include true "seen=1" "text/plain;charset=UTF-8"`,
 		`POST https://site.test/beacon/blob cors include true "{}" "application/json"`,
-		`POST https://site.test/beacon/params cors include true "a=1" "application/x-www-form-urlencoded;charset=UTF-8"`,
-		`POST https://site.test/beacon/none cors include true "" ""`,
+		`POST https://site.test/beacon/params no-cors include true "a=1" "application/x-www-form-urlencoded;charset=UTF-8"`,
+		`POST https://site.test/beacon/none no-cors include true "" ""`,
 	}; !slices.Equal(beacons, want) {
 		t.Errorf("the beacons were\n%s\nwant\n%s", strings.Join(beacons, "\n"), strings.Join(want, "\n"))
 	}

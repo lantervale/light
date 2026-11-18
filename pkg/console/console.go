@@ -44,6 +44,9 @@ type Line struct {
 	// Count is how many times in a row it was said past the first.
 	Count int
 	At    time.Time
+	// Frame is the frame whose document said it, as a panel names it:
+	// "" for the tab's page.
+	Frame string
 }
 
 // Times is how many times in a row the line was said.
@@ -56,7 +59,7 @@ func (l Line) typed() bool { return l.Level == Input || l.Level == Result }
 // again reports whether next says what l did.
 func (l Line) again(next Line) bool {
 	return !l.typed() && l.Level == next.Level && l.Text == next.Text && l.Source == next.Source &&
-		l.Line == next.Line && l.Stack == next.Stack && l.Depth == next.Depth
+		l.Line == next.Line && l.Stack == next.Stack && l.Depth == next.Depth && l.Frame == next.Frame
 }
 
 // Where is the script and the line a Line is from, as short as a panel

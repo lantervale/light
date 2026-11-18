@@ -760,3 +760,35 @@ func TestAPageOfNoOriginAsksAsNull(t *testing.T) {
 	}
 	same(t, "a page of no origin", other.took(), []string{"POST /open Origin=null", "POST /null Origin=null"})
 }
+
+func TestAScriptOfADocumentWithNoOriginAsksAsNull(t *testing.T) {
+	o := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		echo(w, r)
+	})
+	b := browse(t, o.URL+"/sandboxed")
+	result, err := b.client.Script(cookies.Without(b.ctx()), fetch.Call{Method: "GET", Address: o.URL + "/data",
+		Page: b.page, Opaque: true})
+	if err != nil || result.Kind != fetch.Shared {
+		t.Fatalf("its own address answered %+v, %v; want an answer shared with all, read as another origin's", result,
+			err)
+	}
+	same(t, "what a document with no origin asked its own address", o.took(),
+		[]string{"GET /data Origin=null Referer=" + o.URL + "/sandboxed"})
+
+	for name, handle := range map[string]http.HandlerFunc{"not shared": echo, "shared with null": sharing} {
+		closed := serve(t, handle)
+		call := fetch.Call{Method: "GET", Address: closed.URL + "/data", Page: b.page, Opaque: true}
+		if blocked := b.blocked(call); !blocked.CORS {
+			t.Errorf("an answer %s was kept for %q", name, blocked.Why)
+		}
+	}
+}
+
+func TestAFramesRequestInTheClearIsRefusedUnderAPageThatIsNot(t *testing.T) {
+	b := browse(t, "http://frame.test/")
+	blocked := b.blocked(fetch.Call{Method: "GET", Address: "http://plain.test/data", Top: at(t, "https://top.test/")})
+	if !blocked.Mixed || blocked.Sent {
+		t.Errorf("the request was kept as %+v, want mixed content, nothing sent", blocked)
+	}
+}

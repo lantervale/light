@@ -99,30 +99,36 @@ func (s *Screen) end(session *session) {
 	}
 }
 
-// runScripts runs a frame of the shown page's scripts: it starts them
-// the first time, then tells them of the pointer and the keys. A page
-// with nothing to run has none until the console starts them. A tab
-// that is not shown runs nothing.
+// runScripts runs a frame of the scripts of the shown page, then of
+// each of its frames' documents: it gives them what they posted each
+// other, starts them the first time, then tells them of the pointer
+// and the keys. A document with nothing to run has none, the page's
+// until the console starts them. A tab that is not shown runs nothing.
 func (s *Screen) runScripts() {
 	defer s.settle()
 	tab, session := s.browser.Tab(), s.session()
 	page := session.pages[tab.Current()]
-	live := session.scripts
-	if s.host == nil || page == nil || page.Err != nil || live == nil && !page.Scripted() {
+	if s.host == nil || page == nil || page.Err != nil {
 		return
 	}
-	if live == nil {
-		if live = s.start(tab, session, page); live == nil {
-			return
+	set := session.frames[page]
+	if set != nil {
+		set.deliver()
+	}
+	live := session.scripts
+	if live == nil && page.Scripted() {
+		live = s.start(tab, session, page)
+	}
+	if live != nil && live.page == page {
+		if live.at != tab.Current() {
+			live.at = tab.Current()
+			live.rt.Arrived(live.at)
 		}
+		live.rt.Frame()
 	}
-	if live.at != tab.Current() {
-		live.at = tab.Current()
-		live.rt.Arrived(live.at)
-	}
-	live.rt.Frame()
-	s.click(live)
-	s.keys(live)
+	s.runFrames(set)
+	s.click(page, set)
+	s.keys(set)
 }
 
 // settle does what scripts asked of the tab while they ran.
@@ -154,10 +160,28 @@ func (s *Screen) start(tab *tabs.Tab, session *session, page *web.Page) *running
 	return live
 }
 
-// click tells the scripts of a click in their page: the left button
-// released over the element it was pressed on. The page is asked what is
-// under the pointer only as the button goes down or comes up.
-func (s *Screen) click(live *running) {
+// scripted are the scripts that run in the shown page and its frames.
+func (s *Screen) scripted(set *framed) []*running {
+	var all []*running
+	if live := s.session().scripts; live != nil {
+		all = append(all, live)
+	}
+	if set != nil {
+		for _, f := range set.all {
+			if f.run != nil {
+				all = append(all, f.run)
+			}
+		}
+	}
+	return all
+}
+
+// click tells the scripts of a click in their document, the page's or
+// a frame's: the left button released over the element it was pressed
+// on. The page is asked what is under the pointer only as the button
+// goes down or comes up, and the scripts of one document never hear of
+// a click in another.
+func (s *Screen) click(page *web.Page, set *framed) {
 	in := s.win.Input()
 	pressed, released := in.Pressed(input.MouseLeft), in.Released(input.MouseLeft)
 	if !pressed && !released {
@@ -165,18 +189,31 @@ func (s *Screen) click(live *running) {
 	}
 	at, over := s.onPage()
 	over = over && !s.overlaid()
-	var target *ui.Node
+	var (
+		target *ui.Node
+		live   *running
+	)
 	if over {
 		s.picked++
-		if target = live.page.Doc.ElementAt(at); live.page.Doc.Frame(target) != nil {
+		var within *frame
+		target, within, at = s.under(page, at)
+		if live = set.scriptsIn(s.session(), within); live == nil || live.page.Doc.Frame(target) != nil {
 			target = nil
 		}
 	}
 	switch {
 	case pressed:
-		live.pressed, live.keyboard = target, over
+		for _, other := range s.scripted(set) {
+			other.pressed, other.keyboard = nil, false
+		}
+		if live != nil {
+			live.pressed, live.keyboard = target, true
+		}
 	case target != nil && target == live.pressed:
 		zoom := live.page.Doc.Zoom()
+		if zoom <= 0 {
+			zoom = 1
+		}
 		live.acting = true
 		live.rt.Click(target, at.X/zoom, at.Y/zoom, s.held())
 		live.acting = false
@@ -199,20 +236,25 @@ func silent() []struct {
 	}
 }
 
-// keys tells the scripts of the keys pressed since the page was last
-// clicked in: what they typed, and those that type nothing. A text
+// keys tells the scripts of the document last clicked in of the keys
+// pressed since: what they typed, and those that type nothing. A text
 // field with the keyboard keeps the second kind to itself.
-func (s *Screen) keys(live *running) {
+func (s *Screen) keys(set *framed) {
 	in := s.win.Input()
-	if !live.keyboard || s.editing || s.overlaid() {
+	if s.editing || s.overlaid() {
 		return
 	}
-	for _, r := range in.Text() {
-		live.rt.Key(string(r), codeOf(r))
-	}
-	for _, k := range silent() {
-		if in.Pressed(k.key) {
-			live.rt.Key(k.name, k.name)
+	for _, live := range s.scripted(set) {
+		if !live.keyboard || live.rt.Closed() {
+			continue
+		}
+		for _, r := range in.Text() {
+			live.rt.Key(string(r), codeOf(r))
+		}
+		for _, k := range silent() {
+			if in.Pressed(k.key) {
+				live.rt.Key(k.name, k.name)
+			}
 		}
 	}
 }
@@ -291,7 +333,8 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 		Steps:   tab.Len,
 		Fetch:   func(q dom.Request, done func(dom.Response)) func() { return s.fetchFor(session, live, q, done) },
 		Cookies: s.jar.Page(live.address),
-		Storage: func(area string) dom.Storage { return s.storageOf(session, live.page.Address, area) },
+		Storage: func(area string) dom.Storage { return s.storageIn(session, "", originOf(live.page.Address), area) },
+		Windows: &windows{s: s, set: s.framesOf(tab, live.page)},
 		Viewport: func() (float32, float32) {
 			if s.host == nil {
 				return 0, 0
@@ -322,7 +365,7 @@ func (s *Screen) fetchFor(session *session, live *running, q dom.Request, done f
 	if q.Mode != "" || (!q.Script && !q.Sheet) {
 		go func() {
 			defer cancel()
-			done(called(ctx, client, session.log, page, q))
+			done(called(ctx, client, session.log, fetch.Call{Page: page}, q))
 		}()
 		return cancel
 	}
@@ -332,23 +375,17 @@ func (s *Screen) fetchFor(session *session, live *running, q dom.Request, done f
 	}
 	go func() {
 		defer cancel()
-		answer, err := client.Get(netlog.With(ctx, session.log, asker(q), kind), q.Address, "*/*")
-		if err != nil {
-			done(dom.Response{Err: err})
-			return
-		}
-		done(dom.Response{Status: answer.Status, StatusText: http.StatusText(answer.Status), Address: answer.Address,
-			Header: flat(answer.Header), Text: answer.Code()})
+		done(got(client.Get(netlog.With(ctx, session.log, asker(q), kind), q.Address, "*/*")))
 	}()
 	return cancel
 }
 
-// called is what came of a fetch of the script of a page, or of its
-// asking for a module script: sent as a
+// called is what came of a fetch of the script of a document, by, or
+// of its asking for a module script: sent as a
 // browser sends it, another origin's answer given only when that origin
 // shares it. A request that was blocked is a blocked row of log: one of
 // its own when nothing was sent, the row of what was sent otherwise.
-func called(ctx context.Context, client *fetch.Client, log *netlog.Log, page *url.URL, q dom.Request) dom.Response {
+func called(ctx context.Context, client *fetch.Client, log *netlog.Log, by fetch.Call, q dom.Request) dom.Response {
 	kind := netlog.XHR
 	if q.Script {
 		kind = netlog.Script
@@ -358,10 +395,9 @@ func called(ctx context.Context, client *fetch.Client, log *netlog.Log, page *ur
 	for name, value := range q.Header {
 		header.Set(name, value)
 	}
-	result, err := client.Script(ctx, fetch.Call{
-		Method: q.Method, Address: q.Address, Header: header, Body: q.Body, Page: page,
-		Mode: fetch.Mode(q.Mode), Credentials: fetch.Credentials(q.Credentials), Redirect: fetch.Redirect(q.Redirect),
-	})
+	by.Method, by.Address, by.Header, by.Body = q.Method, q.Address, header, q.Body
+	by.Mode, by.Credentials, by.Redirect = fetch.Mode(q.Mode), fetch.Credentials(q.Credentials), fetch.Redirect(q.Redirect)
+	result, err := client.Script(ctx, by)
 	var blocked *fetch.BlockedError
 	switch {
 	case errors.As(err, &blocked) && blocked.Sent:
@@ -398,21 +434,63 @@ func asker(q dom.Request) string {
 	return "script"
 }
 
-// storageOf is an area of the storage of the site a page is of: what it
-// keeps between runs ("local"), or for as long as its tab ("session").
-// A page with no site of its own keeps nothing longer than itself.
-func (s *Screen) storageOf(session *session, address, area string) dom.Storage {
-	origin := originOf(address)
+// storageIn is an area of the storage of the documents of an origin:
+// what they keep between runs ("local"), or for as long as their tab
+// ("session"). top is "" for the site's own, and the site of the tab's
+// page for what a frame of another site, or in one, keeps apart under
+// it. A document with no site of its own keeps nothing longer than
+// itself.
+func (s *Screen) storageIn(session *session, top, origin, area string) dom.Storage {
 	switch {
 	case origin == "":
 		return nil
-	case area == "local":
+	case area == "local" && top == "":
 		return s.sites.Area(origin)
+	case area == "local":
+		return s.sites.Framed(top, origin)
 	}
-	if session.kept[origin] == nil {
-		session.kept[origin] = tabStorage{}
+	key := origin
+	if top != "" {
+		key = top + "\x00" + origin
 	}
-	return session.kept[origin]
+	if session.kept[key] == nil {
+		session.kept[key] = tabStorage{}
+	}
+	return session.kept[key]
+}
+
+// fetchInFrame is fetchFor for the scripts of the document f shows.
+func (s *Screen) fetchInFrame(f *frame, live *running, q dom.Request, done func(dom.Response)) func() {
+	session := f.set.session
+	ctx, cancel := context.WithTimeout(s.asksInFrame(context.Background(), f, live, q), s.timeout())
+	client := s.current().Client
+	if q.Mode != "" || (!q.Script && !q.Sheet) {
+		by := fetch.Call{Page: live.address(), Opaque: f.held.Opaque(), Top: f.set.top.Base}
+		go func() {
+			defer cancel()
+			done(called(ctx, client, session.log, by, q))
+		}()
+		return cancel
+	}
+	kind := netlog.Script
+	if q.Sheet {
+		kind = netlog.Stylesheet
+	}
+	go func() {
+		defer cancel()
+		done(got(client.Get(netlog.With(ctx, session.log, asker(q), kind), q.Address, "*/*")))
+	}()
+	return cancel
+}
+
+// got is the answer to a script element's or a sheet's request, as
+// its document's scripts are told it.
+func got(answer *fetch.Answer, err error) dom.Response {
+	if err != nil {
+		return dom.Response{Err: err}
+	}
+	return dom.Response{Status: answer.Status, StatusText: http.StatusText(answer.Status), Address: answer.Address,
+		Header: flat(answer.Header), Text: answer.Code()}
 }
 
 // originOf is the site an address is of, "" for one that has none.

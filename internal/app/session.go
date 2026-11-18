@@ -103,9 +103,9 @@ func (s *Screen) fetch(tab *tabs.Tab, address string) *web.Page {
 	l := &load{cancel}
 	session.loads[address] = l
 	links := web.Links{Open: s.followed, Over: s.point, Save: s.download, Unsent: session.unsent,
-		Aimed: func(address, target string) bool { return s.aimedFromTop(tab, address, target, nil) },
+		Aimed: func(address, target string) bool { return s.targeted(tab, address, target, nil) },
 		Post: func(sent web.Submission) {
-			if !s.aimedFromTop(tab, sent.Address, sent.Target, &sent) {
+			if !s.targeted(tab, sent.Address, sent.Target, &sent) {
 				s.posted(sent)
 			}
 		}}

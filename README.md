@@ -116,7 +116,7 @@ Cmd is Command on macOS and Control elsewhere.
 
 | Keys | What they do |
 |------|--------------|
-| Cmd+T, Cmd+W | A new tab, close the tab (a window's last tab starts again on the start page) |
+| Cmd+T, Cmd+W | A new tab, close the tab (a window's last tab closes the window) |
 | Cmd+N | A new window, on the start page |
 | Cmd+Q | Quit, whatever the windows open |
 | Cmd+L | The address field |
@@ -140,6 +140,11 @@ it at once. The links of light's own pages (the start page's tiles, the rows of 
 page's scripts hear a Cmd+click as a click with its keys (`metaKey`, `ctrlKey`, `shiftKey`), and may prevent it; they
 hear nothing of a middle click.
 
+A link or a form that asks for a window of its own (`target="_blank"`, or a name no frame of the page has) opens in
+a new tab, shown, beside its own; the keys held at the click win over it. "Open image in new tab" in the menu of a
+right click, and the links of the developer tools, open their tab behind the shown one, as "Open link in new tab"
+does.
+
 ## Windows
 
 Shift+click on a link, "Open link in new window" in the menu of a right click and Cmd+N open a window: the size of
@@ -149,7 +154,8 @@ the others at once, and the history and the downloads pages list the same in eac
 the Network log and the Console are each window's own.
 
 Closing a window stops what its tabs were loading and running, and leaves the other windows; light ends with the
-last one, or at Cmd+Q, and writes its files then, once.
+last one, or at Cmd+Q, and writes its files then, once. Closing a window's last tab (Cmd+W, its close button, a
+middle click on it, "Close tab" in its menu) closes the window.
 
 ## The developer tools
 
@@ -233,9 +239,9 @@ unless you scrolled up:
   on their triangle; the scripts
   that did not load or were skipped; the requests of scripts that failed or were blocked, in a browser's words
   (`Access to fetch at '…' from origin '…' has been blocked by CORS policy: …`, `Mixed Content: …`).
-- On the right of a line, the script and the line it is from: a click shows that script's source in a new tab (at
-  its top: the source view does not scroll to a line). An inline script's lines count from its own first. An
-  address in a line is a link that opens it in a new tab.
+- On the right of a line, the script and the line it is from: a click shows that script's source in a new tab, behind
+  the shown one (at its top: the source view does not scroll to a line). An inline script's lines count from its own first. An
+  address in a line is a link that opens it in a new tab, behind too.
 - A line said again in a row is listed once, with how many times.
 - The bar filters by text and by level: Errors, Warnings, Info, Logs and Debug are each on or off. XHR lists the
   requests of scripts among the lines (method, address, status and time), Requests every request, and CSS what
@@ -328,12 +334,14 @@ are in its HAR file.
   `data:` one runs and shows nothing, and the Console says so). A page is shown with its sheets, pictures and
   fonts, a text as it was sent; a picture alone, a file to download and the other kinds are not, and nothing is
   saved from a frame's address. A script that sets `src` or `srcdoc`, or adds or removes the element, is followed.
-- **No script runs in a frame** yet: its document is shown as with JavaScript off, what its `noscript` holds
-  included. The page around it keeps its own.
+- **Scripts** of a frame's document run, each document in a JavaScript engine of its own
+  ([below](#scripts-in-frames)): its script elements and modules, its timers, its `fetch`, its events. A frame
+  whose `sandbox` has no `allow-scripts`, like any frame with JavaScript off, is shown as a page without scripts,
+  what its `noscript` holds included, and a document with no script costs no engine.
 - **Links and forms** of a frame open in it, with no entry in the tab's history: Back leaves the page, not the
   frame's last document, and a reload starts every frame again from its attributes. `target="_top"` opens in the
   tab, `_parent` in the frame around, a name in the frame of the tab that has it; `_blank` and a name no frame
-  has open in the frame itself. Cmd+click, a middle click and the menu of a right click open a frame's link in a
+  has open in a new tab of the window, shown. Cmd+click, a middle click and the menu of a right click open a frame's link in a
   tab as they do the page's. A form is sent, with a GET or a POST, where its target says.
 - **Limits**: a tab's page holds 64 frames, 8 deep; one more stays empty, and so does a frame asked for the
   address of a page it is itself in. The Console says which.
@@ -355,15 +363,79 @@ are in its HAR file.
   widget in two sites' pages has two jars, and neither is the one of a visit to the widget's own site.
 - **Sandbox**: a frame with a `sandbox` attribute that does not say `allow-same-origin` has no origin: it and what
   it asks for carry no cookie and keep none, and its forms say they come from `null`. Its forms are not sent
-  without `allow-forms`, its links do not leave the tab without `allow-top-navigation` (or
-  `allow-top-navigation-by-user-activation`), a `_blank` link goes nowhere without `allow-popups`, a `download`
-  link saves nothing without `allow-downloads`, and a named target reaches only frames inside it. A frame in a
-  sandboxed one is left what both allow.
+  without `allow-forms`, whether a click or a script sends them, its links and its scripts do not leave the tab
+  without `allow-top-navigation` (or `allow-top-navigation-by-user-activation`, on a click), a `_blank` link or a
+  target no frame it reaches has goes nowhere without `allow-popups`, a `download` link saves nothing without
+  `allow-downloads`, and a named target reaches only frames inside it. Without `allow-scripts` nothing runs;
+  without `allow-modals` `alert`, `confirm` and `prompt` are refused in the Console. A frame in a sandboxed one is
+  left what both allow, and a document keeps the sandbox it was loaded under until the frame shows another.
 - **Not honoured**: the `frame-src` and `child-src` of the page's own Content-Security-Policy, `allow`
   (Permissions Policy), `loading="lazy"`, `referrerpolicy`, `csp`, `credentialless` and `scrolling`. A
   `frame-ancestors` in a `<meta>` is not read, as in browsers. The Inspector shows the `iframe`
   element, not the document in it, and "Inspect element" in a frame selects that element. The Warnings tab lists
   the page's, not its frames'. A menu or a dialog of a frame's document is clipped to the frame.
+
+### Scripts in frames
+
+Every document that runs scripts, the page's and each frame's, has a V8 engine (an isolate) of its own. Two
+documents share no object, whatever their origins: what one knows of another goes through light, in Go, as text.
+
+- **What runs**: classic scripts and modules (a module map a document), timers and `requestAnimationFrame`,
+  `fetch` and `XMLHttpRequest`, the events of clicks and keys (a click goes to the document under the pointer, the
+  keys to the document last clicked in, and no other hears of them), `load` and `error` on an `iframe` told to the
+  document that holds it, at any depth. The Console tags a frame's lines with its host. A line typed in the
+  Console runs in the page, not in a frame.
+- **A document's identity** is set by light when it is shown and never read from its scripts: its origin (that
+  of the address its answer came from, the parent's for a `srcdoc`, `null` in a sandbox without
+  `allow-same-origin`), `window.origin`, the `Origin`, `Referer` and `Sec-Fetch-Site` of its requests, the origin
+  its CORS checks are made against, the network space its requests may reach, and the https page above it that
+  forbids requests in the clear.
+- **Other windows**: `parent`, `top`, `frames`, `window[0]`, `window.name-of-a-frame`, `length` and an
+  `iframe`'s `contentWindow` are windows of other frames. Such a window answers exactly what the standard lets a
+  page of another origin have, from one table (`pkg/frames/window.go`) that also writes the tests: `window`, `self`,
+  `frames`, `parent`, `top`, `opener` (`null`), `length`, `closed`, `location` (only `href` to set and
+  `replace()`), `postMessage()`, `close()`, `focus()`, `blur()`, a frame by its index or its name, and `then`
+  read as `undefined`. Anything else, read, written, defined or deleted, throws a `SecurityError`.
+- **Same-origin frames are kept apart too** (a deviation): a frame of the page's own origin is another
+  engine, so `contentDocument` is `null`, `frameElement` is `null`, `contentWindow` and `parent` are the windows
+  above and `parent.document`, `frame.contentWindow.someFunction()` and `document.domain` do not work. Pages that
+  script their own frames directly break; those that post messages do not.
+- **`postMessage`** between frames copies the message in the sender (light's structured clone), carries it as
+  text through Go and builds it again from the receiver's own objects. `event.origin` and `event.source` are set
+  by light. `targetOrigin` (`*`, `/`, or an origin) is checked when the message comes, against the origin of the
+  document then in the window, and a message goes only to the document that was there when it was posted: a
+  frame that went elsewhere, or was removed, gets nothing. Messages come in the order they were posted, at the
+  tab's next frame. A `MessagePort` or a `Blob` cannot be sent to another frame yet (`DataCloneError`); an
+  `ArrayBuffer` transferred is copied and detached. A message is 32 MB at most, and 4096 may wait.
+- **Sending a window elsewhere** (`w.location = …`, `w.location.replace(…)`, a form a script sends): a document
+  may send itself and the frames in it; its tab when it is of the tab's origin, or on a click of yours, and, in a
+  sandbox, only as `allow-top-navigation` and `allow-top-navigation-by-user-activation` say; any other frame
+  only when it is of its own origin and not sandboxed. Only to `http` and `https` addresses: a `javascript:`
+  address runs nothing. What is refused is a line of the Console.
+- **Storage and cookies**: `localStorage` and `sessionStorage` are kept by top-level site and origin. A frame
+  of the tab's own site, with no other site between, has the site's own; any other frame has an area kept apart
+  under the tab's site (in `storage.json`, under `framed`), which neither a visit to its own site nor the same
+  frame under another site reads. `document.cookie` is the jar its requests use (above): nothing for a third
+  party unless the settings let them in. A sandboxed frame with no origin has neither: `document.cookie` is empty
+  and takes nothing, `localStorage` throws a `SecurityError`.
+- **Failures stay in their frame**: an error a frame's script does not catch is a line of the Console, and the
+  other documents go on. A script that never ends is stopped after its two seconds, as a page's is; the window
+  waits meanwhile, since the documents of a window run one after the other, and the others then go on. A frame
+  whose drawing breaks light is emptied and its engine closed.
+- **What it costs** (measured, Apple silicon): about 3.3 MB and 7 ms for each frame that runs scripts, 10 µs of
+  each frame drawn after; a page of 64 such frames takes 175 MB and 0.6 s more than one without scripts. Engines
+  are closed when the frame is removed, shows something else, its tab leaves the page or its window closes.
+- **Not done**: `history.back()` in a frame does nothing, `window.focus()` and `close()` on a frame do nothing,
+  `window.open` opens nothing, a `MessagePort` does not cross frames, and `BroadcastChannel` stays in its document.
+  An `iframe` gets its window when it is in its document; one beyond the 64 has none.
+
+**The boundary and its limits.** The frames of a tab, and every tab, run in one process: an isolate is a wall
+inside V8, not the operating system's. A bug in V8 that escapes an isolate reaches everything light holds, and
+light does nothing against Spectre: the documents of a process share an address space, so `SharedArrayBuffer`
+is not given to pages, `performance.now()` is told in steps of 100 µs and `crossOriginIsolated` is `false`
+(`WebAssembly.Memory` can still be shared within one document, which has no worker to share it with). Neither
+`Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Resource-Policy` nor a Permissions
+Policy is read. Do not keep in light what a hostile page must never reach.
 
 ## Downloads
 
@@ -409,7 +481,7 @@ not given one keeps them in memory.
   to another site, and is a row of the Network panel. A redirect that answers it is followed with a GET after a
   301, a 302 or a 303 and with the form again after a 307 or a 308, of the origin `null` to another origin. A form
   is sent once: Reload, Back and Forward fetch the page a POST gave with a GET, and never send the form again. A
-  POST always goes in the tab of its page. What is not sent is a warning in the Console: a `multipart/form-data`
+  form with `target="_blank"` is sent in a new tab. What is not sent is a warning in the Console: a `multipart/form-data`
   form, and so a file (a file field sends an empty name otherwise), and a form of a dialog (`method="dialog"`). An
   `accept-charset`, a `_charset_` field and the place an `<input type="image">` was clicked at are not read, and
   the Network panel does not show what a POST carried: a HAR file saved from it does.
@@ -451,8 +523,9 @@ not given one keeps them in memory.
 - It zooms web pages only, not its own pages. The keys zoom one tab; the setting is the zoom of the others.
 - It colours no syntax in a source, and completes no address from the history.
 - A Control+click is not a right click on macOS.
-- A link with `target="_blank"` opens in the tab it is in, as any other; Cmd+click opens it in a new tab,
-  Shift+click in a new window.
+- A link or a form with `target="_blank"` opens a new tab, never a window, and a named target that no frame has
+  opens a new tab each time: a tab is not found again by the name it was opened under. A script's `window.open`
+  opens nothing.
 - With no window left light ends, on macOS too; a tab is not dragged from a window to another.
 - It draws what ember's ui draws. What is missing is listed in ember's guide:
   [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
@@ -493,7 +566,8 @@ none; the jar's own rules hold over it (no cookie to a third party unless the se
 `SameSite=Lax` or `Strict` one). `redirect` is `follow`, `error` or `manual`; each hop of a redirect is checked
 as a request of its own, and one that goes from another origin to a third is sent as of the origin `null`. An
 `https` page sends nothing to an `http` address but this machine's (`localhost`, `127.0.0.1`). `sendBeacon` is a
-`POST` with credentials that goes on once the page is left, as a `fetch` with `keepalive` does, up to 64 KiB. An
+`POST` with credentials that goes on once the page is left, as a `fetch` with `keepalive` does, up to 64 KiB,
+`no-cors` unless its body is of a type a form could not send. An
 `AbortSignal` stops a request, an `XMLHttpRequest`'s `timeout` too. What is blocked is a network error for the
 script (`TypeError: Failed to fetch`, an `error` event), told in the Console and listed in the Network panel.
 
@@ -516,15 +590,19 @@ What does not:
 
 - **Modules**: the engine's binding tells light neither where a module's syntax error is when the text is one
   only a module may be (the Console then names the address, no line), nor of an `import()`: light finds the
-  `import(` of a script by asking the engine's own parser about each, so one written in an `on…` attribute, in
-  `eval`, in `new Function` or at the Console's line is rejected, as is one of a classic script that is not
-  strict code or is over what light checks (128 MB of parsing). `import.meta` is filled by the module's first
-  statement, so a function of a module in a cycle called before its module ran reads none. No CSS module, no
+  `import(` of a script by asking the engine's own parser about them, all at once (three more readings of a
+  script that has any, more only where an `import(` is in a text, a pattern or a method's name), so one written
+  in an `on…` attribute, in `eval`, in `new Function` or at the Console's line is rejected, and the Console says
+  why; so is one of a classic script that is not strict code, or of a script light would read again over 512 MB
+  to tell them apart, which the Console says too. `import.meta` is filled by the module's first statement, so a
+  function of a module in a cycle called before its module ran reads none, and the columns of a module's first
+  line are off by that statement's length. No CSS module, no
   `integrity`, no `referrerpolicy` (a module says the page as its referrer), no import map with a `src`, and an
   import map counts whenever it comes, the first to name a specifier kept. A `modulepreload` fetches its module,
   not what it imports. The page's address, not its `<base>`, is what an inline module's specifiers are read from.
-- An `iframe` shows its document but runs none of its scripts yet, so it has no window: `contentWindow` and
-  `contentDocument` are `null`, `window.frames.length` is 0, and `parent` and `top` are the window itself. Its `src`,
+- An `iframe`'s document runs its scripts in an engine of its own, so the page reaches its window and never its
+  document: `contentDocument` and `frameElement` are `null` for every frame, the page's own origin included
+  (see [Scripts in frames](#scripts-in-frames)). Its `src`,
   `srcdoc`, `name`, `width`, `height` and `sandbox` reflect, a `src` or a `srcdoc` a script sets is followed, and
   the element hears `load` when a document, or light's notice in place of one, shows in it, and `error` when light
   left it empty (see [Frames](#frames)); a browser says `load` there too.
@@ -556,8 +634,9 @@ What does not:
   hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element added since
   the last frame answers little until the next. A rule's `style` is its text read again: no `CSSKeyframeRule`,
   no `CSSStyleSheet` of an `@import`, no `ownerRule`.
-- **Messages** stay in their page: with no frame that runs scripts, worker or other window to post to, `window.postMessage` reaches
-  the window itself, and a `BroadcastChannel` the other channels of the same page, not another tab's. A message is
+- **Messages**: `window.postMessage` reaches the window itself and the windows of the tab's frames
+  ([Scripts in frames](#scripts-in-frames)), and a `BroadcastChannel` the other channels of the same document, not
+  another frame's or another tab's. A message is
   copied by light's own structured clone, written in JavaScript (V8's is not within reach): primitives, plain
   objects and arrays, `Date`, `RegExp`, `Map`, `Set`, `ArrayBuffer` and its views, errors, `Blob`, with their cycles;
   an `ArrayBuffer` transferred is copied, then detached. Each message is a task of its own among the timers, so it
@@ -614,7 +693,7 @@ reach.
 | `pkg/storage` | Plain Go: what pages keep by origin, and its file. |
 | `pkg/cookies` | Plain Go: the cookie jar, its rules, the transport that applies them, and its file. |
 | `pkg/localnet` | Plain Go: the space of an address (public, local, loopback), and the transport that keeps pages from more private ones. |
-| `pkg/frames` | Plain Go: the rules of frames: how many and how deep, what an `iframe` shows, its sandbox, whether a document lets itself be framed, where a target leads, which site its cookies are kept under. |
+| `pkg/frames` | Plain Go: the rules of frames: how many and how deep, what an `iframe` shows, its sandbox, whether a document lets itself be framed, where a target leads, which site its cookies are kept under, what the window of another frame answers, whom a message reaches and who may send a window elsewhere. |
 
 Dependencies go one way: `cmd` → `internal` → `pkg`.
 

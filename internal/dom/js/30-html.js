@@ -303,10 +303,11 @@ class HTMLCanvasElement extends HTMLElement {
   toDataURL() { return "data:,"; }
 }
 reflect(HTMLCanvasElement.prototype, { width: ["width", 300], height: ["height", 150] });
-// light shows an iframe's document but runs no script in it yet: it
-// has no window for the page to reach.
+// An iframe's window is the facade of 57-windows.js, whatever its
+// document's origin: light runs each frame's scripts in an engine of its
+// own, so a page reaches no document but its own.
 class HTMLIFrameElement extends HTMLElement {
-  get contentWindow() { return null; }
+  get contentWindow() { return windowOf(host("window", "of", this[REF])); }
   get contentDocument() { return null; }
   get sandbox() {
     if (!this._sandbox) define(this, { _sandbox: new DOMTokenList(this, "sandbox") });

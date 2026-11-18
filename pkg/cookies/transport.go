@@ -107,15 +107,49 @@ func unsafe(method string) bool {
 type Page struct {
 	jar *Jar
 	at  func() *url.URL
+	// top is the page of the tab for a frame's document, and crossed
+	// whether that document, or one it is in, is of another site.
+	top     *url.URL
+	crossed bool
 }
 
 // Page is the jar for the scripts of the page at the address at gives,
 // asked each time, since a page's own moves change it.
 func (j *Jar) Page(at func() *url.URL) *Page { return &Page{jar: j, at: at} }
 
-func (p *Page) Get() string { return p.jar.Script(p.at()) }
+// Frame is the jar for the scripts of a frame's document at the
+// address at gives, in the tab whose page is at top: what its requests
+// carry (Framed), so the cookies of a crossed frame are those kept
+// under top's site, and none when third parties keep none.
+func (j *Jar) Frame(at func() *url.URL, top *url.URL, crossed bool) *Page {
+	return &Page{jar: j, at: at, top: top, crossed: crossed}
+}
 
-func (p *Page) Set(cookie string) { p.jar.SetScript(p.at(), cookie) }
+// request is the page asking for itself, as a request of its own.
+func (p *Page) request() Request {
+	at := p.at()
+	if p.top == nil || at == nil {
+		return Request{URL: at, Top: at}
+	}
+	q := Request{URL: at, Top: p.top}
+	if p.crossed || siteOf(at) != siteOf(p.top) {
+		q.Partition = siteOf(p.top)
+	}
+	return q
+}
+
+func (p *Page) Get() string {
+	if p.jar == nil {
+		return ""
+	}
+	return header(p.jar.matching(p.request(), true, true))
+}
+
+func (p *Page) Set(cookie string) {
+	if p.jar != nil {
+		p.jar.set(p.request(), cookie, true)
+	}
+}
 
 // Enabled reports whether the page's scripts may keep cookies.
 func (p *Page) Enabled() bool { return p.jar.Enabled() }

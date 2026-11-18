@@ -157,15 +157,42 @@ func TestTheQuitKeysEndLightWhateverItsWindows(t *testing.T) {
 	}
 }
 
-func TestClosingATabOfAWindowsLastLeavesTheWindowOnTheStartPage(t *testing.T) {
-	s := show(t)
-	s.newWindow("light://about")
-	s.frame()
-	second := s.window(1)
-	second.command(input.KeyW)
-	second.at(tabs.Home)
-	if len(s.screens) != 2 || len(second.browser.Tabs) != 1 {
-		t.Fatalf("light has %d windows, the second %d tabs", len(s.screens), len(second.browser.Tabs))
+func TestClosingAWindowsLastTabClosesTheWindowAndTheLastWindowEndsLight(t *testing.T) {
+	for name, closeLast := range map[string]func(*shown){
+		"the keys":          func(s *shown) { s.command(input.KeyW) },
+		"its button":        func(s *shown) { s.click("close-0") },
+		"a middle click":    func(s *shown) { s.middleClickAt(s.middle("tab-0")) },
+		"the menu of a tab": func(s *shown) { s.rightClick("tab-0"); s.choose("Close tab") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := show(t)
+			s.newWindow("light://about")
+			s.frame()
+			second := s.window(1)
+			second.newTab()
+			second.frame()
+			closeLast(second)
+			second.frame()
+			if len(s.screens) != 2 || len(second.browser.Tabs) != 1 || s.world.ShouldQuit() {
+				t.Fatalf("after closing one of two tabs light has %d windows, the second %d tabs, quitting %v",
+					len(s.screens), len(second.browser.Tabs), s.world.ShouldQuit())
+			}
+			closeLast(second)
+			second.frame()
+			if len(s.screens) != 1 || s.screens[0] != s.Screen || s.world.ShouldQuit() {
+				t.Fatalf("after closing the second window's last tab light has %d windows, quitting %v",
+					len(s.screens), s.world.ShouldQuit())
+			}
+			if len(second.sessions) != 0 {
+				t.Errorf("the closed window still holds %d tabs' sessions", len(second.sessions))
+			}
+			s.at(tabs.Home)
+			closeLast(s)
+			s.frame()
+			if !s.world.ShouldQuit() {
+				t.Fatal("closing the last tab of the last window did not end light")
+			}
+		})
 	}
 }
 

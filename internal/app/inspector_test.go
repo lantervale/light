@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/internal/devtools"
+	"github.com/lantervale/light/pkg/tabs"
 )
 
 // markup are the rows the Inspector's tree shows, each as its text,
@@ -169,4 +170,29 @@ func TestTheInspectorShowsAPageOfLightsOwn(t *testing.T) {
 		t.Fatalf("the title is outlined at %v, it is at %v", outline, boxes.Border)
 	}
 	s.clean()
+}
+
+func TestTheSheetOfARuleOpensItsSourceInATabBehind(t *testing.T) {
+	srv, _ := crypt(t)
+	s := show(t)
+	doc := s.visit(srv.URL + "/")
+	s.newTab()
+	s.click("tab-0")
+	s.inspector()
+	s.inspect.Select(doc.ByID("map"))
+	s.frame()
+	var from *ui.Node
+	s.node("dt-insp-rules").Walk(func(n *ui.Node) bool {
+		if from == nil && n.HasClass("dt-insp-link") {
+			from = n
+		}
+		return true
+	})
+	if from == nil {
+		t.Fatal("the rule of the map names no sheet to open")
+	}
+	s.clickAt(from.Box().Center())
+	if got, want := s.opened(), "["+srv.URL+"/] "+tabs.SourceOf(srv.URL+"/site.css")+" "+tabs.Home; got != want {
+		t.Fatalf("after a click on the rule's sheet the tabs are %s, want %s", got, want)
+	}
 }

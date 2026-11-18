@@ -34,8 +34,14 @@ type Call struct {
 	Method, Address string
 	Header          http.Header
 	Body            []byte
-	// Page is the address of the page whose script asks.
-	Page *url.URL
+	// Page is the address of the document whose script asks. Opaque is
+	// one whose origin nothing shares, a sandboxed frame's: it asks as
+	// "null". Top is the page of the tab for a frame's document, nil
+	// for the page itself: a request in the clear is refused when either
+	// came over https.
+	Page   *url.URL
+	Opaque bool
+	Top    *url.URL
 	// Mode is ModeCORS, Credentials CredentialsSameOrigin and Redirect
 	// RedirectFollow when they are not said.
 	Mode        Mode
@@ -78,6 +84,7 @@ type sending struct {
 	c        *Client
 	policy   Policy
 	page     *url.URL
+	top      *url.URL
 	method   string
 	header   http.Header
 	body     []byte
@@ -121,8 +128,12 @@ func (c *Client) Script(ctx context.Context, call Call) (*Result, error) {
 
 // calling is a Call ready to be sent, or why it is not: a *BlockedError.
 func (c *Client) calling(call Call) (*sending, error) {
-	s := &sending{c: c, page: call.Page, redirect: call.Redirect, first: call.Address, header: http.Header{},
+	s := &sending{c: c, page: call.Page, top: call.Top, redirect: call.Redirect, first: call.Address,
+		header: http.Header{},
 		policy: Policy{Origin: OriginOf(call.Page), Mode: call.Mode, Credentials: call.Credentials}}
+	if call.Opaque {
+		s.policy.Origin = nullOrigin
+	}
 	if s.policy.Mode == "" {
 		s.policy.Mode = ModeCORS
 	}
@@ -265,7 +276,7 @@ func redirects(status int) bool {
 // it does not go there: before anything is sent.
 func (s *sending) allowed() (Policy, error) {
 	p := s.policy
-	if Mixed(p.Origin, s.to) {
+	if Mixed(p.Origin, s.to) || Mixed(OriginOf(s.top), s.to) {
 		return p, s.told(&BlockedError{Mixed: true, Why: "Mixed Content: an https page may not ask for an http address."})
 	}
 	if s.crossed = s.crossed || !p.Same(s.to); s.crossed {

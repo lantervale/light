@@ -280,11 +280,15 @@ const fetch = (input, init) => new Promise((resolve, reject) => {
 });
 
 // beacon is navigator.sendBeacon: a POST that outlives its page, whose
-// answer nobody reads. It says whether the request was taken.
+// answer nobody reads, so one a form could send is no CORS request. It
+// says whether the request was taken.
 const beacon = (url, data) => {
   const to = parseURL(url, document.baseURI);
   if (!/^https?:$/.test(to.protocol)) throw new TypeError("Failed to execute 'sendBeacon' on 'Navigator': Beacons are only supported over HTTP(S).");
-  const request = new Request(to.href, { method: "POST", body: data, credentials: "include", keepalive: true });
+  const init = { method: "POST", body: data, credentials: "include", keepalive: true };
+  const type = new Request(to.href, init).headers.get("content-type");
+  if (!type || /^\s*(application\/x-www-form-urlencoded|multipart\/form-data|text\/plain)\s*(;|$)/i.test(type)) init.mode = "no-cors";
+  const request = new Request(to.href, init);
   if (request._bytes && request._bytes.length > keptAlive) return false;
   ask(request, "fetch", () => {});
   return true;

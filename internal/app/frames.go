@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
@@ -52,6 +51,14 @@ type frame struct {
 	page *web.Page
 	load *load
 	gone bool
+	// id names the frame's window to the scripts of its tab. held is
+	// the sandbox the document it shows was loaded under and origin that
+	// document's, "null" for one nothing shares; run is its scripts, nil
+	// for a document that has none to run (framescripts.go).
+	id     int
+	held   frames.Sandbox
+	origin string
+	run    *running
 }
 
 func (f *frame) depth() int {
@@ -89,13 +96,17 @@ type framed struct {
 	session *session
 	top     *web.Page
 	all     []*frame
+	// last is the id of the window made last, and mail what the windows
+	// posted each other that has not come yet (framescripts.go).
+	last int
+	mail []letter
 }
 
 // frames are the frames of a page of the tab, made when first asked.
 func (s *Screen) framesOf(tab *tabs.Tab, top *web.Page) *framed {
 	session := s.sessionOf(tab)
 	if session.frames[top] == nil {
-		session.frames[top] = &framed{tab: tab, session: session, top: top}
+		session.frames[top] = &framed{tab: tab, session: session, top: top, last: topWindow}
 	}
 	return session.frames[top]
 }
@@ -104,7 +115,8 @@ func (s *Screen) framesOf(tab *tabs.Tab, top *web.Page) *framed {
 // last did.
 func (set *framed) adopt(parent *frame, in *web.Page) {
 	for _, n := range in.Frames.Take() {
-		set.all = append(set.all, &frame{set: set, node: n, in: in, parent: parent})
+		set.last++
+		set.all = append(set.all, &frame{set: set, node: n, in: in, parent: parent, id: set.last, origin: opaqueOrigin})
 	}
 }
 
@@ -158,7 +170,8 @@ func (f *frame) blank() {
 			}
 		}
 	}
-	f.page = nil
+	f.quit()
+	f.page, f.origin = nil, opaqueOrigin
 	if f.in.Doc != nil {
 		f.in.Doc.SetFrame(f.node, nil)
 	}
@@ -178,6 +191,7 @@ func (set *framed) release() {
 			f.drop()
 		}
 	}
+	set.mail = nil
 }
 
 // pause stops the loads on their way while the page is not the one its
@@ -400,13 +414,14 @@ func (f *frame) documents() []*url.URL {
 }
 
 // frameLoader is the loader of the settings as f's documents are
-// loaded: with no script, at their frame's size, and let in only where
-// they do not refuse the documents f is in.
+// loaded: with their scripts unless its sandbox runs none, at their
+// frame's size, and let in only where they do not refuse the documents
+// f is in.
 func (s *Screen) frameLoader(f *frame) *web.Loader {
 	loader := *s.current()
 	above, documents := f.above(), f.documents()
 	width, height := s.frameSize(f)
-	loader.Scripts, loader.Zoom = false, 0
+	loader.Scripts, loader.Zoom = loader.Scripts && f.sandbox.Runs(), 0
 	loader.Viewport = func() (float32, float32) { return width, height }
 	loader.Frame = &web.Frame{
 		Top: f.set.top.Base, Chain: documents[:len(documents)-1], Opaque: f.sandbox.Opaque(),
@@ -458,10 +473,14 @@ func (s *Screen) leftEmpty(f *frame, why error) {
 	s.tellFrame(f, "error")
 }
 
-// tellFrame tells the scripts of the tab's page, when f is a frame of
-// it, what became of f: its load or its error event.
+// tellFrame tells the scripts of the document f's element is in what
+// became of f: its load or its error event.
 func (s *Screen) tellFrame(f *frame, event string) {
-	if live := f.set.session.scripts; live != nil && live.page == f.in && f.parent == nil && !f.gone {
+	live := f.set.session.scripts
+	if f.parent != nil {
+		live = f.parent.run
+	}
+	if live != nil && live.page == f.in && !f.gone {
 		s.later = append(s.later, func() {
 			if !live.rt.Closed() {
 				live.rt.Fire(f.node, event, nil)
@@ -505,6 +524,7 @@ func (s *Screen) landFrame(f *frame, l *load, page *web.Page, row int) {
 	case page.Empty:
 	case page.Kind == content.Page:
 		s.showIn(f, page)
+		f.origin = f.originOf(page)
 		s.tellFrame(f, "load")
 	case page.Kind == content.Text:
 		page.Doc, page.Base = web.Text(page.Source), f.in.Base
@@ -528,7 +548,7 @@ func (s *Screen) unshown(f *frame, page *web.Page, why string) {
 // showIn has f show page in place of what it showed.
 func (s *Screen) showIn(f *frame, page *web.Page) {
 	f.blank()
-	f.page = page
+	f.page, f.held, f.origin = page, f.sandbox, opaqueOrigin
 	f.in.Doc.SetFrame(f.node, page.Doc)
 }
 
@@ -550,9 +570,11 @@ func (s *Screen) frameLinks(f *frame) web.Links {
 			s.download(address, name)
 		},
 		Post: func(sent web.Submission) {
-			if to := s.target(f, sent.Target, sent.Address); to != nil {
+			if s.pops(f, sent.Target) {
+				s.fromPage(f.page.Address, func() { s.openTab(sent.Address, &sent) })
+			} else if to, may := s.target(f, sent.Target, sent.Address); to != nil {
 				s.navigate(to, wanted{from: f.page, form: &sent, user: true})
-			} else if s.leaves(f, sent.Address) {
+			} else if may && s.leaves(f, sent.Address) {
 				s.fromPage(f.page.Address, func() { s.posted(sent) })
 			}
 		},
@@ -570,35 +592,48 @@ func (s *Screen) openFrom(f *frame, address, target string) {
 		s.openBeside(address, where)
 		return
 	}
-	if to := s.target(f, target, address); to != nil {
+	if s.pops(f, target) {
+		s.fromPage(f.page.Address, func() { s.openTab(address, nil) })
+		return
+	}
+	if to, may := s.target(f, target, address); to != nil {
 		s.navigate(to, wanted{from: f.page, ref: address, user: true})
-	} else if s.leaves(f, address) {
+	} else if may && s.leaves(f, address) {
 		s.fromPage(f.page.Address, func() { s.Open(address) })
 	}
 }
 
+// reach is the frame of that name a link or a form of f may lead to:
+// a sandboxed frame reaches only those in it.
+func (s *Screen) reach(f *frame, name string) *frame {
+	if to := f.set.named(name); to != nil && (!f.sandbox.On || to.within(f)) {
+		return to
+	}
+	return nil
+}
+
 // target is the frame a link or a form of f with that target leads to,
-// nil for the tab itself and for a target its sandbox keeps it from,
-// which the console is told of.
-func (s *Screen) target(f *frame, target, address string) *frame {
-	said := f.set.session.said
+// nil for the tab itself. It leads nowhere, false, when it asks for a
+// window of its own that f's sandbox keeps it from, _blank or a name
+// f reaches no frame by: the console is told.
+func (s *Screen) target(f *frame, target, address string) (*frame, bool) {
 	switch frames.TargetOf(target) {
 	case frames.Top:
-		return nil
+		return nil, true
 	case frames.Parent:
-		return f.parent
+		return f.parent, true
 	case frames.Named:
-		if to := f.set.named(target); to != nil && (!f.sandbox.On || to.within(f)) {
-			return to
+		if to := s.reach(f, target); to != nil {
+			return to, true
 		}
 	case frames.Self:
+		if !asksWindow(target) {
+			return f, true
+		}
 	}
-	if strings.EqualFold(target, "_blank") && f.sandbox.On && !f.sandbox.Popups {
-		said.Add(console.Line{Level: console.Error, Text: "Blocked opening '" + address + "' in a new window " +
-			"because the request was made in a sandboxed frame whose 'allow-popups' permission is not set."})
-		return nil
-	}
-	return f
+	f.set.session.said.Add(console.Line{Level: console.Error, Text: "Blocked opening '" + address + "' in a new " +
+		"window because the request was made in a sandboxed frame whose 'allow-popups' permission is not set."})
+	return nil, false
 }
 
 // leaves reports whether f may send its tab to address, as a link or a

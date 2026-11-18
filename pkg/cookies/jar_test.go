@@ -550,3 +550,45 @@ func TestTheCookiesOfAFrameAreKeptUnderItsTopLevelSite(t *testing.T) {
 		}
 	})
 }
+
+func TestAFramesScriptsSeeTheCookiesItsRequestsCarry(t *testing.T) {
+	jar := cookies.New()
+	widget, top, other := at(t, "https://widget.test/embed"), at(t, "https://news.test/"), at(t, "https://blog.test/")
+	own := jar.Page(func() *url.URL { return widget })
+	own.Set("first=1; SameSite=None; Secure")
+	own.Set("lax=1")
+	framed := jar.Frame(func() *url.URL { return widget }, top, true)
+	if got := framed.Get(); got != "" {
+		t.Fatalf("a frame of another site reads %q with third parties kept out", got)
+	}
+	framed.Set("ignored=1; SameSite=None; Secure")
+	if jar.Len() != 2 {
+		t.Fatal("a frame of another site set a cookie with third parties kept out")
+	}
+
+	jar.SetThirdParty(true)
+	if got := framed.Get(); got != "" {
+		t.Fatalf("a frame of another site reads its site's own cookies: %q", got)
+	}
+	framed.Set("under=news; SameSite=None; Secure")
+	framed.Set("lax=framed")
+	if got := framed.Get(); got != "under=news" {
+		t.Errorf("a frame of another site reads %q, want what it set that goes to a third party", got)
+	}
+	if got := own.Get(); got != "first=1; lax=1" {
+		t.Errorf("the site's own page reads %q, want its own cookies alone", got)
+	}
+	if got := jar.Frame(func() *url.URL { return widget }, other, true).Get(); got != "" {
+		t.Errorf("the same frame under another site reads %q", got)
+	}
+
+	inside := jar.Frame(func() *url.URL { return at(t, "https://news.test/frame") }, top, false)
+	jar.Page(func() *url.URL { return top }).Set("mine=1")
+	if got := inside.Get(); got != "mine=1" {
+		t.Errorf("a frame of its tab's own site reads %q, want the site's cookies", got)
+	}
+	nested := jar.Frame(func() *url.URL { return at(t, "https://news.test/frame") }, top, true)
+	if got := nested.Get(); got != "" {
+		t.Errorf("a frame of its tab's site inside another site's reads the site's own cookies: %q", got)
+	}
+}

@@ -1,9 +1,14 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/lantervale/ember/input"
 
 	"github.com/lantervale/light/internal/dom"
+	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/frames"
+	"github.com/lantervale/light/pkg/tabs"
 )
 
 // opening is where a click on a link opens it: in the shown tab, in a
@@ -100,6 +105,51 @@ func (s *Screen) openBeside(address string, where opening) {
 		s.fetch(tab, address)
 	}
 	s.showTabs()
+}
+
+// openBehind opens address in a tab of its own behind the shown one, as
+// the menus and the developer tools ask.
+func (s *Screen) openBehind(address string) { s.openBeside(address, behind) }
+
+// openTab opens address in a tab of its own, shown beside the one that
+// asks, with the form sent there when it is one's answer.
+func (s *Screen) openTab(address string, form *web.Submission) {
+	tab := s.browser.OpenBeside(address, true)
+	if form != nil {
+		s.sessionOf(tab).posts[address] = *form
+	}
+	s.visit(address)
+	s.show()
+}
+
+// asksWindow reports whether a target asks for a window of its own,
+// which light opens as a tab: _blank, or a name, for one no frame has.
+func asksWindow(target string) bool {
+	return strings.EqualFold(target, "_blank") || frames.TargetOf(target) == frames.Named
+}
+
+// targeted opens address where a link or a form of tab's page with that
+// target says, in a frame of the page or in a tab of its own, and
+// reports whether it did: the tab itself is left, and so is a link the
+// keys held open elsewhere.
+func (s *Screen) targeted(tab *tabs.Tab, address, target string, form *web.Submission) bool {
+	switch {
+	case s.aimedFromTop(tab, address, target, form):
+	case !asksWindow(target), form == nil && openingBy(s.system, s.win.Input(), false) != inTab:
+		return false
+	default:
+		s.byPage(func() { s.openTab(address, form) })
+	}
+	return true
+}
+
+// pops reports whether a link or a form of f with that target opens a
+// tab of its own: its sandbox may keep it from it.
+func (s *Screen) pops(f *frame, target string) bool {
+	if f.sandbox.On && !f.sandbox.Popups {
+		return false
+	}
+	return asksWindow(target) && s.reach(f, target) == nil
 }
 
 // followUnderMiddle opens the link the middle button went down and came

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -30,7 +32,13 @@ const (
 	strict = `"use strict";`
 	// probed is how much source the import() of one script may have
 	// read again to be told from what only looks like them.
-	probed = 128 << 20
+	probed = 512 << 20
+	// unsupported is what the engine rejects an import() it was not
+	// given by light with, and unreached what light says of it.
+	unsupported = "Error: Not supported"
+	unreached   = "Error: import() is not supported here: light answers the import() of a page's scripts and " +
+		"modules, not one of eval, of new Function, of an on… attribute, of the Console's line or of a script " +
+		"that is not strict code"
 )
 
 // modules are the modules of a context.
@@ -40,6 +48,9 @@ type modules struct {
 	// unlinked stands for every import of a module asked what it
 	// imports.
 	unlinked *v8.Module
+	// callers are the names import() is a call of, by the address of
+	// the script it is called from.
+	callers map[string]string
 }
 
 // module is a module the engine compiled.
@@ -61,6 +72,9 @@ func (c *context) importing() error {
 	c.read = map[int]*module{}
 	define, err := c.ctx.RunScript(`(call, resolve) => {
 	Object.defineProperty(call, "resolve", { value: resolve });
+	Object.defineProperty(call, "from", { value: (name, from) => {
+		Object.defineProperty(globalThis, name, { value: (...asked) => call(from, ...asked) });
+	} });
 	Object.defineProperty(globalThis, "`+importer+`", { value: call });
 }`, "light:import")
 	if err != nil {
@@ -452,54 +466,133 @@ func (c *context) resolved(info *v8.FunctionCallbackInfo) (*v8.Value, error) {
 // importCall is what an import() begins with.
 var importCall = regexp.MustCompile(`import\s*\(`)
 
+// What stands where an import stands when the engine is asked whether
+// it is a call: each is one in the engine's eyes there, and in no other
+// place an import( is written in.
 const (
-	// called stands where an import stands when what follows is a call:
-	// nowhere else is a template read.
-	called = "`    `"
-	// broken stands where an import stands in what the engine runs: it
-	// is read nowhere but in a text, a pattern or a comment.
-	broken = "#     "
+	// called is no name of a method, and ends the line of a pattern.
+	called = "`   `\n"
+	// quoted ends a text in double quotes, and a template on a
+	// substitution that is none; single does so of one in single quotes.
+	quoted = `"${)" `
+	single = `'${)' `
 )
 
-// calls is source with each import() a call of the context's importer,
-// told the address it is called from: the binding has no hook for
-// them. An import that only looks like one, a method of that name or
-// the words in a text, is left as written, and the engine's parser
-// tells them apart: an import() is where a template would be a call
-// too, and where a # would stop the parser.
+// calls is source with each import() a call of a function of the
+// context that knows the address it is called from: the binding has no
+// hook for them. The function's name is as long as the word, so that
+// nothing moves on its line. An import that only looks like one, a
+// method of that name or the words in a text, is left as written, and
+// the engine's parser tells them apart.
 func (c *context) calls(source, from string) string {
 	if !strings.Contains(source, "import") {
 		return source
 	}
 	var found [][]int
 	for _, at := range importCall.FindAllStringIndex(source, -1) {
-		if before, _ := utf8.DecodeLastRuneInString(source[:at[0]]); at[0] == 0 || !named(before) {
+		before, _ := utf8.DecodeLastRuneInString(strings.TrimRightFunc(source[:at[0]], unicode.IsSpace))
+		if at[0] == 0 || (!named(rune(source[at[0]-1])) && before != '.') {
 			found = append(found, at)
 		}
 	}
-	if len(found) == 0 || (len(found)+2)*len(source) > probed {
-		return source
+	p := probe{c: c, source: source, left: probed}
+	found = p.calls(found)
+	if p.left < 0 && c.opts.Rejected != nil {
+		c.opts.Rejected(&Error{Source: from, Message: "light read this script again as often as it does to tell " +
+			"its import() from what looks like one: those left are rejected as not supported."})
 	}
-	all := c.reads(standing(source, called, found...))
-	quoted, err := json.Marshal(from)
-	if err != nil {
+	name := c.caller(from)
+	if len(found) == 0 || name == "" {
 		return source
 	}
 	var out strings.Builder
 	rest := 0
 	for _, at := range found {
-		if (!all && !c.reads(standing(source, called, at))) || c.reads(standing(source, broken, at)) {
-			continue
-		}
 		out.WriteString(source[rest:at[0]])
-		out.WriteString(importer + "(" + string(quoted) + ",")
-		rest = at[1]
-	}
-	if rest == 0 {
-		return source
+		out.WriteString(name)
+		rest = at[0] + len("import")
 	}
 	out.WriteString(source[rest:])
 	return out.String()
+}
+
+// caller is the name of the function an import() of the script at an
+// address is a call of: a word of six letters no page writes, made the
+// first time it is asked for, "" when none is left.
+func (c *context) caller(from string) string {
+	if name, made := c.callers[from]; made {
+		return name
+	}
+	number := strconv.FormatInt(int64(len(c.callers)), 36)
+	quoted, err := json.Marshal(from)
+	if err != nil || len(number) > 4 {
+		return ""
+	}
+	name := "ªº" + strings.Repeat("0", 4-len(number)) + number
+	made, err := c.ctx.RunScript(importer+`.from("`+name+`",`+string(quoted)+`)`, "light:import")
+	if err != nil {
+		return ""
+	}
+	made.Release()
+	if c.callers == nil {
+		c.callers = map[string]string{}
+	}
+	c.callers[from] = name
+	return name
+}
+
+// probe asks the engine which import( of a source are calls, a whole
+// set of them at once: left is how much source it may still read.
+type probe struct {
+	c      *context
+	source string
+	left   int
+}
+
+// calls are those of found that are import() calls. A word that reads
+// with every import replaced reads with any of them replaced, so only
+// the words that do not are asked again, of half the set and of half
+// of that.
+func (p *probe) calls(found [][]int) [][]int {
+	var words []string
+	for _, word := range []string{called, quoted, single} {
+		if len(found) > 0 && !p.reads(word, found) {
+			words = append(words, word)
+		}
+	}
+	return p.sift(found, words)
+}
+
+func (p *probe) sift(found [][]int, words []string) [][]int {
+	if len(found) == 0 || len(words) == 0 {
+		return found
+	}
+	if p.all(found, words) {
+		return found
+	}
+	if len(found) == 1 {
+		return nil
+	}
+	half := len(found) / 2
+	return slices.Concat(p.sift(found[:half], words), p.sift(found[half:], words))
+}
+
+func (p *probe) all(found [][]int, words []string) bool {
+	for _, word := range words {
+		if !p.reads(word, found) {
+			return false
+		}
+	}
+	return true
+}
+
+// reads reports whether the engine reads the source with word where
+// each import of found stands.
+func (p *probe) reads(word string, found [][]int) bool {
+	if p.left -= len(p.source); p.left < 0 {
+		return false
+	}
+	return p.c.reads(standing(p.source, word, found...))
 }
 
 // named reports whether r may be of a name.

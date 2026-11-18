@@ -419,12 +419,14 @@ func (r *Runtime) answer(id int, api string, asked *url.URL, answer Response) {
 	r.answering = nil
 }
 
-func (r *Runtime) origin() string {
+// located is the address of the page's document, that of the page it
+// is written in for one that has none of its own.
+func (r *Runtime) located() *url.URL {
 	u, err := url.Parse(r.page.Address)
-	if err != nil {
-		return "null"
+	if err != nil || r.page.Address == "about:srcdoc" {
+		return r.page.Base
 	}
-	return originOf(u)
+	return u
 }
 
 // vetted is an answer whose host did not say what the script may see
@@ -434,6 +436,9 @@ func (r *Runtime) origin() string {
 func (r *Runtime) vetted(asked *url.URL, answer Response) Response {
 	at, _ := url.Parse(r.page.Address)
 	policy := fetch.Policy{Origin: fetch.OriginOf(at), Mode: fetch.ModeCORS, Credentials: fetch.CredentialsSameOrigin}
+	if r.host.Origin != nil || r.host.Sandboxed.Opaque {
+		policy.Origin = r.origin()
+	}
 	from := asked
 	if final, err := url.Parse(answer.Address); err == nil && answer.Address != "" {
 		from = final

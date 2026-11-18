@@ -106,6 +106,10 @@ func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
 		t.Fatalf("a picture in a link offers %s, want %s", got, want)
 	}
 	s.choose("Open image in new tab")
+	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/map.png"; got != want {
+		t.Fatalf("after opening the picture the tabs are %s, want %s", got, want)
+	}
+	s.click("tab-1")
 	s.at(srv.URL + "/map.png")
 }
 
@@ -213,9 +217,6 @@ func TestARightClickOnATabOffersWhatTabsDo(t *testing.T) {
 		t.Fatalf("%d tabs after closing the others", len(s.browser.Tabs))
 	}
 	s.at(tabs.Home)
-	s.rightClick("tab-0")
-	s.choose("Close tab")
-	s.at(tabs.Home)
 }
 
 func TestALinkOfLightsOwnPagesHasALinksMenu(t *testing.T) {
@@ -298,6 +299,13 @@ func TestARightClickOnARequestCopiesOrOpensItsAddress(t *testing.T) {
 		t.Fatalf("copied %q", got)
 	}
 	s.rightClick(s.requestRow("/site.css"))
+	s.newTab()
+	s.click("tab-0")
+	s.rightClick(s.requestRow("/site.css"))
 	s.choose("Open in new tab")
+	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/site.css "+tabs.Home; got != want {
+		t.Fatalf("after opening the request the tabs are %s, want %s", got, want)
+	}
+	s.click("tab-1")
 	s.at(srv.URL + "/site.css")
 }

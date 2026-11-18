@@ -20,6 +20,12 @@ func Engine() string { return "V8 " + strings.TrimSuffix(v8.Version(), "-v8go") 
 // Available reports whether this build runs scripts.
 func Available() bool { return true }
 
+// live counts the Contexts made and not yet closed.
+var live atomic.Int64 //nolint:gochecknoglobals // a count of the process's engines, for its tests and its tools
+
+// Live is how many Contexts are open: each is an engine of its own.
+func Live() int { return int(live.Load()) }
+
 // initialHeap is the heap a context starts with.
 const initialHeap = 8 << 20
 
@@ -69,6 +75,7 @@ type rejection struct {
 func New(opts Options) (Context, error) {
 	iso := v8.NewIsolate(v8.WithResourceConstraints(initialHeap, opts.memory()), v8.WithExceptionMessages())
 	c := &context{opts: opts, iso: iso, ctx: v8.NewContext(iso)}
+	live.Add(1)
 	iso.SetPromiseRejectedCallback(c.promiseRejected)
 	made, err := c.ctx.RunScript(errorsSource, "light:error")
 	if err != nil {
@@ -160,6 +167,7 @@ func (c *context) Close() {
 	c.ctx.Close()
 	c.iso.Dispose()
 	c.ctx = nil
+	live.Add(-1)
 }
 
 // guarded runs one entry into the engine under the budget, and gives
@@ -315,6 +323,9 @@ func (c *context) report() {
 	for _, r := range rejected {
 		r.promise.Release()
 		if c.opts.Rejected != nil {
+			if r.err.Message == unsupported {
+				r.err.Message = unreached
+			}
 			r.err.Message = "Uncaught (in promise) " + r.err.Message
 			c.opts.Rejected(r.err)
 		}

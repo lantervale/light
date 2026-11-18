@@ -11,11 +11,17 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 )
 
-// version is the version of the file's form.
-const version = 1
+// version is the version of the file's form: 2 since a site framed by
+// another keeps its texts apart, a file of version 1 holding none such.
+const version = 2
+
+// apart joins the site of the page of a tab and the origin of a frame
+// of it into the name of that frame's area.
+const apart = "\x00"
 
 // MaxBytes is how much one site may keep, keys and values together.
 const MaxBytes = 5 << 20
@@ -30,8 +36,16 @@ type Store struct {
 // New is an empty store.
 func New() *Store { return &Store{sites: map[string]map[string]string{}} }
 
-// Area is the area of the site of that origin.
+// Area is the area of the site of that origin, as its own pages see
+// it.
 func (s *Store) Area(origin string) *Area { return &Area{store: s, origin: origin} }
+
+// Framed is the area of the site of that origin as its documents see
+// it in a frame of a page of the site top, another site's: neither
+// its own pages nor its frames under another site read it.
+func (s *Store) Framed(top, origin string) *Area {
+	return &Area{store: s, origin: top + apart + origin}
+}
 
 // Changed reports whether the store holds what its file does not.
 func (s *Store) Changed() bool {
@@ -110,6 +124,9 @@ func (a *Area) Keys() []string {
 type file struct {
 	Version int                          `json:"version"`
 	Sites   map[string]map[string]string `json:"sites"`
+	// Framed are the areas of the sites framed by another, by that
+	// one's site then by their origin.
+	Framed map[string]map[string]map[string]string `json:"framed,omitempty"`
 }
 
 // Save writes the store at path, making its folder, the file whole or
@@ -119,8 +136,19 @@ func (s *Store) Save(path string) error {
 	defer s.mu.Unlock()
 	out := file{Version: version, Sites: map[string]map[string]string{}}
 	for origin, site := range s.sites {
-		if len(site) > 0 {
+		top, framed, is := strings.Cut(origin, apart)
+		switch {
+		case len(site) == 0:
+		case !is:
 			out.Sites[origin] = site
+		default:
+			if out.Framed == nil {
+				out.Framed = map[string]map[string]map[string]string{}
+			}
+			if out.Framed[top] == nil {
+				out.Framed[top] = map[string]map[string]string{}
+			}
+			out.Framed[top][framed] = site
 		}
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
@@ -158,8 +186,15 @@ func Load(path string) (*Store, error) {
 	}
 	s := New()
 	for origin, site := range in.Sites {
-		if site != nil {
+		if site != nil && !strings.Contains(origin, apart) {
 			s.sites[origin] = site
+		}
+	}
+	for top, framed := range in.Framed {
+		for origin, site := range framed {
+			if site != nil && !strings.Contains(top+origin, apart) {
+				s.sites[top+apart+origin] = site
+			}
 		}
 	}
 	return s, nil

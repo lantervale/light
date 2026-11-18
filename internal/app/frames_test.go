@@ -335,12 +335,6 @@ func TestALinkInAFrameOpensWhereItsTargetSays(t *testing.T) {
 	}
 	s.navigate(s.frameAt("nested"), wanted{from: s.frameAt("outer").page, ref: "https://other.test/links"})
 	s.framedTextOf("nested", "https://other.test/links")
-	s.clickAt(s.inFrame(s.frameAt("nested"), "new"))
-	if got := s.framedTextOf("nested", "https://other.test/next"); got != "the next page" {
-		t.Errorf("a link to a new window in a frame shows %q in it", got)
-	}
-	s.navigate(s.frameAt("nested"), wanted{from: s.frameAt("outer").page, ref: "https://other.test/links"})
-	s.framedTextOf("nested", "https://other.test/links")
 	s.clickAt(s.inFrame(s.frameAt("nested"), "parent"))
 	if got := s.framedTextOf("outer", "https://other.test/up"); got != "the parent's page" {
 		t.Errorf("a link to its parent shows %q in the frame around it", got)

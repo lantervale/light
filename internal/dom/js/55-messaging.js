@@ -59,9 +59,9 @@ const copied = (value, seen) => {
   }
   if (value instanceof File) return keep(new File([value], value.name, { type: value.type, lastModified: value.lastModified }));
   if (value instanceof Blob) return keep(new Blob([value], { type: value.type }));
-  if (value instanceof EventTarget || value instanceof Event || platform.has(value)) throw uncloneable("An object of the page");
+  if (value instanceof EventTarget || value instanceof Event || platform.has(value) || facades.has(value)) throw uncloneable("An object of the page");
   if (value instanceof WeakMap || value instanceof WeakSet || value instanceof WeakRef || value instanceof Promise
-    || (typeof SharedArrayBuffer === "function" && value instanceof SharedArrayBuffer)) {
+    || value instanceof SharedBuffer) {
     throw uncloneable(`A ${value.constructor && value.constructor.name || "value"}`);
   }
   const copy = keep(Array.isArray(value) ? new Array(value.length) : {});
@@ -133,8 +133,8 @@ const handOver = (to, from) => {
   old.other = null;
   old.detached = true;
 };
-const messageOf = (init) => {
-  const event = new MessageEvent("message", init);
+const messageOf = (init, type = "message") => {
+  const event = new MessageEvent(type, init);
   event.isTrusted = true;
   return event;
 };
@@ -202,24 +202,21 @@ class MessageChannel {
   get port2() { return channels.get(this)[1]; }
 }
 
-// postMessage is the window's: light shows one document a page, so a
-// window has itself alone to post to.
+// postMessage is the window's own, a page posting to itself: what it
+// posts to another frame's goes through that window (57-windows.js).
+// The origin is the one light holds the page to be of.
 const postMessage = function postMessage(message, target, transfer) {
   if (arguments.length === 0) throw new TypeError("postMessage needs a message");
-  let origin = "/";
-  if (target !== null && typeof target === "object") {
-    if (target.targetOrigin !== undefined) origin = String(target.targetOrigin);
-    transfer = target.transfer;
-  } else if (target !== undefined && target !== null) origin = String(target);
+  const [origin, list] = targeted(target, transfer);
+  const from = host("origin");
   let reached = true;
   if (origin !== "*" && origin !== "/") {
     const to = host("url", origin, "");
     if (!to) throw new DOMException(`Invalid target origin '${origin}' in a call to 'postMessage'.`, "SyntaxError");
-    reached = to.origin === here.origin && here.origin !== "null";
+    reached = to.origin === from && from !== "null";
   }
-  const sent = serialized(message, transfer === undefined || transfer === null ? [] : Array.from(transfer));
+  const sent = serialized(message, list);
   if (!reached) return;
-  const from = here.origin;
   setTimeout(() => dispatch(window, messageOf({ ...sent, origin: from, source: window })), 0);
 };
 

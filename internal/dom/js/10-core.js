@@ -11,7 +11,7 @@ const host = (...args) => {
   try {
     return light(...args);
   } catch (error) {
-    const named = /^(SyntaxError|QuotaExceededError|HierarchyRequestError|NotFoundError): (.*)$/s.exec(error.message);
+    const named = /^(SyntaxError|QuotaExceededError|HierarchyRequestError|NotFoundError|SecurityError|DataCloneError): (.*)$/s.exec(error.message);
     if (named) throw new DOMException(named[2], named[1]);
     throw error;
   }

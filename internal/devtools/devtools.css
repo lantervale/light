@@ -92,6 +92,8 @@
 .dt-line .dt-times { flex: none; padding: 0 5px; border-radius: 8px; background: var(--dt-accent);
 	color: var(--dt-bg); font-size: 11px; user-select: none; }
 .dt-line .dt-said { flex: 1; min-width: 0; }
+.dt-line .dt-frame { flex: none; max-width: 30%; padding: 0 5px; border: 1px solid var(--dt-faint); border-radius: 8px;
+	color: var(--dt-faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dt-line .dt-text, .dt-line .dt-stack { white-space: pre-wrap; overflow-wrap: anywhere; }
 .dt-line .dt-stack { padding-left: 16px; opacity: 0.8; }
 .dt-line .dt-where { flex: none; max-width: 40%; color: var(--dt-faint); overflow: hidden; text-overflow: ellipsis;

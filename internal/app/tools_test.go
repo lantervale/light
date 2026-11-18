@@ -89,13 +89,17 @@ func TestWhereALineOfTheConsoleIsFromOpensItsSource(t *testing.T) {
 		})
 		return at
 	}
-	s.clickAt(find("dt-where"))
-	if got := s.browser.Tab().Current(); got != tabs.SourceOf(srv.URL+"/app.js") || len(s.browser.Tabs) != 2 {
-		t.Fatalf("after a click on where the line is from the tab shows %q, of %d tabs", got, len(s.browser.Tabs))
-	}
+	s.newTab()
 	s.click("tab-0")
-	s.clickAt(find("dt-link"))
-	if got := s.browser.Tab().Current(); got != srv.URL+"/vaults" || len(s.browser.Tabs) != 3 {
-		t.Fatalf("after a click on the address in the line the tab shows %q, of %d tabs", got, len(s.browser.Tabs))
+	source, linked := tabs.SourceOf(srv.URL+"/app.js"), srv.URL+"/vaults"
+	s.clickAt(find("dt-where"))
+	if got, want := s.opened(), "["+srv.URL+"/] "+source+" "+tabs.Home; got != want {
+		t.Fatalf("after a click on where the line is from the tabs are %s, want %s", got, want)
 	}
+	s.clickAt(find("dt-link"))
+	if got, want := s.opened(), "["+srv.URL+"/] "+source+" "+linked+" "+tabs.Home; got != want {
+		t.Fatalf("after a click on the address in the line the tabs are %s, want %s", got, want)
+	}
+	s.click("tab-1")
+	s.at(source)
 }

@@ -89,5 +89,9 @@ func (r *Runtime) table() map[string]op {
 		"text8":      decoded,
 		"body":       r.answered,
 		"random":     random,
+		// the other windows (windows.go)
+		"window":  r.window,
+		"origin":  func(arguments) (any, error) { return r.origin(), nil },
+		"sandbox": func(arguments) (any, error) { return []bool{r.host.Sandboxed.Opaque, r.host.Sandboxed.NoModals}, nil },
 	}
 }

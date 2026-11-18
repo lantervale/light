@@ -302,6 +302,9 @@ func (c *spoke) spoken(l console.Line) *ui.Node {
 		ui.TabIndex(0).Apply(where)
 		ui.OnClick(func() { p.host.Source(l.Source, l.Line) }).Apply(where)
 	}
+	if l.Frame != "" {
+		line.Append(ui.Span(ui.Class("dt-frame"), ui.Attr("title", "Said by a frame of the page"), ui.Text(l.Frame)))
+	}
 	line.Append(said, where)
 	return line
 }

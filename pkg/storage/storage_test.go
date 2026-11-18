@@ -83,3 +83,65 @@ func TestWhatIsStoredIsKeptInAFile(t *testing.T) {
 		t.Fatalf("a corrupt file reads as %v", err)
 	}
 }
+
+func TestASiteFramedByAnotherKeepsItsTextsApart(t *testing.T) {
+	store := storage.New()
+	own := store.Area("https://widget.test")
+	underNews := store.Framed("https://news.test", "https://widget.test")
+	underBlog := store.Framed("https://blog.test", "https://widget.test")
+	own.Set("who", "first party")
+	underNews.Set("who", "under news")
+	underBlog.Set("who", "under blog")
+	areas := map[string]*storage.Area{"first party": own, "under news": underNews, "under blog": underBlog}
+	for name, area := range areas {
+		if got, _ := area.Get("who"); got != name || len(area.Keys()) != 1 {
+			t.Errorf("the area %s reads %q among %v", name, got, area.Keys())
+		}
+	}
+	underNews.Clear()
+	if _, ok := own.Get("who"); !ok {
+		t.Error("clearing a framed area cleared the site's own")
+	}
+	underNews.Set("who", "under news")
+
+	path := filepath.Join(t.TempDir(), "storage.json")
+	if err := store.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	again, err := storage.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := again.Framed("https://news.test", "https://widget.test").Get("who"); got != "under news" {
+		t.Errorf("a framed area came back as %q", got)
+	}
+	if got, _ := again.Area("https://widget.test").Get("who"); got != "first party" {
+		t.Errorf("the site's own area came back as %q", got)
+	}
+}
+
+func TestAFileOfTheFormerFormKeepsWhatSitesStored(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "storage.json")
+	const former = `{"version": 1, "sites": {"https://site.test": {"name": "Ann"}}}`
+	if err := os.WriteFile(path, []byte(former), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := storage.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.Area("https://site.test").Get("name"); got != "Ann" {
+		t.Fatalf("what a site stored before is read as %q", got)
+	}
+	if len(store.Framed("https://site.test", "https://site.test").Keys()) != 0 {
+		t.Error("a framed area reads what the site's own pages stored")
+	}
+	store.Area("https://site.test").Set("more", "1")
+	if err = store.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), `"version": 2`) || !strings.Contains(string(data), `"name": "Ann"`) {
+		t.Errorf("the file written again is %s", data)
+	}
+}

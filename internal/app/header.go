@@ -113,7 +113,12 @@ func (s *Screen) newTab() {
 	s.show()
 }
 
+// closeTab closes tab i, and the window with its last one.
 func (s *Screen) closeTab(i int) {
+	if len(s.browser.Tabs) == 1 {
+		s.win.RequestClose()
+		return
+	}
 	s.browser.Close(i)
 	s.show()
 }

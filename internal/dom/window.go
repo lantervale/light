@@ -3,6 +3,7 @@ package dom
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -76,14 +77,23 @@ func (r *Runtime) jar() Cookies {
 	return r.cookies
 }
 
-func (r *Runtime) cookie(arguments) (any, error) { return r.jar().Get(), nil }
+func (r *Runtime) cookie(arguments) (any, error) {
+	if r.host.Sandboxed.Opaque {
+		return "", nil
+	}
+	return r.jar().Get(), nil
+}
 
 func (r *Runtime) setCookie(a arguments) (any, error) {
-	r.jar().Set(a.text(0))
+	if !r.host.Sandboxed.Opaque {
+		r.jar().Set(a.text(0))
+	}
 	return nothing()
 }
 
-func (r *Runtime) cookieEnabled(arguments) (any, error) { return r.jar().Enabled(), nil }
+func (r *Runtime) cookieEnabled(arguments) (any, error) {
+	return !r.host.Sandboxed.Opaque && r.jar().Enabled(), nil
+}
 
 func (r *Runtime) log(a arguments) (any, error) {
 	source, line, _ := where(a.text(2))
@@ -194,7 +204,7 @@ func originOf(u *url.URL) string {
 	case "http", "https", "light":
 		return u.Scheme + "://" + u.Host
 	}
-	return "null"
+	return opaqueOrigin
 }
 
 // changed is an address with one of its parts set.
@@ -276,6 +286,10 @@ func (r *Runtime) area(name string) Storage {
 const maxStored = 1 << 20
 
 func (r *Runtime) storage(a arguments) (any, error) {
+	if r.host.Sandboxed.Opaque {
+		//nolint:revive,staticcheck // a DOMException's message, as Chrome words it
+		return nil, errors.New("SecurityError: The document is sandboxed and lacks the 'allow-same-origin' flag.")
+	}
 	area, key := r.area(a.text(0)), a.text(2)
 	switch a.text(1) {
 	case "get":

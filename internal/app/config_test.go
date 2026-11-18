@@ -58,10 +58,6 @@ func TestASettingIsAppliedAtOnceAndKeptBetweenRuns(t *testing.T) {
 	s.Open(tabs.Page(aboutName))
 	s.click("home")
 	s.at(tabs.Page(guideName))
-	s.closeTab(1)
-	s.closeTab(0)
-	s.frame()
-	s.at(tabs.Page(guideName))
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}

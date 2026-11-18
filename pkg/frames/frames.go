@@ -206,8 +206,10 @@ func local(host string) bool {
 type Target int
 
 const (
-	// Self is the frame the link is in: no target, _self, and, as light
-	// opens no window for a page, _blank and a name no frame has.
+	// Self is the frame the link is in: no target and _self. _blank
+	// reads as Self too, and a name no frame has as Named: both ask for
+	// a window of their own, which whoever follows the link opens as a
+	// tab, or refuses, before it comes here.
 	Self Target = iota
 	// Parent is the frame around it, the tab's page for one that is in
 	// none.

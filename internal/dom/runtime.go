@@ -10,6 +10,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -161,6 +162,13 @@ type Host struct {
 	Window    func() Window
 	// Budget is how long one script may run, script.DefaultBudget when 0.
 	Budget time.Duration
+	// Origin is the origin of the page's document as the browser holds
+	// it, that of its address without it. Sandboxed is what its frame
+	// keeps it from, and Windows the other windows of its tab
+	// (windows.go).
+	Origin    func() string
+	Sandboxed Sandboxed
+	Windows   Windows
 }
 
 // Runtime is one page's scripts and what they see of the page.
@@ -487,7 +495,11 @@ func (r *Runtime) Close() {
 // Closed reports whether the Runtime was closed.
 func (r *Runtime) Closed() bool { return r.closed }
 
-func (r *Runtime) now() float64 { return float64(time.Since(r.began).Microseconds()) / 1000 }
+// now is the time since the page began in milliseconds, as fine as
+// scripts are told it.
+func (r *Runtime) now() float64 {
+	return math.Floor(float64(time.Since(r.began).Microseconds())/1000/timeStep) * timeStep
+}
 
 // where reads the first place of a stack that is not light's own: its
 // script's address, line and column.

@@ -6,14 +6,41 @@ byName(Document.prototype, (page, name) => {
 });
 const document = new Document(token);
 
-// A window names the elements of its page by their id, where nothing
-// else has the name.
+// framed is the window of the frame of the page at that index, or of
+// that name, undefined for none.
+const framed = (name) => {
+  const index = indexOf(name);
+  const child = index >= 0 ? host("window", "child", 0, index) : host("window", "named", 0, name);
+  return child < 0 ? undefined : windowOf(child);
+};
+const [opaque, noModals] = host("sandbox");
+// asks is a function that would ask the user something, which light
+// only notes in the console: a sandboxed frame without allow-modals is
+// refused even that.
+const asks = (name, said, answer) => function (message) {
+  if (noModals) host("log", "error", `Ignored call to '${name}()'. The document is sandboxed, and the 'allow-modals' keyword is not set.`);
+  else host("log", "info", said(message));
+  return answer;
+};
+const stored = (area) => {
+  const kept = storage(area);
+  return {
+    get() {
+      if (opaque) throw new DOMException(`Failed to read the '${area}Storage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag.`, "SecurityError");
+      return kept;
+    },
+  };
+};
+
+// A window names the frames of its page by their index and their name,
+// then its elements by their id, where nothing else has the name.
 class Window extends EventTarget {}
 Object.setPrototypeOf(Window.prototype, new Proxy(Object.create(EventTarget.prototype), {
-  has(target, name) { return name in target || (typeof name === "string" && host("byId", name) !== 0); },
+  has(target, name) { return name in target || (typeof name === "string" && (framed(name) !== undefined || host("byId", name) !== 0)); },
   get(target, name, receiver) {
     if (name in target || typeof name !== "string") return Reflect.get(target, name, receiver);
-    return wrap(host("byId", name)) || undefined;
+    const frame = framed(name);
+    return frame !== undefined ? frame : wrap(host("byId", name)) || undefined;
   },
 }));
 Object.setPrototypeOf(window, Window.prototype);
@@ -40,11 +67,10 @@ class Option extends HTMLOptionElement {
 }
 
 define(window, {
-  window, self: window, globalThis: window, top: window, parent: window, frames: window, document, console,
+  window, self: window, globalThis: window, frames: window, document, console,
   setTimeout, clearTimeout, setInterval, clearInterval: clearTimeout, requestAnimationFrame, cancelAnimationFrame,
   queueMicrotask, requestIdleCallback, cancelIdleCallback: clearTimeout, setImmediate: undefined,
   history, navigator, performance, crypto, customElements, CSS, structuredClone,
-  localStorage: storage("local"), sessionStorage: storage("session"),
   // light is not told its monitor's size: the screen scripts read is
   // the window itself, the part of it light knows.
   screen: {
@@ -56,11 +82,11 @@ define(window, {
       angle: 0, addEventListener() {}, removeEventListener() {},
     },
   },
-  visualViewport: undefined, name: "", closed: false, opener: null, frameElement: null, length: 0,
-  isSecureContext: here.protocol === "https:", origin: here.origin, event: undefined, status: "",
-  alert(message) { host("log", "info", "alert: " + (message === undefined ? "" : String(message))); },
-  confirm(message) { host("log", "info", "confirm, answered no: " + String(message)); return false; },
-  prompt(message) { host("log", "info", "prompt, left unanswered: " + String(message)); return null; },
+  visualViewport: undefined, name: "", closed: false, opener: null, frameElement: null,
+  isSecureContext: here.protocol === "https:", origin: host("origin"), crossOriginIsolated: false, event: undefined, status: "",
+  alert: asks("alert", (message) => "alert: " + (message === undefined ? "" : String(message)), undefined),
+  confirm: asks("confirm", (message) => "confirm, answered no: " + String(message), false),
+  prompt: asks("prompt", (message) => "prompt, left unanswered: " + String(message), null),
   print() {}, focus() {}, blur() {}, stop() {}, close() {},
   open() { host("log", "warn", "light opens no window for a script"); return null; },
   postMessage,
@@ -109,8 +135,13 @@ define(window, {
   HTMLOptGroupElement, HTMLOutputElement, HTMLMenuElement, HTMLFontElement,
 });
 for (const name of ["setImmediate", "visualViewport", "event", "Audio"]) delete window[name];
+delete window.SharedArrayBuffer;
 accessors(window, {
   location: { get() { return location; }, set(address) { go(address, false); } },
+  parent: { get() { return windowOf(host("window", "parent", 0)); }, set(value) { define(window, { parent: value }); } },
+  top: { get() { return windowOf(host("window", "top", 0)); } },
+  length: { get() { return host("window", "length", 0); }, set(value) { define(window, { length: value }); } },
+  localStorage: stored("local"), sessionStorage: stored("session"),
   innerWidth: { get() { return host("viewport")[0]; } },
   innerHeight: { get() { return host("viewport")[1]; } },
   outerWidth: { get() { return host("around")[0]; } },
@@ -181,6 +212,18 @@ const calls = {
   event(ref, type, init) {
     const target = targetOf(ref);
     return target ? !dispatch(target, eventOf(type, init || {})) : false;
+  },
+  // message tells the window of what another posted it: what it wrote
+  // down, read here, with the origin and the window light knows it by.
+  message(text, origin, source) {
+    let data;
+    try {
+      data = read(text);
+    } catch (_) {
+      dispatch(window, messageOf({ origin, source: windowOf(source) }, "messageerror"));
+      return;
+    }
+    dispatch(window, messageOf({ data, origin, source: windowOf(source), ports: [] }));
   },
   // script names the script element that runs, null between two.
   script(ref) { document.currentScript = wrap(ref); },

@@ -52,6 +52,9 @@ type Request struct {
 	// User is whether an act of the user began a navigation: a click, an
 	// address typed, a form submitted.
 	User bool
+	// Opaque is whether the page that asks has an origin nothing
+	// shares, a sandboxed frame's: every address is another site to it.
+	Opaque bool
 }
 
 func (q Request) mode() Mode {
@@ -223,7 +226,11 @@ func (i Identity) Apply(h http.Header, q *Request, trail []*url.URL) {
 	}
 	h.Set("Sec-Fetch-Dest", string(q.Destination))
 	h.Set("Sec-Fetch-Mode", string(mode))
-	h.Set("Sec-Fetch-Site", Site(q.Initiator, trail))
+	site := Site(q.Initiator, trail)
+	if q.Opaque && web(q.Initiator) {
+		site = siteCrossSite
+	}
+	h.Set("Sec-Fetch-Site", site)
 	user := ""
 	if mode == Navigate && q.User {
 		user = "?1"

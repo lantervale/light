@@ -120,9 +120,14 @@ func (b *builder) sendOrSay(form, submitter *ui.Node) {
 // is sent there with what a POST carries.
 func (t *Tree) Send(form, submitter *ui.Node) error { return t.b.send(form, submitter) }
 
-// Submission is what Send sends.
+// Submission is what Send sends, for a script that sends the form
+// itself: an error where Send would send nothing.
 func (t *Tree) Submission(form, submitter *ui.Node) (Submission, error) {
-	return t.b.submission(form, submitter)
+	sent, err := t.b.submission(form, submitter)
+	if f := t.b.framed(); err == nil && f != nil && f.NoForms {
+		return sent, &SandboxedError{Address: sent.Address}
+	}
+	return sent, err
 }
 
 // Submitter is the button Enter in a field of form presses: its first

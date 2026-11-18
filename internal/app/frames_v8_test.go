@@ -4,9 +4,11 @@ package app //nolint:testpackage // the screen is driven by what it holds: its e
 
 import (
 	"testing"
+
+	"github.com/lantervale/light/pkg/console"
 )
 
-func TestAScriptReachesItsPagesIframesAndNothingInThem(t *testing.T) {
+func TestAScriptReachesItsPagesIframesAndNothingInTheirDocuments(t *testing.T) {
 	f, transport := framingOf(t, map[string]answer{
 		"site.test/": html(`<title>Scripted</title><iframe id="one" name="first" src="/inner" width="200"></iframe>
 			<iframe id="bad" src="javascript:alert(1)"></iframe><p id="heard"></p><script>
@@ -30,13 +32,13 @@ func TestAScriptReachesItsPagesIframesAndNothingInThem(t *testing.T) {
 	s := showWith(t, Options{Transport: transport, Downloads: t.TempDir()})
 	s.visit("https://site.test/")
 	s.until("its scripts ran", func() bool { return s.session().scripts != nil })
-	if got := s.framedText("one"); got != "inner no script here" {
-		t.Fatalf("the frame shows %q, want its page as one that runs no script", got)
+	if got := s.framedText("one"); got != "inner" {
+		t.Fatalf("the frame shows %q, want its page as one that runs its scripts", got)
 	}
 	s.until("the page heard of its frames", func() bool { return s.pageText("heard") == "bad:error one:load " })
 	for expression, want := range map[string]string{
-		`one.contentWindow === null && one.contentDocument === null`: "true",
-		`frames.length + " " + (parent === window) + " " + (top === window) + " " + (frameElement === null)`: `"0 ` +
+		`one.contentWindow === frames[0] && one.contentWindow === first && one.contentDocument === null`: "true",
+		`frames.length + " " + (parent === window) + " " + (top === window) + " " + (frameElement === null)`: `"2 ` +
 			`true true true"`,
 		`one.src + " " + one.name + " " + one.width + " " + one.srcdoc + "|" + one.sandbox.length`: `"https://` +
 			`site.test/inner first 200 |0"`,
@@ -46,8 +48,9 @@ func TestAScriptReachesItsPagesIframesAndNothingInThem(t *testing.T) {
 			t.Errorf("%s is %s (%v), want %s", expression, got, err, want)
 		}
 	}
-	if f.came("site.test/ran") {
-		t.Error("a script of a frame's document ran")
+	s.until("the frame's script asked for what it fetches", func() bool { return f.came("site.test/ran") })
+	if !s.consoleSays(console.Error, "SecurityError") || s.session().pages["https://site.test/"].Title != "Scripted" {
+		t.Errorf("a frame of the page's own origin reached its document: the console says %s", s.said())
 	}
 
 	if _, err := s.evaluate(`one.src = "/second"`); err != nil {

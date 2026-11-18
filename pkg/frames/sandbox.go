@@ -66,6 +66,11 @@ func (s Sandbox) Under(parent Sandbox) Sandbox {
 // own that nothing shares: it keeps and sends no cookie.
 func (s Sandbox) Opaque() bool { return s.On && !s.SameOrigin }
 
+// Runs reports whether the frame's document runs its scripts, and Asks
+// whether it may ask the user something (alert, confirm, prompt).
+func (s Sandbox) Runs() bool { return !s.On || s.Scripts }
+func (s Sandbox) Asks() bool { return !s.On || s.Modals }
+
 // Submits reports whether a form of the frame is sent.
 func (s Sandbox) Submits() bool { return !s.On || s.Forms }
 

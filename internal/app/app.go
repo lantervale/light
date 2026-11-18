@@ -205,8 +205,8 @@ func (s *Screen) build() {
 			s.config.ToolsHeight = height
 			s.settings.touch()
 		},
-		Source:  func(address string, _ int) { s.OpenInNewTab(tabs.SourceOf(address)) },
-		Open:    s.OpenInNewTab,
+		Source:  func(address string, _ int) { s.openBehind(tabs.SourceOf(address)) },
+		Open:    s.openBehind,
 		Storage: s.storedBy,
 		Export:  func() { s.saveHAR(0, false) },
 		Title:   s.titled,
