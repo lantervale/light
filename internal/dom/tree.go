@@ -9,6 +9,8 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/lantervale/ember/ui"
+
+	"github.com/lantervale/light/internal/web"
 )
 
 // The names scripts know the nodes that are no element by.
@@ -18,6 +20,7 @@ const (
 	commentTag  = "#comment"
 	doctypeTag  = "#doctype"
 	documentTag = "#document"
+	cdataTag    = "#cdata-section"
 )
 
 // Scripts read the page's tree as its HTML was read (web.Tree): every
@@ -97,25 +100,45 @@ func (r *Runtime) connected(u *ui.Node) bool {
 func (r *Runtime) tagOf(u *ui.Node) string { return r.tree.Tag(u) }
 
 // nameOf is the name scripts know n by: an element's tag, after its
-// namespace when it is not HTML's ("svg:path").
+// namespace when it is not HTML's ("svg:path"), in braces when it is
+// neither SVG's nor MathML's ("{urn:x}item", "{}item" for none). A
+// processing instruction's is its target after a question mark, and a
+// document a script made says whether createDocument made it, which
+// makes it an XMLDocument.
 func (r *Runtime) nameOf(n *html.Node) string {
 	switch n.Type { //nolint:exhaustive // the tree has no other
 	case html.TextNode:
+		if n.Namespace == web.CDATASection {
+			return cdataTag
+		}
 		return textTag
 	case html.CommentNode:
+		if n.Namespace == web.Instruction {
+			return "?" + web.InstructionTarget(n)
+		}
 		return commentTag
 	case html.DoctypeNode:
 		return doctypeTag
 	case html.DocumentNode:
-		if n == r.tree.Root() {
+		switch d := r.docs[n]; {
+		case n == r.tree.Root():
 			return documentTag
+		case d != nil && d.created:
+			return documentTag + ":xml"
+		case d != nil:
+			return documentTag + ":html"
 		}
 		return fragmentTag
 	}
-	if n.Namespace != "" {
+	switch n.Namespace {
+	case "":
+		return n.Data
+	case "svg", "math":
 		return n.Namespace + ":" + n.Data
+	case web.NoNamespace:
+		return "{}" + n.Data
 	}
-	return n.Data
+	return "{" + n.Namespace + "}" + n.Data
 }
 
 func (r *Runtime) document(arguments) (any, error) {
@@ -169,8 +192,10 @@ func (r *Runtime) sibling(n *html.Node, a arguments) (any, error) {
 	return 0, nil
 }
 
+// isConnected reports whether n is in a document: the page, or one a
+// script made.
 func (r *Runtime) isConnected(n *html.Node, _ arguments) (any, error) {
-	return r.tree.Connected(n), nil
+	return r.tree.Connected(n) || r.docs[lineage(n)[0]] != nil, nil
 }
 
 func (r *Runtime) contains(n *html.Node, a arguments) (any, error) {
@@ -240,27 +265,32 @@ func (r *Runtime) create(a arguments) (any, error) {
 	}
 	tag := a.text(0)
 	if tag == fragmentTag {
-		return r.ref(&html.Node{Type: html.DocumentNode}), nil
+		return r.own(&html.Node{Type: html.DocumentNode}, a, 2), nil
 	}
-	return r.ref(r.tree.Element(tag, a.text(1))), nil
+	n := r.tree.Element(tag, a.text(1))
+	if prefix := a.text(3); prefix != "" {
+		r.prefixes[n] = prefix
+	}
+	return r.own(n, a, 2), nil
 }
 
 func (r *Runtime) createText(a arguments) (any, error) {
 	if r.made++; r.made > maxNodes {
 		return nil, errTooManyNodes
 	}
-	return r.ref(&html.Node{Type: html.TextNode, Data: a.text(0)}), nil
+	return r.own(&html.Node{Type: html.TextNode, Data: a.text(0)}, a, 1), nil
 }
 
 func (r *Runtime) createComment(a arguments) (any, error) {
 	if r.made++; r.made > maxNodes {
 		return nil, errTooManyNodes
 	}
-	return r.ref(&html.Node{Type: html.CommentNode, Data: a.text(0)}), nil
+	return r.own(&html.Node{Type: html.CommentNode, Data: a.text(0)}, a, 1), nil
 }
 
 // insert puts the second node in the first before the third, at its
-// end for none. A script that enters the page with it runs.
+// end for none: a node of another document becomes one of the first's.
+// A script that enters the page with it runs.
 func (r *Runtime) insert(parent *html.Node, a arguments) (any, error) {
 	child, err := r.node(a, 1)
 	if err != nil {
@@ -275,6 +305,9 @@ func (r *Runtime) insert(parent *html.Node, a arguments) (any, error) {
 	case within(child, parent):
 		//nolint:revive,staticcheck // a DOMException's message, as Chrome words it
 		return nil, errors.New("HierarchyRequestError: The new child element contains the parent.")
+	}
+	if to := r.home(parent); to != r.home(child) {
+		r.adopt(child, to)
 	}
 	r.settle(r.tree.Insert(parent, child, before))
 	return nothing()
@@ -300,7 +333,11 @@ func (r *Runtime) clone(n *html.Node, a arguments) (any, error) {
 	if r.made++; r.made > maxNodes {
 		return nil, errTooManyNodes
 	}
-	return r.ref(r.copyOf(n, a.flag(1))), nil
+	c := r.copyOf(n, a.flag(1))
+	if d := r.home(n); d != nil {
+		r.adopt(c, d)
+	}
+	return r.ref(c), nil
 }
 
 // copyOf is a copy of n, of what it holds too when deep.
@@ -310,6 +347,9 @@ func (r *Runtime) copyOf(n *html.Node, deep bool) *html.Node {
 	if n.Type == html.ElementNode && n.DataAtom == atom.Template && n.Namespace == "" {
 		c = r.tree.Element(n.Data, "")
 		c.Attr = append([]html.Attribute(nil), n.Attr...)
+	}
+	if prefix := r.prefixes[n]; prefix != "" {
+		r.prefixes[c] = prefix
 	}
 	if !deep {
 		return c
@@ -379,14 +419,24 @@ func (r *Runtime) setHTML(n *html.Node, a arguments) (any, error) {
 	if content := r.tree.Content(n); content != nil {
 		into = content
 	}
+	made, err := r.markupIn(a.text(1), n)
+	if err != nil {
+		return nil, err
+	}
 	r.empty(into)
-	for _, c := range r.markup(a.text(1), n.Data) {
+	for _, c := range made {
 		r.tree.Insert(into, c, nil)
 	}
 	return nothing()
 }
 
+// fragment is markup read as the children of an element of a tag, or
+// as what the node a script names holds.
 func (r *Runtime) fragment(a arguments) (any, error) {
+	if within := r.nodes[int(a.number(2))]; within != nil {
+		made, err := r.markupIn(a.text(0), within)
+		return r.refs(made), err
+	}
 	return r.refs(r.markup(a.text(0), a.text(1))), nil
 }
 
@@ -571,6 +621,9 @@ func (r *Runtime) forget(top *html.Node) {
 	}
 	drop := func(n *html.Node) bool {
 		delete(r.ran, n)
+		delete(r.owners, n)
+		delete(r.docs, n)
+		delete(r.prefixes, n)
 		if content := r.tree.Content(n); content != nil {
 			r.forget(content)
 		}

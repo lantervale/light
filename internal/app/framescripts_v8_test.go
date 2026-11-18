@@ -97,7 +97,7 @@ func TestTheScriptsOfAFramesDocumentRun(t *testing.T) {
 		`document.getElementById("out").textContent`: "classic", `mod`: "module ran", `timed`: "timed", `fetched`: "data",
 		`shared`: "shared", `kept`: "TypeError",
 		`origin + " " + location.href`: "https://other.test https://other.test/inner",
-		`heard.join()`:                 "deep loaded,https://other.test from deep",
+		`heard.join()`:                 "https://other.test from deep,deep loaded",
 	} {
 		s.becomes("one", expression, want)
 	}

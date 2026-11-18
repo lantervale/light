@@ -9,18 +9,46 @@ const TAG = Symbol("tag");
 const NS = Symbol("namespace");
 const token = Symbol("light");
 const wrappers = new Map();
-const ELEMENT_NODE = 1, TEXT_NODE = 3, COMMENT_NODE = 8, DOCUMENT_NODE = 9, DOCTYPE_NODE = 10, FRAGMENT_NODE = 11;
+const ELEMENT_NODE = 1, TEXT_NODE = 3, CDATA_NODE = 4, INSTRUCTION_NODE = 7, COMMENT_NODE = 8, DOCUMENT_NODE = 9,
+  DOCTYPE_NODE = 10, FRAGMENT_NODE = 11;
 const FRAGMENT = "#document-fragment";
 const HTML_NS = "http://www.w3.org/1999/xhtml";
+const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace", XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
 // namespaces are those of the elements that are not HTML's, by the name
-// light knows each by.
+// light knows each by. An element of another namespace is known by the
+// namespace itself, and one of none by "-".
 const namespaces = { svg: "http://www.w3.org/2000/svg", math: "http://www.w3.org/1998/Math/MathML" };
+const NO_NS = "-";
 const namespaceOf = (uri) => Object.keys(namespaces).find((name) => namespaces[name] === uri) || "";
+const spaceOf = (uri) => (uri === null || uri === undefined || uri === "" ? NO_NS
+  : uri === HTML_NS ? "" : namespaceOf(String(uri)) || String(uri));
+// The page's document is a node as any other: pageRef is its number,
+// and pageInfo its type and whether it was read by XML's rules.
+// strangers is whether a script made a document of its own, and
+// xmlAbout whether any document is of XML: until then every node is
+// the page's, and every name is HTML's.
+const PAGE = Symbol("page");
+const INFO = Symbol("info");
+const pageRef = host("document", "page");
+const pageInfo = host("document", "info", pageRef);
+let strangers = false;
+let xmlAbout = pageInfo[1];
+// prefixed is whether a script made an element with a prefix.
+let prefixed = false;
+const inXML = (node) => xmlAbout && host("document", "xml", node[REF]);
 // objectOf is the object of the node of a number, of that name.
 const objectOf = (ref, tag) => {
   if (tag === FRAGMENT) return new DocumentFragment(token, ref);
   if (tag === "#comment") return new Comment(token, ref);
   if (tag === "#doctype") return new DocumentType(token, ref);
+  if (tag === "#cdata-section") return new CDATASection(token, ref);
+  if (tag === "#document:xml") return new XMLDocument(token, ref);
+  if (tag === "#document:html") return new Document(token, ref);
+  if (tag[0] === "?") return new ProcessingInstruction(token, ref, tag.slice(1));
+  if (tag[0] === "{") {
+    const end = tag.indexOf("}");
+    return new Element(token, ref, tag.slice(end + 1), tag.slice(1, end) || NO_NS);
+  }
   const colon = tag.indexOf(":");
   if (colon < 0) return new (classOf(tag))(token, ref, tag);
   const namespace = tag.slice(0, colon);
@@ -137,7 +165,7 @@ class Node extends EventTarget {
   get nodeName() { return ""; }
   get nodeValue() { return null; }
   set nodeValue(_) { /* an element has none */ }
-  get ownerDocument() { return document; }
+  get ownerDocument() { return (strangers && wrap(host("document", "owner", this[REF]))) || document; }
   get isConnected() { return host("connected", this[REF]); }
   get parentNode() {
     const parent = host("parent", this[REF]);
@@ -183,7 +211,7 @@ class Node extends EventTarget {
       throw new DOMException("The node to be replaced is not a child of this node.", "NotFoundError");
     }
     if (child === old) return old;
-    insert(this, child, old);
+    insert(this, child, old, old);
     detach(old);
     return old;
   }
@@ -212,34 +240,94 @@ class Node extends EventTarget {
       }
     }
   }
-  lookupNamespaceURI() { return null; }
-  isDefaultNamespace() { return true; }
+  lookupNamespaceURI(prefix) { return namespaceFrom(this, prefix === "" || prefix === undefined ? null : prefix); }
+  lookupPrefix(uri) { return uri === null || uri === undefined || uri === "" ? null : prefixFrom(this, String(uri)); }
+  isDefaultNamespace(uri) {
+    return namespaceFrom(this, null) === (uri === "" || uri === undefined ? null : uri);
+  }
 }
 const nodeTypes = {
-  ELEMENT_NODE, ATTRIBUTE_NODE: 2, TEXT_NODE, CDATA_SECTION_NODE: 4, PROCESSING_INSTRUCTION_NODE: 7, COMMENT_NODE,
-  DOCUMENT_NODE, DOCUMENT_TYPE_NODE: 10, DOCUMENT_FRAGMENT_NODE: FRAGMENT_NODE,
+  ELEMENT_NODE, ATTRIBUTE_NODE: 2, TEXT_NODE, CDATA_SECTION_NODE: CDATA_NODE, ENTITY_REFERENCE_NODE: 5, ENTITY_NODE: 6,
+  PROCESSING_INSTRUCTION_NODE: INSTRUCTION_NODE, COMMENT_NODE, DOCUMENT_NODE, DOCUMENT_TYPE_NODE: 10,
+  DOCUMENT_FRAGMENT_NODE: FRAGMENT_NODE, NOTATION_NODE: 12,
   DOCUMENT_POSITION_DISCONNECTED: 1, DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4,
-  DOCUMENT_POSITION_CONTAINS: 8, DOCUMENT_POSITION_CONTAINED_BY: 16,
+  DOCUMENT_POSITION_CONTAINS: 8, DOCUMENT_POSITION_CONTAINED_BY: 16, DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: 32,
+};
+
+// declaringFrom is the element a namespace is looked up from for a node
+// that is none: a document's own, else the one the node is in.
+const declaringFrom = (node) => (node instanceof Document ? node.documentElement
+  : node instanceof DocumentType || node instanceof DocumentFragment ? null : node.parentElement);
+// namespaceFrom is the namespace a prefix stands for at a node, the
+// default one for null, as the elements from it up declare them.
+const namespaceFrom = (node, prefix) => {
+  if (!(node instanceof Element)) {
+    const from = declaringFrom(node);
+    return from ? namespaceFrom(from, prefix) : null;
+  }
+  if (prefix === "xml") return XML_NAMESPACE;
+  if (prefix === "xmlns") return XMLNS_NAMESPACE;
+  for (let at = node; at; at = at.parentElement) {
+    if (prefix === null && at.namespaceURI !== null) return at.namespaceURI;
+    const declared = at.getAttribute(prefix === null ? "xmlns" : "xmlns:" + prefix);
+    if (declared !== null) return declared || null;
+  }
+  return null;
+};
+// prefixFrom is a prefix the elements from a node up declare for a
+// namespace, null for none.
+const prefixFrom = (node, uri) => {
+  if (!(node instanceof Element)) {
+    const from = declaringFrom(node);
+    return from ? prefixFrom(from, uri) : null;
+  }
+  for (let at = node; at; at = at.parentElement) {
+    for (const [name, value] of host("attrs", at[REF])) {
+      if (name.startsWith("xmlns:") && value === uri) return name.slice(6);
+    }
+  }
+  return null;
 };
 define(Node, nodeTypes);
 define(Node.prototype, nodeTypes);
 
+const refuse = (why) => { throw new DOMException(why, "HierarchyRequestError"); };
+// admit refuses what a document cannot hold: more than one element,
+// more than one doctype, or a doctype after its element. replaced is
+// the child the new one takes the place of.
+const admit = (parent, child, before, replaced) => {
+  const kids = parent.childNodes;
+  const at = before ? kids.indexOf(before) : kids.length;
+  const has = (from, kind) => kids.slice(...from).some((n) => n !== replaced && n instanceof kind);
+  const parts = child instanceof DocumentFragment ? child.childNodes : [child];
+  const elements = parts.filter((n) => n instanceof Element).length;
+  if (elements > 1 || parts.some((n) => n instanceof Text)) refuse("A document holds one element, and no text.");
+  if (elements && (has([0], Element) || has([at], DocumentType))) {
+    refuse("Only one element on document allowed.");
+  }
+  if (child instanceof DocumentType && (has([0], DocumentType) || has([0, at], Element))) {
+    refuse("Only one doctype on document allowed, before its element.");
+  }
+};
 // insert puts child in parent before another of its children, at its
 // end for none: a fragment gives its children in its place.
-const insert = (parent, child, before) => {
-  if (parent === document) parent = document.documentElement;
+const insert = (parent, child, before, replaced = null) => {
+  if (!(parent instanceof Element || parent instanceof Document || parent instanceof DocumentFragment)) {
+    refuse("This node type does not support this method.");
+  }
   const into = refOf(parent);
+  const ref = refOf(child, "the child");
+  if (child === parent || host("contains", ref, into)) refuse("The new child element contains the parent.");
   if (before !== null && (!(before instanceof Node) || before.parentNode !== parent)) {
     throw new DOMException("The node before which the new node is to be inserted is not a child of this node.",
       "NotFoundError");
   }
+  if (child instanceof Document) refuse("Nodes of type '#document' may not be inserted inside nodes of type '" + parent.nodeName + "'.");
+  if (parent instanceof Document) admit(parent, child, before, replaced);
+  else if (child instanceof DocumentType) refuse("A doctype is held by a document only.");
   if (child instanceof DocumentFragment) {
     for (const one of child.childNodes) insert(parent, one, before);
     return child;
-  }
-  const ref = refOf(child, "the child");
-  if (child === parent || (child instanceof Element && host("contains", ref, into))) {
-    throw new DOMException("The new child element contains the parent.", "HierarchyRequestError");
   }
   if (child.parentNode) detach(child);
   host("insert", into, ref, before ? before[REF] : 0);
@@ -253,7 +341,7 @@ const insert = (parent, child, before) => {
 };
 const detach = (child) => {
   const parent = child.parentNode;
-  if (!parent || parent === document) return;
+  if (!parent || (parent === document && child instanceof Element)) return;
   const previousSibling = watching ? child.previousSibling : null, nextSibling = watching ? child.nextSibling : null;
   host("remove", child[REF]);
   if (watching) observed({ type: "childList", target: parent, addedNodes: [], removedNodes: [child], previousSibling, nextSibling });
@@ -286,6 +374,14 @@ class CharacterData extends Node {
   get nextElementSibling() { return wrap(host("sibling", this[REF], 1, true)); }
   get previousElementSibling() { return wrap(host("sibling", this[REF], -1, true)); }
   appendData(text) { this.data += text; }
+  substringData(at, count) { return this.data.substr(offsetIn(this, at), count >>> 0); }
+  insertData(at, text) { this.replaceData(at, 0, text); }
+  deleteData(at, count) { this.replaceData(at, count, ""); }
+  replaceData(at, count, text) {
+    const data = this.data;
+    at = offsetIn(this, at);
+    this.data = data.slice(0, at) + String(text) + data.slice(at + (count >>> 0));
+  }
   remove() { detach(this); }
   before(...items) { if (this.parentNode) insert(this.parentNode, nodesOf(items), this); }
   after(...items) { if (this.parentNode) insert(this.parentNode, nodesOf(items), this.nextSibling); }
@@ -297,6 +393,12 @@ class CharacterData extends Node {
     insert(parent, nodesOf(items), next);
   }
 }
+// offsetIn is an offset into a node's text, refused past its end.
+const offsetIn = (node, at) => {
+  at >>>= 0;
+  if (at > node.length) throw new DOMException("The offset is past the end of the text.", "IndexSizeError");
+  return at;
+};
 class Text extends CharacterData {
   constructor(key, ref) {
     if (key === token) {
@@ -338,8 +440,8 @@ class DocumentType extends Node {
   get nodeType() { return DOCTYPE_NODE; }
   get name() { return host("text", this[REF]); }
   get nodeName() { return this.name; }
-  get publicId() { return ""; }
-  get systemId() { return ""; }
+  get publicId() { return host("attr", this[REF], "public") || ""; }
+  get systemId() { return host("attr", this[REF], "system") || ""; }
   get textContent() { return null; }
   set textContent(_) {}
   get childNodes() { return new NodeList(); }
@@ -595,14 +697,22 @@ class Element extends Node {
   }
   get nodeType() { return ELEMENT_NODE; }
   get localName() { return this[TAG]; }
-  get tagName() { return this[NS] ? this[TAG] : this[TAG].toUpperCase(); }
+  get tagName() {
+    const prefix = this.prefix;
+    const name = prefix ? prefix + ":" + this[TAG] : this[TAG];
+    return this[NS] || inXML(this) ? name : name.toUpperCase();
+  }
   get nodeName() { return this.tagName; }
-  get namespaceURI() { return this[NS] ? namespaces[this[NS]] : HTML_NS; }
-  get prefix() { return null; }
+  get namespaceURI() {
+    const space = this[NS];
+    return space === "" ? HTML_NS : space === NO_NS ? null : namespaces[space] || space;
+  }
+  get prefix() { return (prefixed && host("document", "prefix", this[REF])) || null; }
 
   // _named is an attribute's name as this element keeps it: in lower
-  // case in HTML, as it is written elsewhere (viewBox).
-  _named(name) { return this[NS] ? String(name) : String(name).toLowerCase(); }
+  // case in HTML, as it is written elsewhere (viewBox) and in a
+  // document of XML.
+  _named(name) { return this[NS] || inXML(this) ? String(name) : String(name).toLowerCase(); }
   getAttribute(name) { return host("attr", this[REF], this._named(name)); }
   hasAttribute(name) { return this.getAttribute(name) !== null; }
   hasAttributes() { return host("attrs", this[REF]).length > 0; }
@@ -613,6 +723,14 @@ class Element extends Node {
     return map;
   }
   getAttributeNode(name) { return this.attributes.getNamedItem(this._named(name)); }
+  setAttributeNode(attribute) {
+    const old = this.getAttributeNode(attribute.name);
+    this.setAttribute(attribute.name, attribute.value);
+    attribute.ownerElement = this;
+    return old;
+  }
+  setAttributeNodeNS(attribute) { return this.setAttributeNode(attribute); }
+  getAttributeNodeNS(_, name) { return this.getAttributeNode(name); }
   setAttribute(name, value) {
     name = this._named(name);
     if (!/^[^\s"'>/=]+$/.test(name)) throw new DOMException(`'${name}' is not a valid attribute name.`, "InvalidCharacterError");
@@ -663,7 +781,8 @@ class Element extends Node {
     const parent = this.parentNode;
     if (!parent) return;
     const next = this.nextSibling;
-    const nodes = wrapAll(host("fragment", String(markup), parent instanceof Element ? parent.localName : "div"));
+    const within = parent instanceof Element ? parent : null;
+    const nodes = wrapAll(host("fragment", String(markup), within ? within.localName : "div", within ? within[REF] : 0));
     detach(this);
     for (const node of nodes) insert(parent, node, next);
   }
@@ -681,7 +800,8 @@ class Element extends Node {
     const inside = /^(afterbegin|beforeend)$/i.test(where);
     const within = inside ? this : this.parentNode;
     const fragment = document.createDocumentFragment();
-    for (const node of wrapAll(host("fragment", String(markup), within instanceof Element ? within.localName : "div"))) {
+    const element = within instanceof Element;
+    for (const node of wrapAll(host("fragment", String(markup), element ? within.localName : "div", element ? within[REF] : 0))) {
       fragment.appendChild(node);
     }
     this.insertAdjacentElement(where, fragment);
@@ -703,10 +823,8 @@ class Element extends Node {
   matches(selector) { return host("matches", this[REF], String(selector)); }
   webkitMatchesSelector(selector) { return this.matches(selector); }
   closest(selector) { return wrap(host("closest", this[REF], String(selector))); }
-  getElementsByTagName(tag) {
-    return HTMLCollection.from(host("query", this[REF], tag === "*" ? "*" : CSS.escape(String(tag).toLowerCase()), true).map(wrap));
-  }
-  getElementsByTagNameNS(_, tag) { return this.getElementsByTagName(tag); }
+  getElementsByTagName(tag) { return tagged(this, tag); }
+  getElementsByTagNameNS(uri, tag) { return tagged(this, tag, uri === "*" ? "*" : spaceOf(uri)); }
   getElementsByClassName(names) {
     const classes = String(names).split(/\s+/).filter(Boolean);
     if (!classes.length) return new HTMLCollection();
@@ -746,6 +864,11 @@ class Element extends Node {
   requestFullscreen() { return Promise.reject(new TypeError("light has no fullscreen")); }
 }
 const scrolls = (element) => element === document.documentElement || element === document.body;
+// tagged are the elements under a node of a name, as it is written in
+// a document of XML and in lower case for HTML's, or of a local name
+// in a namespace.
+const tagged = (root, name, space = null) =>
+  HTMLCollection.from(host("document", "tagged", root[REF], String(name), space).map(wrap));
 accessors(Element.prototype, parentMixin);
 define(Element.prototype, parentMethods);
 

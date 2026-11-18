@@ -71,6 +71,8 @@ func (s *Screen) pageOf(address string) shownPage {
 		return s.unknown(address, name)
 	case onTheWeb(address):
 		return s.webPage(address)
+	case address == blankAddress:
+		return s.blankBody()
 	}
 	return s.unreachable(address, "light opens "+own+", http:// and https:// addresses")
 }

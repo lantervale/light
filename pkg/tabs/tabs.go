@@ -3,6 +3,7 @@
 package tabs
 
 import (
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
@@ -35,30 +36,207 @@ func Own(address string) (string, string, bool) {
 	return u.Host, u.Query().Get("q"), true
 }
 
-// Tab is one tab: its visited addresses, where it stands among them, and
-// the tab it was opened beside.
+// Tab is one tab: the pages it went through, where it stands among
+// them, and the tab it was opened beside. Its pages and what their
+// frames went through are one history, as browsers keep it: each step
+// is a page with the address each of its frames that moved is at.
 type Tab struct {
-	urls []string
-	at   int
-	from *Tab
+	steps []step
+	at    int
+	from  *Tab
 }
 
-func NewTab(address string) *Tab { return &Tab{urls: []string{address}} }
+// step is one step of a tab's history: the address of its page, and
+// those of its frames that went elsewhere than their element asks, by
+// their place in the page (FramePath).
+type step struct {
+	address string
+	frames  map[string]string
+}
 
-func (h *Tab) Current() string  { return h.urls[h.at] }
+func NewTab(address string) *Tab { return &Tab{steps: []step{{address: address}}} }
+
+func (h *Tab) Current() string  { return h.steps[h.at].address }
 func (h *Tab) CanBack() bool    { return h.at > 0 }
-func (h *Tab) CanForward() bool { return h.at < len(h.urls)-1 }
+func (h *Tab) CanForward() bool { return h.at < len(h.steps)-1 }
 
-// Len is how many pages Back and Forward go through.
-func (h *Tab) Len() int { return len(h.urls) }
+// Len is how many steps Back and Forward go through, those of the
+// page's frames among them.
+func (h *Tab) Len() int { return len(h.steps) }
 
 // Visit goes to address and drops what Forward would have returned to.
 func (h *Tab) Visit(address string) {
 	if address == h.Current() {
 		return
 	}
-	h.urls = append(h.urls[:h.at+1], address)
+	h.add(step{address: address})
+}
+
+// Push is Visit for an address the page gave itself: its frames stay
+// where they are.
+func (h *Tab) Push(address string) {
+	if address == h.Current() {
+		return
+	}
+	h.add(step{address: address, frames: maps.Clone(h.steps[h.at].frames)})
+}
+
+func (h *Tab) add(next step) {
+	h.steps = append(h.steps[:h.at+1], next)
 	h.at++
+}
+
+// FramePath is the place of a frame in its page: the key of each
+// frame it is in, from the page down, then its own: whatever names a
+// frame among those of its document.
+func FramePath(keys ...string) string {
+	escaped := make([]string, len(keys))
+	for i, key := range keys {
+		escaped[i] = url.PathEscape(key)
+	}
+	return strings.Join(escaped, "/")
+}
+
+// Frame is the address the frame at path is at, "" for what its
+// element asks.
+func (h *Tab) Frame(path string) string { return h.steps[h.at].frames[path] }
+
+// VisitFrame is a step of the frame at path to address: the page
+// stays, the frames in that one start again, and what Forward would
+// have returned to is dropped.
+func (h *Tab) VisitFrame(path, address string) {
+	if address == h.Frame(path) {
+		return
+	}
+	h.add(step{address: h.Current(), frames: h.framesWith(path, address)})
+}
+
+// ReplaceFrame names the address the frame at path is at, without a
+// step: "" for what its element asks.
+func (h *Tab) ReplaceFrame(path, address string) {
+	h.steps[h.at].frames = h.framesWith(path, address)
+}
+
+// PushFrame is VisitFrame for an address the frame's document gave
+// itself: the frames in it stay where they are.
+func (h *Tab) PushFrame(path, address string) {
+	if address == h.Frame(path) {
+		return
+	}
+	frames := maps.Clone(h.steps[h.at].frames)
+	if frames == nil {
+		frames = map[string]string{}
+	}
+	frames[path] = address
+	h.add(step{address: h.Current(), frames: frames})
+}
+
+// framesWith are the frames of the step the tab stands on with the one
+// at path at address, and none in it.
+func (h *Tab) framesWith(path, address string) map[string]string {
+	frames := map[string]string{}
+	for at, to := range h.steps[h.at].frames {
+		if at != path && !strings.HasPrefix(at, path+"/") {
+			frames[at] = to
+		}
+	}
+	if address != "" {
+		frames[path] = address
+	}
+	return frames
+}
+
+// RenameFrame is ReplaceFrame for an address the frame's document gave
+// itself: the frames in it stay where they are.
+func (h *Tab) RenameFrame(path, address string) {
+	if h.steps[h.at].frames == nil {
+		h.steps[h.at].frames = map[string]string{}
+	}
+	h.steps[h.at].frames[path] = address
+}
+
+// Change is what a move through a tab's history changes: the page, or
+// the frames of it at those paths, the outer ones only.
+type Change struct {
+	Top    bool
+	Frames []string
+	from   int
+	to     int
+}
+
+// Moved reports whether the move changes anything.
+func (c Change) Moved() bool { return c.Top || len(c.Frames) > 0 }
+
+// At is the step the tab stands on, the first being 0.
+func (h *Tab) At() int { return h.at }
+
+// Since is what differs between the step numbered from and the one
+// the tab stands on. has reports whether the page still has a frame at
+// a path; nil when it has them all.
+func (h *Tab) Since(from int, has func(path string) bool) Change { return h.between(from, h.at, has) }
+
+func (h *Tab) between(from, to int, has func(path string) bool) Change {
+	c := Change{from: from, to: to}
+	a, b := h.steps[from], h.steps[to]
+	if a.address != b.address {
+		c.Top = true
+		return c
+	}
+	var paths []string
+	for path := range a.frames {
+		if b.frames[path] != a.frames[path] {
+			paths = append(paths, path)
+		}
+	}
+	for path := range b.frames {
+		if _, known := a.frames[path]; !known {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	for _, path := range paths {
+		inner := slices.ContainsFunc(c.Frames, func(outer string) bool { return strings.HasPrefix(path, outer+"/") })
+		if !inner && (has == nil || has(path)) {
+			c.Frames = append(c.Frames, path)
+		}
+	}
+	return c
+}
+
+// Ahead is what going delta steps would change, without going: back
+// for a negative delta. A step that would change only frames the page
+// has no more is passed over, and a move past either end changes
+// nothing.
+func (h *Tab) Ahead(delta int, has func(path string) bool) Change {
+	at, by := h.at, 1
+	if delta < 0 {
+		by, delta = -1, -delta
+	}
+	for ; delta > 0; delta-- {
+		next := at + by
+		for next >= 0 && next < len(h.steps) && !h.between(at, next, has).Moved() {
+			next += by
+		}
+		if next < 0 || next >= len(h.steps) {
+			return Change{from: h.at, to: h.at}
+		}
+		at = next
+	}
+	return h.between(h.at, at, has)
+}
+
+// Take makes the move Ahead told of.
+func (h *Tab) Take(c Change) {
+	if c.from == h.at && c.to >= 0 && c.to < len(h.steps) {
+		h.at = c.to
+	}
+}
+
+// Travel goes delta steps as Ahead tells, and says what changed.
+func (h *Tab) Travel(delta int, has func(path string) bool) Change {
+	c := h.Ahead(delta, has)
+	h.Take(c)
+	return c
 }
 
 func (h *Tab) Back() {
@@ -77,7 +255,7 @@ func (h *Tab) Forward() {
 // sent it to, when it stands on from.
 func (h *Tab) Redirect(from, to string) {
 	if h.Current() == from {
-		h.urls[h.at] = to
+		h.steps[h.at].address = to
 	}
 }
 
@@ -87,7 +265,7 @@ func (h *Tab) Drop() {
 	if !h.CanBack() {
 		return
 	}
-	h.urls = h.urls[:h.at]
+	h.steps = h.steps[:h.at]
 	h.at--
 }
 
@@ -152,7 +330,10 @@ func (b *Browser) Duplicate(i int) {
 	if i < 0 || i >= len(b.Tabs) {
 		return
 	}
-	twin := &Tab{urls: slices.Clone(b.Tabs[i].urls), at: b.Tabs[i].at}
+	twin := &Tab{steps: slices.Clone(b.Tabs[i].steps), at: b.Tabs[i].at}
+	for at := range twin.steps {
+		twin.steps[at].frames = maps.Clone(twin.steps[at].frames)
+	}
 	b.Tabs = slices.Insert(b.Tabs, i+1, twin)
 	b.Active = i + 1
 }

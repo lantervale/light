@@ -18,7 +18,7 @@ import (
 // tree shows, nil otherwise.
 func (in *Inspector) element() *ui.Node {
 	n := in.state.selected
-	if n == nil || n.IsText() || n == in.page.Head || in.items[n] == nil || in.page.Doc == nil {
+	if n == nil || n.IsText() || in.isHead(n) || in.items[n] == nil || in.page.Doc == nil {
 		return nil
 	}
 	return n
@@ -37,7 +37,7 @@ func (in *Inspector) restyle() {
 				b.WriteString(" " + a.Name + "=" + a.Value)
 			}
 		}
-		boxes, _ := in.page.Doc.BoxesOf(n)
+		boxes, _ := in.docOf(n).BoxesOf(n)
 		fmt.Fprint(&b, boxes)
 	}
 	if styled := b.String(); styled != in.styled || styled == "" {
@@ -70,7 +70,7 @@ func (in *Inspector) style() {
 func (in *Inspector) listRules(n *ui.Node) {
 	filter := strings.ToLower(strings.TrimSpace(in.state.Rules))
 	var out []*ui.Node
-	for _, m := range in.page.Doc.MatchedRules(n) {
+	for _, m := range in.docOf(n).MatchedRules(n) {
 		var decls []*ui.Node
 		for _, d := range m.Declarations {
 			if filter != "" && !strings.Contains(strings.ToLower(d.Name+": "+d.Value), filter) {
@@ -241,7 +241,7 @@ func hexed(digits string) (uint8, uint8, uint8, float64, bool) {
 func (in *Inspector) listComputed(n *ui.Node) {
 	filter := strings.ToLower(strings.TrimSpace(in.state.Computed))
 	var out []*ui.Node
-	for _, p := range in.page.Doc.ComputedStyle(n) {
+	for _, p := range in.docOf(n).ComputedStyle(n) {
 		if !p.Declared && !in.state.All ||
 			filter != "" && !strings.Contains(strings.ToLower(p.Name+": "+p.Value), filter) {
 			continue
@@ -272,7 +272,8 @@ func number(v float32) string {
 // content's size, then where its border box is and how it is
 // positioned.
 func (in *Inspector) showBox(n *ui.Node) {
-	boxes, ok := in.page.Doc.BoxesOf(n)
+	doc := in.docOf(n)
+	boxes, ok := doc.BoxesOf(n)
 	if !ok {
 		fill(in.box, ui.Div(ui.Class("dt-insp-none"), ui.Text("This element has no box: it is not shown.")))
 		return
@@ -293,8 +294,8 @@ func (in *Inspector) showBox(n *ui.Node) {
 			side("dt-insp-right", level.outer.X+level.outer.W-level.within.X-level.within.W),
 			side("dt-insp-bottom", level.outer.Y+level.outer.H-level.within.Y-level.within.H))
 	}
-	position, _ := in.page.Doc.ComputedValue(n, "position")
-	sizing, _ := in.page.Doc.ComputedValue(n, "box-sizing")
+	position, _ := doc.ComputedValue(n, "position")
+	sizing, _ := doc.ComputedValue(n, "box-sizing")
 	fill(in.box, inner, ui.Div(ui.ID("dt-insp-box-at"),
 		ui.Text(fmt.Sprintf("%s × %s at %s, %s · %s · %s", number(boxes.Border.W), number(boxes.Border.H),
 			number(boxes.Border.X), number(boxes.Border.Y), position, sizing))))

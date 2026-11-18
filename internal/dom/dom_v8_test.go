@@ -79,9 +79,8 @@ func TestScriptsReadAndChangeThePage(t *testing.T) {
 		{"atob and btoa", `atob(btoa("light")) + btoa("é")`, "light6Q=="},
 		{"TextEncoder and TextDecoder", `new TextDecoder().decode(new TextEncoder().encode("né")) +
 			new TextEncoder().encode("é").length`, "né2"},
-		{"what light has not answers with nothing", `[new XPathEvaluator().createExpression("//p").evaluate(document)
-			.iterateNext(), document.body instanceof ShadowRoot, new PerformanceObserver(() => 0).takeRecords().length,
-			document.evaluate("//p", document).snapshotLength].join()`, ",false,0,0"},
+		{"what light has not answers with nothing", `[document.body instanceof ShadowRoot,
+			new PerformanceObserver(() => 0).takeRecords().length].join()`, "false,0"},
 		{"JSON and the language", `JSON.stringify([...new Set([1, 1, 2])].map((n) => n ** 2))`, "[1,4]"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

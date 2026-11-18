@@ -39,6 +39,9 @@ type Page struct {
 	// points BoxOf answers in: the origin of Doc's own points when Doc
 	// is another Document, and what the highlight is cut to.
 	Area func() (geom.Rect, bool)
+	// Frame is the page the iframe n of this one shows, false for none:
+	// the tree opens the iframe on it. Nil for a page without frames.
+	Frame func(n *ui.Node) (Page, bool)
 }
 
 // Host is what the Inspector asks of the screen it is part of. Page is
@@ -93,10 +96,13 @@ type Inspector struct {
 	box, computed, computedFilter, all    *ui.Node
 	overlay, clip, outline, label         *ui.Node
 	edges                                 [4]*ui.Node
-	items                                 map[*ui.Node]*item
-	rows                                  map[*ui.Node]*item
-	top                                   []*item
-	shown, picking, keyboard, held        bool
+	// inner are the pages the iframes of the page show, by their
+	// iframe, and roots the same by their root and by their head.
+	inner, roots                   map[*ui.Node]*framed
+	items                          map[*ui.Node]*item
+	rows                           map[*ui.Node]*item
+	top                            []*item
+	shown, picking, keyboard, held bool
 	// guarding keeps the page from the press that picked until its
 	// release.
 	guarding bool
@@ -117,6 +123,7 @@ type Inspector struct {
 // the page.
 func New(doc *ui.Document, host Host) *Inspector {
 	in := &Inspector{doc: doc, host: host, state: &State{}, items: map[*ui.Node]*item{}, rows: map[*ui.Node]*item{},
+		inner: map[*ui.Node]*framed{}, roots: map[*ui.Node]*framed{},
 		keys: make(map[input.Key]bool)}
 	in.pick = ui.Button(ui.ID("dt-insp-pick"), ui.Attr("aria-label", "Pick an element from the page"),
 		ui.Span(ui.Class("dt-insp-pick-box")), ui.Span(ui.Class("dt-insp-pick-arrow")),
@@ -247,6 +254,8 @@ func (in *Inspector) follow() bool {
 			All: keep.All}
 	}
 	in.hovered = nil
+	clear(in.inner)
+	clear(in.roots)
 	in.rebuild()
 	in.find(0)
 	in.restyle()
@@ -290,6 +299,7 @@ func (in *Inspector) Select(n *ui.Node) {
 	in.follow()
 	var it *item
 	if n != nil {
+		in.discover(n)
 		it = in.reveal(n)
 	}
 	in.selectItem(it)
@@ -308,8 +318,8 @@ func (in *Inspector) selectItem(it *item) {
 	if it != nil {
 		it.row.AddClass("selected")
 		in.doc.ScrollIntoView(it.row)
-		if changed && !n.IsText() && n != in.page.Head && in.page.Doc != nil && in.page.Doc != in.doc {
-			in.page.Doc.ScrollIntoView(n)
+		if doc := in.docOf(n); changed && !n.IsText() && !in.isHead(n) && doc != nil && doc != in.doc {
+			doc.ScrollIntoView(n)
 		}
 	}
 	in.restyle()

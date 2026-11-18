@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
@@ -27,8 +28,14 @@ const (
 	opaqueOrigin = "null"
 	// inlineAddress is the address of a document written in its iframe.
 	inlineAddress = "about:srcdoc"
-	// maxMail is how many messages may wait for the windows of a page.
+	// maxMail is how many messages may wait for the windows of a page,
+	// or in one end of a channel.
 	maxMail = 4096
+	// mailRounds is how many times in a frame of the tab its documents
+	// are given what they posted each other, and mailTime how long that
+	// may take.
+	mailRounds = 256
+	mailTime   = 4 * time.Millisecond
 )
 
 // letter is a message one window of a page posted another: what its
@@ -37,7 +44,7 @@ const (
 // its window when it was posted, and no others.
 type letter struct {
 	to      *running
-	message string
+	message dom.Posted
 	target  string
 	from    *frame
 	origin  string
@@ -116,11 +123,8 @@ func (set *framed) byWindow(id int) (*frame, bool) {
 // within are the frames of the document parent shows, the page's for
 // nil, as that document orders them.
 func (set *framed) within(parent *frame) []*frame {
-	in := set.top
-	if parent != nil {
-		in = parent.page
-	}
-	if in == nil || in.Doc == nil {
+	in := set.shownBy(parent)
+	if in == nil {
 		return nil
 	}
 	set.adopt(parent, in)
@@ -140,6 +144,19 @@ func (set *framed) within(parent *frame) []*frame {
 		})
 	}
 	return out
+}
+
+// shownBy is the document a window shows, the page for nil; nil for
+// none.
+func (set *framed) shownBy(parent *frame) *web.Page {
+	in := set.top
+	if parent != nil {
+		in = parent.page
+	}
+	if in == nil || in.Doc == nil {
+		return nil
+	}
+	return in
 }
 
 // scriptsOf are the scripts of a window: the page's for nil.
@@ -253,25 +270,49 @@ func (w *windows) Of(n *ui.Node) int {
 // Post leaves a message for the scripts that run in a window now: it
 // comes at the tab's next frame, if their document's origin is then
 // the one the message is for.
-func (w *windows) Post(to int, message, target string) error {
-	if _, is := frames.Reaches(target, opaqueOrigin, opaqueOrigin); !is {
-		return dom.ErrTargetOrigin
-	}
-	f, ok := w.frame(to)
-	if !ok || len(w.set.mail) >= maxMail {
+func (w *windows) Post(to int, message dom.Posted, target string) error {
+	set := w.set
+	if !set.take(set.scriptsOf(w.by), message) {
 		return nil
 	}
-	if live := w.set.scriptsOf(f); live != nil {
-		w.set.mail = append(w.set.mail, letter{to: live, message: message, target: target, from: w.by,
-			origin: w.set.originIn(w.by)})
+	_, is := frames.Reaches(target, opaqueOrigin, opaqueOrigin)
+	f, ok := w.frame(to)
+	live := set.scriptsOf(f)
+	if !is || !ok || live == nil || len(set.mail) >= maxMail {
+		set.lose(message)
+		if !is {
+			return dom.ErrTargetOrigin
+		}
+		return nil
 	}
+	set.mail = append(set.mail, letter{to: live, message: message, target: target, from: w.by,
+		origin: set.originIn(w.by)})
 	return nil
 }
 
 // deliver gives the windows of the page what was posted them, in the
 // order it was: each to the scripts it was for, if they still run in
 // their window and their document is of the origin the message is for.
+//
+// What a message makes its reader post comes in the same frame of the
+// tab, after what was posted before it, until rounds of them were
+// given or they took too long: a talk between two documents does not
+// wait a frame of the tab for each answer.
 func (set *framed) deliver() {
+	began := time.Now()
+	set.sweep()
+	for round := 0; round < mailRounds && time.Since(began) < mailTime; round++ {
+		if len(set.mail) == 0 && !set.carries() {
+			break
+		}
+		set.post()
+		set.carry()
+	}
+	set.orphans()
+}
+
+// post gives the windows what waits for them now.
+func (set *framed) post() {
 	mail := set.mail
 	set.mail = nil
 	for _, m := range mail {
@@ -280,11 +321,14 @@ func (set *framed) deliver() {
 			to = set.all[at]
 		}
 		if set.scriptsOf(to) != m.to || m.to.rt.Closed() {
+			set.lose(m.message)
 			continue
 		}
 		if reaches, _ := frames.Reaches(m.target, m.origin, set.originIn(to)); !reaches {
+			set.lose(m.message)
 			continue
 		}
+		set.give(m.to, m.message)
 		source := dom.NoWindow
 		switch {
 		case m.from == to:
@@ -328,7 +372,11 @@ func (w *windows) Go(to int, address string, replace bool) {
 		switch {
 		case s.browser.Tab() != set.tab || set.scriptsOf(w.by) != asking:
 		case target != nil && !target.gone:
-			s.navigate(target, wanted{from: from, ref: address, user: user})
+			how := aStep
+			if replace {
+				how = inPlace
+			}
+			s.navigate(target, wanted{from: from, ref: address, user: user, how: how})
 		case target != nil:
 		case replace:
 			s.fromPage(from.Address, func() {
@@ -341,6 +389,26 @@ func (w *windows) Go(to int, address string, replace bool) {
 			s.fromPage(from.Address, func() { asking.by(s)(func() { s.Open(address) }) })
 		}
 	})
+}
+
+// Focus gives a window the keyboard when the document that asks may:
+// on the user's click, or when it holds the keyboard itself.
+func (w *windows) Focus(to int) {
+	set := w.set
+	target, ok := w.frame(to)
+	asking, live := set.scriptsOf(w.by), set.scriptsOf(target)
+	if !ok || asking == nil || !asking.acting && !asking.keyboard {
+		return
+	}
+	for _, other := range w.s.scripted(set) {
+		other.keyboard = false
+	}
+	if live != nil {
+		live.keyboard = true
+	}
+	if target != nil && target.in.Doc != nil {
+		target.in.Doc.Focus(target.node)
+	}
 }
 
 func (w *windows) label() string {
@@ -361,12 +429,15 @@ func (s *Screen) runFrames(set *framed) {
 		if f.gone || f.page == nil {
 			continue
 		}
-		if f.run == nil && s.scripting() && f.held.Runs() && f.page.Scripted() && f.page.Tree != nil &&
-			f.page.Tree.Activate == nil {
+		if f.run == nil && s.runs(f) {
 			s.startFrame(f)
 		}
 		if f.run != nil {
 			f.run.rt.Frame()
+		}
+		if f.loads && (f.run == nil || f.run.rt.Closed() || f.run.rt.Loaded()) {
+			f.loads = false
+			s.tellFrame(f, "load")
 		}
 	}
 }
@@ -407,12 +478,16 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 			session.said.Add(console.Line{Level: console.Level(m.Level), Text: m.Text, Source: m.Source, Line: m.Line,
 				Stack: m.Stack, Depth: m.Depth, At: m.At, Frame: label})
 		},
-		Navigate: func(address string, _ bool) {
+		Ask: s.frameDialogs(f, live), Hold: &s.modalOf(f.set.tab).hold,
+		Navigate: func(address string, replace bool) {
 			if !onTheWeb(address) {
 				return
 			}
-			user := live.acting
-			later(func() { s.navigate(f, wanted{from: live.page, ref: address, user: user}) })
+			user, how := live.acting, aStep
+			if replace {
+				how = inPlace
+			}
+			later(func() { s.navigate(f, wanted{from: live.page, ref: address, user: user, how: how}) })
 		},
 		Reload: func() {
 			later(func() {
@@ -420,14 +495,24 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 					f.key = ""
 					return
 				}
-				s.navigate(f, wanted{from: live.page, ref: live.page.Address})
+				s.navigate(f, wanted{from: live.page, ref: live.page.Address, how: inPlace})
 			})
 		},
 		Post: func(sent web.Submission) {
 			user := live.acting
 			later(func() { s.postFrom(f, live, sent, user) })
 		},
-		Moved:   func(_, address string) { live.at = address },
+		Moved: func(how, address string) {
+			live.at = address
+			if f.run == live {
+				s.renamed(f, how, address)
+				s.later = append(s.later, s.showNavigation)
+			}
+		},
+		Travel: func(delta int) {
+			user := live.acting
+			later(func() { s.travel(f, user, delta) })
+		},
 		Steps:   set.tab.Len,
 		Fetch:   func(q dom.Request, done func(dom.Response)) func() { return s.fetchInFrame(f, live, q, done) },
 		Storage: func(area string) dom.Storage { return s.frameStorage(f, origin, area) },
@@ -444,6 +529,14 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 		Origin:    func() string { return origin },
 		Sandboxed: dom.Sandboxed{Opaque: opaque, NoModals: !f.held.Asks()},
 		Windows:   &windows{s: s, set: set, by: f},
+		Loading:   func() bool { return set.loading(f) },
+	}
+	if !opaque {
+		within := district{origin: origin}
+		if f.crossed() {
+			within.top = frames.Site(set.top.Base)
+		}
+		host.Broadcast = func(name string, m dom.Posted) { s.broadcast(live, within, name, m) }
 	}
 	if !opaque {
 		host.Cookies = s.jar.Frame(live.address, set.top.Base, f.crossed())
@@ -554,4 +647,76 @@ func (s *Screen) postFrom(f *frame, live *running, sent web.Submission, user boo
 		return
 	}
 	s.fromPage(live.page.Address, func() { s.posted(sent) })
+}
+
+// district is where a document keeps what it stores: its origin, under
+// the site of its tab's page when it is framed by another site.
+type district struct{ top, origin string }
+
+// districtOf is the district of the document f shows, the page's for
+// nil; false for a document nothing shares its origin with.
+func (set *framed) districtOf(f *frame) (district, bool) {
+	if f == nil {
+		origin := frames.Origin(set.top.Base)
+		return district{origin: origin}, origin != opaqueOrigin && origin != ""
+	}
+	if f.origin == opaqueOrigin || f.origin == "" {
+		return district{}, false
+	}
+	within := district{origin: f.origin}
+	if f.crossed() {
+		within.top = frames.Site(set.top.Base)
+	}
+	return within, true
+}
+
+// broadcast gives a message of a BroadcastChannel to the other
+// documents of the profile that keep their storage where its sender
+// does: those of its origin, in every tab of every window, each at its
+// next frame.
+func (p *Profile) broadcast(from *running, within district, name string, m dom.Posted) {
+	for _, s := range p.screens {
+		for _, session := range s.sessions {
+			for _, set := range session.frames {
+				hears := func(f *frame) {
+					live := set.scriptsOf(f)
+					if at, ok := set.districtOf(f); ok && at == within && live != nil && live != from {
+						live.rt.Broadcast(name, within.origin, m)
+					}
+				}
+				hears(nil)
+				for _, f := range set.all {
+					hears(f)
+				}
+			}
+		}
+	}
+}
+
+// loading reports whether a frame of the document parent shows, the
+// page's for nil, is still on its way: its document, or the scripts
+// that have not told its window it loaded.
+func (set *framed) loading(parent *frame) bool {
+	if in := set.shownBy(parent); in != nil {
+		set.adopt(parent, in)
+	}
+	for _, f := range set.all {
+		switch {
+		case f.parent != parent || f.gone:
+		case !f.live:
+			if rooted(f.node, f.in.Doc) {
+				return true
+			}
+		case f.load != nil:
+			return true
+		case f.loads:
+			return true
+		}
+	}
+	return false
+}
+
+// runs reports whether the document f shows has scripts light runs.
+func (s *Screen) runs(f *frame) bool {
+	return s.scripting() && f.held.Runs() && f.page.Scripted() && f.page.Tree != nil && f.page.Tree.Activate == nil
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -196,6 +197,8 @@ func (s *Screen) build() {
 		Serve:      func(name string, picture []byte) { s.pictures.Store(name, picture) },
 		Closed:     s.show,
 		Evaluate:   s.evaluate,
+		Contexts:   s.contexts,
+		EvaluateIn: s.evaluateIn,
 		Unscripted: s.unscripted,
 		Pointer: func() (geom.Vec2, bool) {
 			in := s.win.Input()
@@ -238,10 +241,19 @@ func (s *Screen) OpenInNewTab(address string) {
 	s.show()
 }
 
+// move goes through the shown tab's history as step does, past the
+// steps of frames its page has no more.
 func (s *Screen) move(step func(*tabs.Tab)) {
-	s.session().note = ""
-	step(s.browser.Tab())
-	s.show()
+	tab := s.browser.Tab()
+	from := tab.At()
+	for {
+		before := tab.At()
+		step(tab)
+		if tab.At() == before || tab.Since(before, s.framed).Moved() {
+			break
+		}
+	}
+	s.arrive(tab.Since(from, s.framed))
 }
 
 // tick runs what ended off the frame since the last one, and follows
@@ -305,12 +317,24 @@ func (s *Screen) show() {
 	s.say()
 }
 
-// warnings are what ui refused in the shown page of the web.
+// warnings are what ui refused in the shown page of the web, and in
+// the documents of its frames.
 func (s *Screen) warnings() []error {
-	if page := s.session().pages[s.browser.Tab().Current()]; page != nil && page.Doc != nil {
-		return page.Doc.Warnings()
+	session := s.session()
+	page := session.pages[s.browser.Tab().Current()]
+	if page == nil || page.Doc == nil {
+		return nil
 	}
-	return nil
+	all := slices.Clone(page.Doc.Warnings())
+	for _, f := range session.frames[page].frameList() {
+		if f.gone || f.page == nil || f.page.Doc == nil {
+			continue
+		}
+		for _, warned := range f.page.Doc.Warnings() {
+			all = append(all, fmt.Errorf("in the frame %s: %w", f.label(), warned))
+		}
+	}
+	return all
 }
 
 // picture gives the Document a picture stored under name.

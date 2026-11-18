@@ -66,7 +66,7 @@ func (s *Screen) targetOf(n *ui.Node) target {
 			t.selection = page.Doc.Selection().Text
 		}
 	}
-	if t.node = s.ofPage(n); frame != nil {
+	if t.node = s.ofPage(n); t.node == nil && frame != nil {
 		t.node = frame
 	}
 	for ; n != nil; n = n.Parent() {

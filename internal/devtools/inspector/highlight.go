@@ -46,12 +46,15 @@ func (in *Inspector) boxesOf(n *ui.Node, area geom.Rect) (ui.Boxes, bool) {
 	if n == nil || n.IsText() || in.page.Doc == nil {
 		return ui.Boxes{}, false
 	}
-	boxes, ok := in.page.Doc.BoxesOf(n)
-	if !ok {
+	boxes, ok := in.docOf(n).BoxesOf(n)
+	if _, shown := in.through(n, geom.Rect{}); !ok || !shown {
 		return ui.Boxes{}, false
 	}
 	by := in.origin(area)
-	move := func(r geom.Rect) geom.Rect { return geom.Rect{X: r.X + by.X, Y: r.Y + by.Y, W: r.W, H: r.H} }
+	move := func(r geom.Rect) geom.Rect {
+		r, _ = in.through(n, r)
+		return geom.Rect{X: r.X + by.X, Y: r.Y + by.Y, W: r.W, H: r.H}
+	}
 	return ui.Boxes{Margin: move(boxes.Margin), Border: move(boxes.Border), Padding: move(boxes.Padding),
 		Content: move(boxes.Content)}, true
 }
@@ -83,8 +86,8 @@ func (in *Inspector) under(at geom.Vec2) *ui.Node {
 		return nil
 	}
 	if in.page.Doc != in.doc {
-		n := in.page.Doc.ElementAt(at.Sub(in.origin(area)))
-		for at := n; at != nil; at = at.Parent() {
+		n := in.into(in.page.Doc, at.Sub(in.origin(area)))
+		for at := n; at != nil; at = in.parentOf(at) {
 			if at == in.page.Root {
 				return n
 			}

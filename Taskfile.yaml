@@ -19,6 +19,16 @@ dotenv:
 env:
   CGO_CXXFLAGS: -nostdinc++
 
+vars:
+  # web-platform-tests are cloned into .wpt/wpt (ignored by git) at the commit wpt.lock pins, with only the folders
+  # tools/wpt/sparse.txt names; WPT_OUT is where a run's report goes.
+  WPT: .wpt/wpt
+  WPT_PIN:
+    sh: cat wpt.lock
+  WPT_SETUP:
+    sh: echo "$(cat wpt.lock) $(cat tools/wpt/sparse.txt tools/wpt/pyproject.toml | shasum | cut -c1-12)"
+  WPT_OUT: '{{.WPT_OUT | default ".wpt/results"}}'
+
 tasks:
   run:
     desc: Run light with its JavaScript engine (needs ember's WebGPU library, once - cd ../ember && task wgpu)
@@ -44,3 +54,34 @@ tasks:
       - task: golangci:lint
       - task: golangci:lint
         vars: {CLI_ARGS: --build-tags v8}
+
+  wpt:setup:
+    desc: Fetch web-platform-tests at the commit wpt.lock pins into .wpt (ignored by git) - a shallow clone of the folders in tools/wpt/sparse.txt, its own Python virtualenv with its requirements, and light's product for its runner (tools/wpt)
+    set: [errexit, pipefail]
+    status:
+      - test "$(cat .wpt/setup 2>/dev/null)" = "{{.WPT_SETUP}}"
+    cmds:
+      - rm -f .wpt/setup
+      - test -d "{{.WPT}}/.git" || { git init -q "{{.WPT}}" && git -C "{{.WPT}}" remote add origin https://github.com/web-platform-tests/wpt; }
+      - git -C "{{.WPT}}" sparse-checkout set --cone $(cat tools/wpt/sparse.txt)
+      - git -C "{{.WPT}}" cat-file -e "{{.WPT_PIN}}^{commit}" 2>/dev/null || git -C "{{.WPT}}" fetch -q --depth 1 --filter=blob:none origin "{{.WPT_PIN}}"
+      - git -C "{{.WPT}}" checkout -q --detach "{{.WPT_PIN}}"
+      # wpt makes its virtualenv (.wpt/wpt/_venv3) and installs its requirements there the first time it is asked anything.
+      - python3 "{{.WPT}}/wpt" run --help > /dev/null
+      - '"{{.WPT}}/_venv3/bin/pip" --disable-pip-version-check install -q -e tools/wpt'
+      - echo "{{.WPT_SETUP}}" > .wpt/setup
+
+  wpt:
+    desc: Run the web-platform-tests of tools/wpt/subset.txt (or those given - task wpt -- /dom/nodes/Node-contains.html) against light with its JavaScript engine, hidden, one at a time; the report goes to WPT_OUT (.wpt/results)
+    deps: [wpt:setup]
+    env:
+      EMBER_HIDDEN: 1
+    cmds:
+      - go build -tags v8 -o .wpt/light ./cmd/light
+      - mkdir -p "{{.WPT_OUT}}"
+      - >-
+        python3 "{{.WPT}}/wpt" run --no-manifest-download --no-install-fonts --processes 1 --no-pause-after-test
+        --no-fail-on-unexpected --no-restart-on-unexpected --binary .wpt/light
+        --log-wptreport "{{.WPT_OUT}}/wptreport.json" --log-raw "{{.WPT_OUT}}/raw.log" --log-grouped -
+        light {{.CLI_ARGS | default "--include-file tools/wpt/subset.txt"}} < /dev/null
+      - python3 tools/wpt/summary.py "{{.WPT_OUT}}/wptreport.json" | tee "{{.WPT_OUT}}/summary.txt"

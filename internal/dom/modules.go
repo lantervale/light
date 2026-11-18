@@ -130,7 +130,7 @@ func (r *Runtime) proceed() {
 		r.state = interactive
 		r.enter("ready", "interactive")
 	}
-	if r.state == interactive && r.racing == 0 {
+	if r.state == interactive && r.racing == 0 && (r.host.Loading == nil || !r.host.Loading()) {
 		r.state = complete
 		r.enter("ready", "complete")
 	}

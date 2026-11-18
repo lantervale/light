@@ -37,9 +37,12 @@ type session struct {
 	said    *console.Lines
 	scripts *running
 	kept    map[string]dom.Storage
-	// frames are the frames of the pages the tab holds, by their page.
-	frames map[*web.Page]*framed
-	tools  devtools.State
+	// frames are the frames of the pages the tab holds, by their page,
+	// and returned whether the tab's history moved since they were last
+	// brought where its step has them (framehistory.go).
+	frames   map[*web.Page]*framed
+	returned bool
+	tools    devtools.State
 	// zoom is the tab's own zoom in percent, 0 for the settings'.
 	zoom int
 	// note is what the status bubble says of the tab's last move when it

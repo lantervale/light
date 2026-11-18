@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -25,19 +26,23 @@ import (
 )
 
 type shown struct {
-	t      *testing.T
-	doc    *ui.Document
-	panel  *devtools.Panel
-	state  *devtools.State
-	log    *netlog.Log
-	said   *console.Lines
-	asked  []string
-	srv    *httptest.Server
-	in     *input.State
-	frame  func()
-	named  string
-	served map[string][]byte
-	closed int
+	t     *testing.T
+	doc   *ui.Document
+	panel *devtools.Panel
+	state *devtools.State
+	log   *netlog.Log
+	said  *console.Lines
+	asked []string
+	// contexts are the documents the console's line may be evaluated
+	// in, and askedIn where each line was.
+	contexts []devtools.Context
+	askedIn  []int
+	srv      *httptest.Server
+	in       *input.State
+	frame    func()
+	named    string
+	served   map[string][]byte
+	closed   int
 	// exported counts the times the screen was asked to save a HAR file.
 	exported int
 	warns    []error
@@ -103,6 +108,11 @@ func show(t *testing.T) *shown {
 				return "", errors.New("ReferenceError: boom is not defined")
 			}
 			return "value of " + source, nil
+		},
+		Contexts: func() []devtools.Context { return s.contexts },
+		EvaluateIn: func(context int, source string) (string, error) {
+			s.askedIn = append(s.askedIn, context)
+			return source + " in " + strconv.Itoa(context), nil
 		},
 		Unscripted: func() string { return s.unscripted },
 		Pointer:    func() (geom.Vec2, bool) { return s.in.Mouse(), s.in.Down(input.MouseLeft) },
@@ -816,4 +826,70 @@ func TestTheConsolesTextIsSelected(t *testing.T) {
 	if got := s.doc.Selection().Text; !strings.Contains(got, "copy me") || !strings.Contains(got, "app.js:2") {
 		t.Fatalf("the selection reads %q", got)
 	}
+}
+
+func TestTheConsolesLineIsEvaluatedInTheDocumentChosen(t *testing.T) {
+	s := show(t)
+	s.click("dt-tab-console")
+	if _, shown := s.doc.BoxOf(s.node("dt-context")); shown {
+		t.Fatal("a page without frames has documents to choose")
+	}
+	s.contexts = []devtools.Context{{Name: "top", Origin: "https://site.test"},
+		{ID: 4, Name: "other.test", Origin: "https://other.test"}, {ID: 7, Name: "srcdoc", Origin: "null"}}
+	s.frame()
+	s.frame()
+	if got := s.node("dt-context").Text(); got != "top · https://site.test" {
+		t.Fatalf("the line is evaluated in %q", got)
+	}
+	s.click("dt-eval")
+	s.enter("a")
+	s.click("dt-context")
+	if got := s.node("dt-context").Text(); got != "other.test · https://other.test" {
+		t.Fatalf("after a press the line is evaluated in %q", got)
+	}
+	s.click("dt-eval")
+	s.enter("b")
+	s.click("dt-context")
+	s.click("dt-eval")
+	s.enter("c")
+	if got := s.node("dt-context").Text(); got != "srcdoc · null" || s.state.Context != 7 {
+		t.Fatalf("after two presses the line is evaluated in %q", got)
+	}
+	s.contexts = s.contexts[:2]
+	s.frame()
+	s.frame()
+	if got := s.node("dt-context").Text(); got != "top · https://site.test" || s.state.Context != 0 {
+		t.Fatalf("once its frame went away the line is evaluated in %q", got)
+	}
+	s.enter("d")
+	s.click("dt-context")
+	s.click("dt-context")
+	if s.state.Context != 0 {
+		t.Fatalf("past the last document the line is evaluated in %d", s.state.Context)
+	}
+	if strings.Join(s.asked, ",") != "a,d" || !slices.Equal(s.askedIn, []int{4, 7}) {
+		t.Fatalf("the page was asked %q and its frames %v", s.asked, s.askedIn)
+	}
+	want := []string{"input|a|", "result|value of a|", "input|b|", "result|b in 4|", "input|c|", "result|c in 7|",
+		"input|d|", "result|value of d|"}
+	if got := s.lines(); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("the console lists %q, want %q", got, want)
+	}
+	var tagged []string
+	s.node("dt-lines").Walk(func(n *ui.Node) bool {
+		if n.HasClass("dt-frame") {
+			tagged = append(tagged, n.Text())
+		}
+		return true
+	})
+	if strings.Join(tagged, ",") != "other.test,other.test,srcdoc,srcdoc" {
+		t.Fatalf("the lines of frames are tagged %q", tagged)
+	}
+	s.contexts = nil
+	s.frame()
+	s.frame()
+	if _, shown := s.doc.BoxOf(s.node("dt-context")); shown {
+		t.Fatal("a page whose frames went away has documents to choose")
+	}
+	s.clean()
 }

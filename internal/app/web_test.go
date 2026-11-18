@@ -202,6 +202,7 @@ func TestALinkOfAnExternalPageOpensRelativeToIt(t *testing.T) {
 	srv := serve(t)
 	s := show(t)
 	doc := s.visit(srv.URL + "/")
+	s.unasked()
 	host, _ := s.doc.BoxOf(s.host)
 	at := box(t, doc, "vault").Center().Add(geom.V2(host.X, host.Y))
 	s.in.SetMouse(at)

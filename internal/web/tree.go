@@ -71,6 +71,8 @@ type Tree struct {
 	Submit func(form, submitter *ui.Node)
 	// handlers is whether an element of the page has a script's handler.
 	handlers bool
+	// xml is a page read by XML's rules (documents.go).
+	xml bool
 }
 
 // Scripted reports whether the page has anything for a script engine to

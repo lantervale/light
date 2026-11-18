@@ -496,7 +496,7 @@ func TestWhatIsInAFrameIsReachedAsWhatIsInThePage(t *testing.T) {
 	})
 	s := showWith(t, Options{Transport: transport, Downloads: t.TempDir()})
 	s.system = "darwin"
-	doc := s.visit("https://site.test/")
+	s.visit("https://site.test/")
 	s.framedText("one")
 	one := s.frameAt("one")
 	at := s.inFrame(one, "link")
@@ -513,8 +513,8 @@ func TestWhatIsInAFrameIsReachedAsWhatIsInThePage(t *testing.T) {
 		t.Fatalf("the menu of a link in a frame is %s", got)
 	}
 	s.choose("Inspect element")
-	if got := s.inspect.Selected(); got != doc.ByID("one") {
-		t.Errorf("Inspect element in a frame selected %v, want the page's iframe", got)
+	if got := s.inspect.Selected(); got != one.page.Doc.ByID("link") {
+		t.Errorf("Inspect element in a frame selected %v, want the link of the frame's document", got)
 	}
 	s.toggleTools()
 	s.frame()

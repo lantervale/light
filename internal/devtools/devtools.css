@@ -92,7 +92,7 @@
 .dt-line .dt-times { flex: none; padding: 0 5px; border-radius: 8px; background: var(--dt-accent);
 	color: var(--dt-bg); font-size: 11px; user-select: none; }
 .dt-line .dt-said { flex: 1; min-width: 0; }
-.dt-line .dt-frame { flex: none; max-width: 30%; padding: 0 5px; border: 1px solid var(--dt-faint); border-radius: 8px;
+.dt-line .dt-frame { flex: none; max-width: 30%; margin: -1px 0; padding: 0 5px; border: 1px solid var(--dt-faint); border-radius: 8px;
 	color: var(--dt-faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dt-line .dt-text, .dt-line .dt-stack { white-space: pre-wrap; overflow-wrap: anywhere; }
 .dt-line .dt-stack { padding-left: 16px; opacity: 0.8; }
@@ -112,6 +112,8 @@
 #dt-eval { flex: 1; min-width: 0; height: 20px; padding: 0; border: 0; outline: none; background: transparent;
 	color: var(--dt-strong); font-family: monospace; font-size: 12px; }
 #dt-eval:disabled { color: var(--dt-faint); }
+#dt-context { display: none; flex: none; max-width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#dt-context.shown { display: block; }
 .dt-none { padding: 10px; color: var(--dt-faint); }
 #dt-details { display: none; flex: none; flex-direction: column; box-sizing: border-box; width: 46%;
 	border-left: 1px solid var(--dt-rule); }

@@ -20,16 +20,24 @@ const (
 )
 
 // handles are the numbers scripts know the nodes of the page's tree
-// by: a text node's is negative, any other's positive.
+// by: a text node's is negative, any other's positive, a CDATA
+// section's among them.
 type handles struct {
 	nodes map[int]*html.Node
 	ids   map[*html.Node]int
 	last  int
 	made  int
+	// docs are the documents the page's scripts made, and owners the
+	// document of each node that is not the page's (documents.go).
+	docs   map[*html.Node]*made
+	owners map[*html.Node]*html.Node
+	// prefixes are the prefixes scripts gave the elements they made.
+	prefixes map[*html.Node]string
 }
 
 func newHandles() handles {
-	return handles{nodes: map[int]*html.Node{}, ids: map[*html.Node]int{}}
+	return handles{nodes: map[int]*html.Node{}, ids: map[*html.Node]int{}, docs: map[*html.Node]*made{},
+		owners: map[*html.Node]*html.Node{}, prefixes: map[*html.Node]string{}}
 }
 
 // ref is the number of n, 0 for none: a new one the first time.
@@ -42,7 +50,7 @@ func (h *handles) ref(n *html.Node) int {
 	}
 	h.last++
 	id := h.last
-	if n.Type == html.TextNode {
+	if n.Type == html.TextNode && n.Namespace == "" {
 		id = -id
 	}
 	h.nodes[id], h.ids[n] = n, id
@@ -130,8 +138,13 @@ func (r *Runtime) on(do func(n *ui.Node, a arguments) (any, error)) op {
 	return r.of(func(n *html.Node, a arguments) (any, error) { return do(r.shown(n), a) })
 }
 
-// shown is what ui has of n, an element that is nowhere for none.
+// shown is what ui has of n, an element that is nowhere for none, as
+// for every node of a document a script made: ui makes nothing of
+// those, so nothing of them is fetched.
 func (r *Runtime) shown(n *html.Node) *ui.Node {
+	if r.home(n) != nil {
+		return ui.Div()
+	}
 	if u := r.tree.Make(n); u != nil {
 		return u
 	}

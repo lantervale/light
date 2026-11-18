@@ -158,9 +158,9 @@ func TestAPageOfTheInternetLoadsNothingOfTheLocalNetwork(t *testing.T) {
 	if got := l.got(router) + l.got(here); got != "" {
 		t.Errorf("a page of the Internet asked the local network for %s", got)
 	}
-	if got := l.got(other); got != all+", GET /turned.png" {
-		t.Errorf("the Internet was asked for %s", got)
-	}
+	s.until("the Internet was asked for what the page shows", func() bool {
+		return l.got(other) == all+", GET /turned.png"
+	})
 	if page := s.session().pages[site+"/"]; page.Space != localnet.Public {
 		t.Errorf("the page came from the %s network", page.Space)
 	}

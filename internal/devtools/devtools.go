@@ -110,6 +110,9 @@ type State struct {
 	// Unfolded the lines whose calls show.
 	History  []string
 	Unfolded map[string]bool
+	// Context is the ID of the document the console's line is evaluated
+	// in, 0 for the page's.
+	Context int
 	// Tool is what the tabs registered elsewhere keep, by their ID.
 	Tool map[string]any
 }
@@ -120,6 +123,14 @@ func (s *State) Shown() string {
 		return networkTab
 	}
 	return s.Tab
+}
+
+// Context is a document the console's line may be evaluated in: the
+// tab's page, whose ID is 0, or a frame of it, by its name and the
+// origin of its document.
+type Context struct {
+	ID           int
+	Name, Origin string
 }
 
 // Host is what the panel asks of the screen it is part of. Point, Serve
@@ -134,6 +145,12 @@ type Host struct {
 	// Evaluate runs what was typed in the console in the tab's page, and
 	// gives its value as the console prints it.
 	Evaluate func(source string) (string, error)
+	// Contexts are the documents of the tab's page that run scripts, its
+	// own first, then those of its frames: what the console's line may
+	// be evaluated in. EvaluateIn is Evaluate in the one of that ID.
+	// Both may be nil: the line is then the page's.
+	Contexts   func() []Context
+	EvaluateIn func(context int, source string) (string, error)
 	// Unscripted is why the tab's page runs no script, "" when it does.
 	Unscripted func() string
 	// Pointer is where the pointer is in the window and whether its main

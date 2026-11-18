@@ -50,22 +50,25 @@ type item struct {
 
 // tag is the name of the element n.
 func (in *Inspector) tag(n *ui.Node) string {
-	switch {
-	case n == in.page.Head:
+	switch page := in.pageOf(n); {
+	case n == page.Head:
 		return "head"
-	case in.page.Tag != nil:
-		return in.page.Tag(n)
+	case page.Tag != nil:
+		return page.Tag(n)
 	}
 	return n.Tag().String()
 }
 
 // childrenOf are the nodes the tree shows under n: its children but
 // the text that is only white space, after the page's head under its
-// root.
+// root, and under an iframe the root of the page it shows.
 func (in *Inspector) childrenOf(n *ui.Node) []*ui.Node {
 	var out []*ui.Node
-	if n == in.page.Root && in.page.Head != nil {
-		out = append(out, in.page.Head)
+	if shown := in.shows(n); shown != nil {
+		return []*ui.Node{shown.Root}
+	}
+	if page := in.pageOf(n); n == page.Root && page.Head != nil {
+		out = append(out, page.Head)
 	}
 	for _, c := range n.Children() {
 		if c.IsText() && strings.TrimSpace(c.Text()) == "" {
@@ -78,8 +81,11 @@ func (in *Inspector) childrenOf(n *ui.Node) []*ui.Node {
 
 // parentOf is the node n is shown under.
 func (in *Inspector) parentOf(n *ui.Node) *ui.Node {
-	if n == in.page.Head {
-		return in.page.Root
+	switch page := in.pageOf(n); {
+	case n == page.Head:
+		return page.Root
+	case n == page.Root && in.roots[n] != nil:
+		return in.roots[n].frame
 	}
 	return n.Parent()
 }
@@ -135,7 +141,7 @@ func (in *Inspector) build(n *ui.Node, parent *item) *item {
 	in.make(it)
 	open, set := in.state.toggled[n]
 	if !set {
-		open = it.depth < 2 && n != in.page.Head
+		open = it.depth < 2 && !in.isHead(n) && in.of(n) == nil && in.inner[n] == nil
 	}
 	if open && it.expandable {
 		in.open(it)
@@ -259,7 +265,7 @@ func (in *Inspector) say(it *item) {
 		parts = append(parts, closing(name))
 	}
 	it.unstyled = false
-	if _, styled := in.page.Doc.ComputedValue(n, "display"); !styled && n != in.page.Head {
+	if _, styled := in.docOf(n).ComputedValue(n, "display"); !styled && !in.isHead(n) {
 		it.unstyled = true
 	}
 	for _, badge := range in.badges(n) {
@@ -281,18 +287,19 @@ func closing(name string) *ui.Node {
 // badges name what an element is to its children: a flex or a grid
 // container, and a box that scrolls.
 func (in *Inspector) badges(n *ui.Node) []string {
-	if in.page.Doc == nil || n == in.page.Head {
+	if in.page.Doc == nil || in.isHead(n) {
 		return nil
 	}
 	var out []string
-	switch display, _ := in.page.Doc.ComputedValue(n, "display"); display {
+	doc := in.docOf(n)
+	switch display, _ := doc.ComputedValue(n, "display"); display {
 	case "flex", "inline-flex":
 		out = append(out, "flex")
 	case "grid", "inline-grid":
 		out = append(out, "grid")
 	}
 	for _, axis := range []string{"overflow-x", "overflow-y"} {
-		if v, _ := in.page.Doc.ComputedValue(n, axis); v == "auto" || v == "scroll" {
+		if v, _ := doc.ComputedValue(n, axis); v == "auto" || v == "scroll" {
 			out = append(out, "scroll")
 			break
 		}

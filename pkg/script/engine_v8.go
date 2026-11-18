@@ -43,6 +43,10 @@ type context struct {
 	// depth counts the runs and calls in progress: the budget is the
 	// outermost's.
 	depth int
+	// watchdog stops the outermost run once its budget is spent, at
+	// due (Pause).
+	watchdog *time.Timer
+	due      time.Time
 	// watch guards expired, which the watchdog sets as it interrupts.
 	watch   sync.Mutex
 	expired bool
@@ -200,6 +204,7 @@ func (c *context) within(enter func() error) error {
 	var watchdog *time.Timer
 	if outermost {
 		watchdog = time.AfterFunc(c.opts.budget(), c.expire)
+		c.watchdog, c.due = watchdog, time.Now().Add(c.opts.budget())
 	}
 	err := enter()
 	c.depth--
@@ -215,6 +220,17 @@ func (c *context) within(enter func() error) error {
 		return ErrInterrupted
 	}
 	return nil
+}
+
+func (c *context) Pause() func() {
+	if c.depth == 0 || c.watchdog == nil || !c.watchdog.Stop() {
+		return func() {}
+	}
+	left := time.Until(c.due)
+	return func() {
+		c.due = time.Now().Add(left)
+		c.watchdog.Reset(left)
+	}
 }
 
 // expire is the watchdog: the budget is spent.

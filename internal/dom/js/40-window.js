@@ -591,19 +591,8 @@ class PerformanceObserver {
 }
 PerformanceObserver.supportedEntryTypes = [];
 
-// light has no shadow tree, and finds nothing by XPath: a page that
-// asks gets no node.
+// light has no shadow tree: a page that asks gets no node.
 class ShadowRoot extends DocumentFragment {}
-class XPathEvaluator {
-  createExpression() { return this; }
-  createNSResolver() { return null; }
-  evaluate() {
-    return {
-      resultType: 4, snapshotLength: 0, singleNodeValue: null, invalidIteratorState: false,
-      iterateNext: () => null, snapshotItem: () => null,
-    };
-  }
-}
 
 const customElements = {
   _defined: new Map(),
@@ -614,12 +603,8 @@ const customElements = {
 };
 
 class DOMParser {
-  parseFromString(markup) {
-    const parsed = document.implementation.createHTMLDocument();
-    parsed.body.innerHTML = String(markup);
-    return parsed;
-  }
+  parseFromString(markup, type) { return parseDocument(markup, type); }
 }
 class XMLSerializer {
-  serializeToString(node) { return node instanceof Element ? node.outerHTML : node.textContent || ""; }
+  serializeToString(node) { return writtenAsXML(node); }
 }

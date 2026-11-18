@@ -56,6 +56,24 @@ func LocationMembers() []Member {
 // the symbols toStringTag, hasInstance and isConcatSpreadable.
 func Quiet() []string { return []string{"then"} }
 
+// Carried is a kind of value a message carries from one document to
+// another, and the mark it is written down under.
+type Carried struct{ Name, Mark string }
+
+// Carries are the kinds of values a message carries: what the
+// structured clone copies, written down as text and bytes and made
+// again from the receiver's own objects. A plain text, a boolean, null
+// and a finite number are written as they are. Whatever else a script
+// posts (a function, a symbol, a node, a window, a promise) is refused.
+func Carries() []Carried {
+	return []Carried{
+		{"undefined", "u"}, {"a number that is none", "n"}, {"a bigint", "i"}, {"a value met before", "r"},
+		{"a wrapped primitive", "p"}, {"a Date", "d"}, {"a RegExp", "x"}, {"an ArrayBuffer", "b"}, {"a view", "v"},
+		{"a Map", "m"}, {"a Set", "s"}, {"an error", "e"}, {"an Array", "a"}, {"an Object", "o"}, {"a Blob", "B"},
+		{"a File", "F"}, {"a MessagePort", "P"},
+	}
+}
+
 // Reaches reports whether a message posted for target, a targetOrigin
 // as scripts write one, is for a window whose document is of the
 // origin receiver, when the sender's is sender: "*" is for any, "/"

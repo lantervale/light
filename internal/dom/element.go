@@ -7,6 +7,8 @@ import (
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
+
+	"github.com/lantervale/light/internal/web"
 )
 
 // named is an attribute's name as its markup writes it.
@@ -202,6 +204,9 @@ var raw = map[string]bool{
 // html is the markup of what n holds, of n too when asked for its
 // outer markup, as a browser writes it.
 func (r *Runtime) html(n *html.Node, a arguments) (any, error) {
+	if r.xmlOf(n) {
+		return web.MarkupXML(n, a.flag(1)), nil
+	}
 	var out strings.Builder
 	if a.flag(1) {
 		r.write(&out, n)
@@ -230,6 +235,10 @@ func (r *Runtime) write(out *strings.Builder, n *html.Node) {
 			out.WriteString(textEscaper.Replace(n.Data))
 		}
 	case html.CommentNode:
+		if n.Namespace == web.Instruction {
+			out.WriteString("<?" + web.InstructionTarget(n) + " " + n.Data + ">")
+			return
+		}
 		out.WriteString("<!--" + n.Data + "-->")
 	case html.DoctypeNode:
 		out.WriteString("<!DOCTYPE " + n.Data + ">")

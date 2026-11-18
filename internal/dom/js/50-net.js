@@ -439,13 +439,35 @@ class XMLHttpRequest extends XMLHttpRequestEventTarget {
         json: () => { try { return JSON.parse(utf8.decode(this._bytes)); } catch (_) { return null; } },
         arraybuffer: () => this._bytes.slice().buffer,
         blob: () => new Blob([this._bytes], { type: this._kind }),
-        document: () => new DOMParser().parseFromString(this._text),
+        document: () => this._document,
       };
       this._read.response = made[this._type]();
     }
     return this._read.response;
   }
-  get responseXML() { return null; }
+  // _document is the answer read as a document: XML by its type, and
+  // HTML only when the script asked for a document. What is neither,
+  // and XML that is not well-formed, is none.
+  get _document() {
+    if (this.readyState !== 4 || !this._bytes) return null;
+    if (!("document" in this._read)) {
+      const media = /^[^;]*/.exec(this._kind)[0].trim().toLowerCase() || "text/xml";
+      let parsed = null;
+      if (media === "text/html") {
+        if (this._type === "document") parsed = host("document", "parse", this._text, media, this.responseURL);
+      } else if (/^(text|application)\/xml$|\+xml$/.test(media)) {
+        parsed = host("document", "parse", shared(this._bytes), media, this.responseURL, this._kind);
+      }
+      this._read.document = parsed ? wrap(parsed[0]) : null;
+    }
+    return this._read.document;
+  }
+  get responseXML() {
+    if (this._type !== "" && this._type !== "document") {
+      throw new DOMException(`The answer is read as '${this._type}', not as a document.`, "InvalidStateError");
+    }
+    return this._document;
+  }
   getResponseHeader(name) { return this._answer.get(name); }
   getAllResponseHeaders() {
     let all = "";

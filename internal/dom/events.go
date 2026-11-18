@@ -26,6 +26,12 @@ type activation struct {
 // one of the types a browser fires, with what it carries (key, code,
 // clientX…). It reports whether a script prevented what the event does.
 func (r *Runtime) Fire(n *ui.Node, kind string, init map[string]any) bool {
+	prevented := false
+	r.whenFree(func() { prevented = r.fired(n, kind, init) })
+	return prevented
+}
+
+func (r *Runtime) fired(n *ui.Node, kind string, init map[string]any) bool {
 	if n == nil {
 		return r.fire(nil, kind, init)
 	}
@@ -57,6 +63,12 @@ type Keys struct{ Ctrl, Shift, Alt, Meta bool }
 // is then followed only if no script prevented the click; Frame forgets
 // it, so Click comes after Frame in the frame of the click.
 func (r *Runtime) Click(n *ui.Node, x, y float32, held Keys) bool {
+	prevented := false
+	r.free(func() { prevented = r.clicked(n, x, y, held) })
+	return prevented
+}
+
+func (r *Runtime) clicked(n *ui.Node, x, y float32, held Keys) bool {
 	at := map[string]any{"clientX": x, "clientY": y, button: 0, "detail": 1, "ctrlKey": held.Ctrl,
 		"shiftKey": held.Shift, "altKey": held.Alt, "metaKey": held.Meta}
 	r.Fire(n, "mousedown", at)
@@ -96,6 +108,10 @@ func (r *Runtime) by(submitter *ui.Node) map[string]any {
 // the click or the submit; anything else (the keyboard) is told to
 // them first, at the next frame.
 func (r *Runtime) submit(form, submitter *ui.Node) {
+	if !r.asking.script && r.withheld() {
+		r.asking.queued = append(r.asking.queued, func() { r.submit(form, submitter) })
+		return
+	}
 	if r.closed {
 		r.send(form, submitter)
 		return
@@ -192,6 +208,10 @@ func (r *Runtime) Key(key, code string) {
 // anything else (the keyboard) is told to them first, at the next
 // frame.
 func (r *Runtime) activate(a *ui.Node, follow func()) {
+	if !r.asking.script && r.withheld() {
+		r.asking.queued = append(r.asking.queued, func() { r.activate(a, follow) })
+		return
+	}
 	if r.closed {
 		follow()
 		return

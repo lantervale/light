@@ -111,8 +111,9 @@ const structuredClone = function structuredClone(value, options) {
 };
 
 // ports is what a port is, kept apart from it: the port it is entangled
-// with, the messages that wait in it, whether it was started, and
-// whether it was closed or left with a message.
+// with, or the number of its end when the other is in another document
+// (57-windows.js), the messages that wait in it, whether it was
+// started, and whether it was closed or left with a message.
 const ports = new WeakMap();
 const portOf = (port) => {
   const state = ports.get(port);
@@ -130,7 +131,9 @@ const handOver = (to, from) => {
   state.queue = old.queue;
   old.queue = [];
   if (old.other) entangle(to, old.other);
+  if (old.remote) remotes.set(state.remote = old.remote, to);
   old.other = null;
+  old.remote = 0;
   old.detached = true;
 };
 const messageOf = (init, type = "message") => {
@@ -149,13 +152,17 @@ class MessagePort extends EventTarget {
   constructor(key) {
     if (key !== token) illegal();
     super();
-    ports.set(this, { other: null, queue: [], started: false, detached: false });
+    ports.set(this, { other: null, remote: 0, queue: [], started: false, detached: false });
   }
   postMessage(message, options) {
     const state = portOf(this);
     if (arguments.length === 0) throw new TypeError("postMessage needs a message");
     const transfer = transferOf(options);
     if (transfer.includes(this)) throw uncloneable("The port a message is posted through");
+    if (state.remote) {
+      host("channel", "send", state.remote, ...given(written(message, transfer)));
+      return;
+    }
     const target = state.other;
     const doomed = target !== null && transfer.includes(target);
     const sent = serialized(message, transfer);
@@ -174,6 +181,11 @@ class MessagePort extends EventTarget {
     const state = portOf(this);
     state.detached = true;
     state.queue = [];
+    if (state.remote) {
+      remotes.delete(state.remote);
+      host("channel", "shut", state.remote);
+      state.remote = 0;
+    }
     const other = state.other;
     if (other === null) return;
     state.other = portOf(other).other = null;
@@ -221,8 +233,9 @@ const postMessage = function postMessage(message, target, transfer) {
 };
 
 // broadcasts are the open channels of each name, in the order they were
-// made. A page's channels reach the other channels of the same page:
-// light tells no other tab.
+// made. A page's channels reach the other channels of the same page,
+// and through light those of the other documents of its origin that
+// keep their storage where it does.
 const broadcasts = new Map();
 const broadcastOf = (channel) => {
   const state = broadcastStates.get(channel);
@@ -245,7 +258,8 @@ class BroadcastChannel extends EventTarget {
     if (arguments.length === 0) throw new TypeError("postMessage needs a message");
     if (state.closed) throw new DOMException("The channel is closed.", "InvalidStateError");
     const { data } = serialized(message, []);
-    const from = here.origin;
+    const from = host("origin");
+    host("broadcast", state.name, ...given(written(message, [])));
     for (const channel of broadcasts.get(state.name)) {
       if (channel === this) continue;
       setTimeout(() => {

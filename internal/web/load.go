@@ -264,16 +264,15 @@ func (l *Loader) read(ctx context.Context, answer *fetch.Answer, links Links) *P
 // build reads an HTML answer and builds its Document, its sheets and its
 // icon fetched meanwhile: a frame's document has no icon.
 func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, links Links) {
-	page.Source = answer.Text()
-	root, err := html.ParseWithOptions(strings.NewReader(cut(page.Source)), html.ParseOptionEnableScripting(l.Scripts))
+	root, err := l.parse(page, answer)
 	if err != nil {
-		page.Err = fmt.Errorf("reading its HTML: %w", err)
+		page.Err = err
 		return
 	}
-	if l.Scripts {
-		writtenIn(cut(page.Source)).restore(root)
-	}
 	b := newBuilder(l, answer.URL, links)
+	if b.tree != nil {
+		b.tree.xml = IsXML(page.Media)
+	}
 	b.encode = encoderOf(answer.Body, answer.Header.Get("Content-Type"))
 	ctx = fetch.By(l.within(netlog.As(ctx, l.by(), netlog.Other), answer.URL), answer.URL)
 	ctx = localnet.From(ctx, answer.Space)
@@ -281,7 +280,8 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	if l.Frame != nil {
 		icon <- nil
 	} else {
-		go func() { icon <- b.icon(ctx, root) }()
+		at := b.icons(root)
+		go func() { icon <- b.icon(ctx, at) }()
 	}
 	b.load(ctx, root)
 	page.Title, page.Doc, page.Icon = titleOf(root), b.document(ctx, root), <-icon
@@ -289,6 +289,28 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	if err = ctx.Err(); err != nil {
 		page.Err = err
 	}
+}
+
+// parse reads an answer into its tree: by XML's rules for a document
+// sent as XML, which is shown whole or not at all, else as HTML.
+func (l *Loader) parse(page *Page, answer *fetch.Answer) (*html.Node, error) {
+	if IsXML(page.Media) {
+		page.Source = DecodeXML(answer.Body, answer.Header.Get("Content-Type"))
+		root, err := ParseXML(cut(page.Source))
+		if err != nil {
+			return nil, fmt.Errorf("its XML is not well-formed, and nothing of it is shown: %w", err)
+		}
+		return root, nil
+	}
+	page.Source = answer.Text()
+	root, err := html.ParseWithOptions(strings.NewReader(cut(page.Source)), html.ParseOptionEnableScripting(l.Scripts))
+	if err != nil {
+		return nil, fmt.Errorf("reading its HTML: %w", err)
+	}
+	if l.Scripts {
+		writtenIn(cut(page.Source)).restore(root)
+	}
+	return root, nil
 }
 
 // refresh is where an answer says to go at once, in a Refresh header or,

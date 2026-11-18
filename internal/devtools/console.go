@@ -57,8 +57,12 @@ type spoke struct {
 	p *Panel
 
 	filter, clear, scroll, lines, eval *ui.Node
-	chips                              map[console.Level]*ui.Node
-	css, xhr, requests                 *ui.Node
+	// context is the button that names the document the line is
+	// evaluated in, and chooses the next; in is what it last read.
+	context            *ui.Node
+	in                 string
+	chips              map[console.Level]*ui.Node
+	css, xhr, requests *ui.Node
 
 	// state is the one last shown, heard the console's version as last
 	// listed and seen the requests'.
@@ -79,6 +83,8 @@ func newConsole(p *Panel) Tool {
 	c.eval = ui.Input(ui.ID("dt-eval"), ui.Placeholder("Evaluate in the page"), ui.Attr("aria-label", "Evaluate"),
 		ui.Attr("autocomplete", "off"))
 	ui.On(c.eval, ui.EventSubmit, c.evaluate)
+	c.context = p.Button("dt-context", "top", c.next)
+	c.context.AddClass("dt-chip")
 	c.lines = ui.Div(ui.ID("dt-lines"))
 	c.scroll = ui.Div(ui.ID("dt-console"))
 	c.filter = ui.Input(ui.ID("dt-console-filter"), ui.Placeholder("Filter Output"),
@@ -108,11 +114,12 @@ func newConsole(p *Panel) Tool {
 	c.requests = c.chip("dt-show-requests", "Requests", func() { p.state.Requests = !p.state.Requests })
 	bar.Append(ui.Div(ui.Class("dt-rule")), c.css, c.xhr, c.requests)
 	body := ui.Div(ui.ID("dt-said"), c.scroll,
-		ui.Div(ui.ID("dt-prompt"), p.Icon("input"), c.eval), c.keys())
+		ui.Div(ui.ID("dt-prompt"), p.Icon("input"), c.eval, c.context), c.keys())
 	return Tool{Bar: bar, Body: body, Show: c.show, Update: func(shown bool) {
 		if !shown {
 			return
 		}
+		c.within()
 		lists := p.state.XHR || p.state.Requests
 		if p.console.Version() != c.heard || lists && p.log.Version() != c.seen {
 			c.say()
@@ -160,6 +167,7 @@ func (c *spoke) show() {
 	if c.p.doc.Value(c.filter) != state.Said {
 		c.p.doc.SetValue(c.filter, state.Said)
 	}
+	c.within()
 	c.say()
 }
 
@@ -359,13 +367,71 @@ func (c *spoke) evaluate() {
 		p.state.History = append(p.state.History, source)
 	}
 	c.recalled, c.draft, c.follow = len(p.state.History), "", true
-	p.console.Add(console.Line{Level: console.Input, Text: source})
-	value, err := p.host.Evaluate(source)
+	in := c.within()
+	frame := ""
+	if in.ID != 0 {
+		frame = in.Name
+	}
+	p.console.Add(console.Line{Level: console.Input, Text: source, Frame: frame})
+	var (
+		value string
+		err   error
+	)
+	if in.ID != 0 {
+		value, err = p.host.EvaluateIn(in.ID, source)
+	} else {
+		value, err = p.host.Evaluate(source)
+	}
 	if err != nil {
-		p.console.Add(console.Line{Level: console.Error, Text: err.Error()})
+		p.console.Add(console.Line{Level: console.Error, Text: err.Error(), Frame: frame})
 		return
 	}
-	p.console.Add(console.Line{Level: console.Result, Text: value})
+	p.console.Add(console.Line{Level: console.Result, Text: value, Frame: frame})
+}
+
+// contexts are the documents the line may be evaluated in: the page's
+// alone when the screen names no other.
+func (c *spoke) contexts() []Context {
+	if c.p.host.Contexts != nil && c.p.host.EvaluateIn != nil {
+		if all := c.p.host.Contexts(); len(all) > 0 {
+			return all
+		}
+	}
+	return []Context{{Name: "top"}}
+}
+
+// within is the document the line is evaluated in, named on its
+// button: the page's when the one chosen is no more. The button shows
+// only while the page has frames to choose.
+func (c *spoke) within() Context {
+	all := c.contexts()
+	at := slices.IndexFunc(all, func(in Context) bool { return in.ID == c.p.state.Context })
+	if at < 0 {
+		at, c.p.state.Context = 0, all[0].ID
+	}
+	in := all[at]
+	named := in.Name
+	if in.Origin != "" {
+		named += " · " + in.Origin
+	}
+	if len(all) < 2 {
+		named = ""
+	}
+	if named != c.in {
+		c.in = named
+		toggle(c.context, "shown", named != "")
+		c.context.SetText(named)
+		c.context.SetAttr("title", "Evaluate in "+named+": press for the next document of the page")
+	}
+	return in
+}
+
+// next has the line evaluated in the document after the one it is.
+func (c *spoke) next() {
+	all := c.contexts()
+	at := slices.IndexFunc(all, func(in Context) bool { return in.ID == c.p.state.Context })
+	c.p.state.Context = all[(at+1)%len(all)].ID
+	c.within()
 }
 
 // recall shows in the console's line what was typed step lines later:

@@ -20,16 +20,21 @@ type kin struct {
 	// origins are those of the documents of the frames a (and the one
 	// in it) and b, as the browser holds them.
 	origins [2]string
+	// aired is what each document hears of the others' broadcasts.
+	aired map[string]string
 }
 
 func kins() []kin {
 	return []kin{
 		{name: "same origin", first: "site.test", second: "site.test", far: "site.test",
-			origins: [2]string{"https://site.test", "https://site.test"}},
+			origins: [2]string{"https://site.test", "https://site.test"},
+			aired:   map[string]string{"": "leaf,mid,sib", "a": "leaf,sib,top", "b": "leaf,mid,top", "n": "mid,sib,top"}},
 		{name: "same site", first: "a.site.test", second: "b.site.test", far: "b.site.test",
-			origins: [2]string{"https://a.site.test", "https://b.site.test"}},
+			origins: [2]string{"https://a.site.test", "https://b.site.test"},
+			aired:   map[string]string{"b": "leaf", "n": "sib"}},
 		{name: "cross site", first: "other.test", second: "third.test", far: "third.test",
-			origins: [2]string{"https://other.test", "https://third.test"}},
+			origins: [2]string{"https://other.test", "https://third.test"},
+			aired:   map[string]string{"b": "leaf", "n": "sib"}},
 		{name: "sandboxed", first: "site.test", second: "site.test", far: "site.test", sandbox: ` sandbox="allow-scripts"`,
 			origins: [2]string{"null", "null"}},
 	}
@@ -44,7 +49,23 @@ func keeper(name string) string {
 		document.title = secret;
 		try { localStorage.setItem("kept", secret); document.cookie = "kept=" + secret; } catch (_) {}
 		window.got = [];
+		window.aired = [];
+		window.news = new BroadcastChannel("matrix");
+		news.onmessage = (e) => aired.push(e.data);
+		const through = (port) => {
+			window.port = port;
+			port.onmessage = (m) => {
+				if (m.data && m.data.kinds) { window.last = m.data.kinds; return; }
+				const own = Object.getPrototypeOf(m) === MessageEvent.prototype && m.target === port && m.source === null &&
+					m.origin === "" && m.ports.length === 0;
+				got.push("port|" + m.data + "|" + own);
+				if (m.data === "close") port.close();
+				else port.postMessage("pong " + m.data);
+			};
+		};
 		addEventListener("message", (e) => {
+			if (e.data && e.data.kinds) { window.last = e.data.kinds; return; }
+			if (e.ports.length) through(e.ports[0]);
 			const own = Object.getPrototypeOf(e) === MessageEvent.prototype && e.target === window &&
 				(typeof e.data !== "object" || Object.getPrototypeOf(e.data) === Object.prototype) &&
 				(e.source === window || Object.getPrototypeOf(e.source) === null);
@@ -123,7 +144,9 @@ func denied(asker string) map[string]string {
 		`W.postMessage(window, "*")`:                                                 "throws DataCloneError",
 		`W.postMessage(W, "*")`:                                                      "throws DataCloneError",
 		`W.postMessage(Symbol.iterator, "*")`:                                        "throws DataCloneError",
-		`W.postMessage("x", "*", [new MessageChannel().port1])`:                      "throws DataCloneError",
+		`W.postMessage(new MessageChannel().port1, "*")`:                             "throws DataCloneError",
+		`W.postMessage("x", "*", [{}])`:                                              "throws DataCloneError",
+		`W.postMessage(new Blob([() => secret]), "nowhere")`:                         "throws SyntaxError",
 		`W.postMessage("x", "nowhere")`:                                              "throws SyntaxError",
 		`W.postMessage.call(W).secret`:                                               "throws TypeError",
 		`Object.entries(W).length + Object.keys(W).length`:                           "0",
@@ -337,6 +360,173 @@ func (m *matrix) exchange(w way) {
 	}
 }
 
+// kinds is a message that holds a value of every kind the table says
+// a message carries, by its mark, and held what the document that gets
+// it must find under each: an object of its own.
+const kinds = `(() => {
+	const shared = {n: 1};
+	window.spare = new MessageChannel();
+	return {kinds: {u: undefined, n: NaN, i: 12n, r: [shared, shared], p: Object("s"), d: new Date(5), x: /a+/g,
+		b: new Uint8Array([1, 2]).buffer, v: new Uint16Array([513]), m: new Map([["k", shared]]), s: new Set([1]),
+		e: new RangeError("bad"), a: [1, , 3], o: {secret: "copied"}, B: new Blob(["blob"], {type: "t/x"}),
+		F: new File(["file"], "f.txt"), P: spare.port1}};
+})()`
+
+func held() map[string]string {
+	return map[string]string{
+		"u": `"u" in last && last.u === undefined`, "n": `Number.isNaN(last.n)`, "i": `last.i === 12n`,
+		"r": `last.r[0] === last.r[1] && Object.getPrototypeOf(last.r[0]) === Object.prototype`,
+		"p": `last.p instanceof String && last.p == "s"`, "d": `last.d instanceof Date && last.d.getTime() === 5`,
+		"x": `last.x instanceof RegExp && last.x.source === "a+"`,
+		"b": `last.b instanceof ArrayBuffer && new Uint8Array(last.b)[1] === 2`,
+		"v": `last.v instanceof Uint16Array && last.v[0] === 513`,
+		"m": `last.m instanceof Map && last.m.get("k") === last.r[0]`, "s": `last.s instanceof Set && last.s.has(1)`,
+		"e": `last.e instanceof RangeError && last.e.message === "bad" && last.e.constructor.constructor === Function`,
+		"a": `Array.isArray(last.a) && last.a.length === 3 && !(1 in last.a)`,
+		"o": `Object.getPrototypeOf(last.o) === Object.prototype && last.o.secret === "copied"`,
+		"B": `last.B instanceof Blob && last.B.size === 4 && last.B.type === "t/x"`,
+		"F": `last.F instanceof File && last.F.name === "f.txt" && last.F.size === 4`,
+		"P": `last.P instanceof MessagePort && Object.getPrototypeOf(last.P) === MessagePort.prototype`,
+	}
+}
+
+// portCrawl walks everything a script can get from a port, its
+// prototypes too, and lists what is not of the script's own document
+// or tells of another's.
+const portCrawl = `(() => {
+	const seen = new Set(), out = [];
+	const walk = (v, path, depth) => {
+		if (typeof v === "string") {
+			if (v.includes("secret of") && v !== secret) out.push(path + " holds " + v);
+			return;
+		}
+		if (v === null || (typeof v !== "object" && typeof v !== "function") || seen.has(v) || depth > 5) return;
+		seen.add(v);
+		if (!(v instanceof Object) && Object.getPrototypeOf(v) !== null) out.push(path + " is not of this document");
+		for (const k of Reflect.ownKeys(v)) {
+			let x;
+			try { x = v[k]; } catch (_) { continue; }
+			walk(x, path + "." + String(k), depth + 1);
+		}
+		walk(Object.getPrototypeOf(v), path + ".__proto__", depth + 1);
+	};
+	walk(PORT, "port", 0);
+	return out.length + " " + out.join("; ");
+})()`
+
+// portDenied are the ways a script reaches through a port for what
+// is another document's, each with what it must get.
+func portDenied(holder string) map[string]string {
+	return map[string]string{
+		`Reflect.ownKeys(PORT).length`: "0", `Object.getPrototypeOf(PORT) === MessagePort.prototype`: "true",
+		`PORT.constructor.constructor("return secret")()`: "secret of " + holder,
+		`PORT.postMessage(() => secret)`:                  "throws DataCloneError",
+		`PORT.postMessage({reach() { return secret; }})`:  "throws DataCloneError",
+		`PORT.postMessage(window)`:                        "throws DataCloneError",
+		`PORT.postMessage(parent)`:                        "throws DataCloneError",
+		`PORT.postMessage(document.body)`:                 "throws DataCloneError",
+		`PORT.postMessage(PORT)`:                          "throws DataCloneError",
+		`PORT.postMessage(1, [PORT])`:                     "throws DataCloneError",
+		`PORT.postMessage(1, [window])`:                   "throws DataCloneError",
+		`structuredClone(PORT)`:                           "throws DataCloneError",
+		`JSON.stringify(PORT)`:                            "{}",
+		`PORT.secret + "|" + PORT.document + "|" + PORT.remote + "|" + PORT.other + "|" + PORT.window`: "" +
+			"undefined|undefined|" +
+			"undefined|undefined|undefined",
+		portCrawl: "0 ",
+	}
+}
+
+// ports has the document that looks hand the other one end of a
+// channel, and checks that each end gives its holder messages and
+// nothing else: copies made of its own objects, of every kind the
+// table carries, through the window and through the port.
+func (m *matrix) ports(w way) {
+	m.t.Helper()
+	asked := map[string]string{"top": "", "mid": "a", "sib": "b", "leaf": "n"}[w.asked]
+	in := func(from, expression, want string) {
+		m.t.Helper()
+		m.checks++
+		if got := m.within(from, expression); got != want {
+			m.t.Errorf("%s, %s, in %q: %s is %s, want %s", m.kin.name, w.name, from, expression, got, want)
+		}
+	}
+	m.does(asked, `window.port = null; window.last = null; got.length = 0;`)
+	m.does(w.from, strings.ReplaceAll(`window.chan = new MessageChannel(); window.portGot = [];
+		chan.port1.onmessage = (m) => portGot.push(m.data + "|" + (m.source === null && m.origin === "" &&
+			m.target === chan.port1 && Object.getPrototypeOf(m) === MessageEvent.prototype));
+		chan.port1.addEventListener("close", () => portGot.push("closed"));
+		W.postMessage("a port", "*", [chan.port2]);`, "W", "("+w.window+")"))
+	m.until(w.name+": the port came", func() bool { return m.within(asked, `port instanceof MessagePort`) == "true" })
+	in(asked, `got.join()`, m.originOf(w.origin)+"|a port|true")
+	in(w.from, `chan.port1.postMessage("ping")`, "undefined")
+	m.until(w.name+": the port answered", func() bool { return m.within(w.from, `portGot.join()`) == "pong ping|true" })
+	in(asked, `got[1]`, "port|ping|true")
+	for expression, want := range portDenied(w.asker) {
+		in(w.from, strings.ReplaceAll(expression, "PORT", "chan.port1"), want)
+	}
+	for expression, want := range portDenied(w.asked) {
+		in(asked, strings.ReplaceAll(expression, "PORT", "port"), want)
+	}
+	for _, through := range []string{`W.postMessage(` + kinds + `, "*", [spare.port1])`,
+		`chan.port1.postMessage(` + kinds + `, [spare.port1])`} {
+		m.does(asked, `window.last = null;`)
+		in(w.from, strings.ReplaceAll(through, "W", "("+w.window+")"), "undefined")
+		m.until(w.name+": every kind came", func() bool { return m.within(asked, `last !== null`) == "true" })
+		for _, kind := range frames.Carries() {
+			check, known := held()[kind.Mark]
+			if !known {
+				m.t.Errorf("the matrix sends nothing for %s", kind.Name)
+			}
+			in(asked, check, "true")
+		}
+		in(asked, `Object.keys(last).length`, strconv.Itoa(len(frames.Carries())))
+	}
+	in(w.from, `chan.port1.postMessage("close")`, "undefined")
+	m.until(w.name+": the port closed", func() bool {
+		return strings.HasSuffix(m.within(w.from, `portGot.join()`), "closed")
+	})
+	in(w.from, `chan.port1.postMessage("late")`, "undefined")
+	in(asked, `got.length`, "3")
+}
+
+func (m *matrix) originOf(i int) string {
+	if i < 0 {
+		return "https://site.test"
+	}
+	return m.kin.origins[i]
+}
+
+// broadcasts has every document broadcast its name, and checks which
+// heard which: those of one origin that keep their storage together.
+func (m *matrix) broadcasts() {
+	m.t.Helper()
+	names := map[string]string{"": "top", "a": "mid", "b": "sib", "n": "leaf"}
+	for from, name := range names {
+		m.does(from, `news.postMessage("`+name+`");`)
+	}
+	heard := func(from string) string {
+		return m.within(from, `aired.slice().sort().join()`)
+	}
+	m.until("the broadcasts came", func() bool {
+		for from := range names {
+			if heard(from) != m.kin.aired[from] {
+				return false
+			}
+		}
+		return true
+	})
+	for range 5 {
+		m.frame()
+	}
+	for from, name := range names {
+		m.checks++
+		if got := heard(from); got != m.kin.aired[from] {
+			m.t.Errorf("%s: %s heard the broadcasts of %q, want %q", m.kin.name, name, got, m.kin.aired[from])
+		}
+	}
+}
+
 func TestNothingButCopiedDataCrossesFromOneFrameToAnother(t *testing.T) {
 	checks := 0
 	for _, k := range kins() {
@@ -348,6 +538,7 @@ func TestNothingButCopiedDataCrossesFromOneFrameToAnother(t *testing.T) {
 			}
 			m.expect(w, strings.ReplaceAll(crawl, "walk(W,", "walk(("+w.window+"),"), "0 ")
 			m.exchange(w)
+			m.ports(w)
 			if got := m.within(w.from, `secret + "|" + document.title + "|" + fn()`); got != strings.Repeat("|secret of "+
 				w.asker, 3)[1:] {
 				t.Errorf("%s, %s: the document that looked now holds %s", k.name, w.name, got)
@@ -359,8 +550,12 @@ func TestNothingButCopiedDataCrossesFromOneFrameToAnother(t *testing.T) {
 				t.Errorf("%s: the document %s was changed: %s", k.name, name, got)
 			}
 		}
+		m.broadcasts()
 		if said := m.said(); strings.Contains(said, "error:") {
 			t.Errorf("%s: the console says %s", k.name, said)
+		}
+		if set := m.session().frames[m.session().pages[m.browser.Tab().Current()]]; len(set.ports) != 2*len(ways())*2 {
+			t.Errorf("%s: %d ends are left open, want the spare ones", k.name, len(set.ports))
 		}
 		checks += m.checks
 		_ = m.Close()

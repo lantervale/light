@@ -27,9 +27,11 @@ const fetchers = 8
 // pictureTimeout is how long one picture of a page may take.
 const pictureTimeout = 15 * time.Second
 
-// icon is the site's icon: the first the page links to (rel icon) that
-// light can draw, else /favicon.ico.
-func (b *builder) icon(ctx context.Context, root *html.Node) []byte {
+// icons are the addresses the site's icon is asked at, in order: those
+// the page links to (rel icon), then /favicon.ico. They are read from
+// the tree before anything else has it: the icon is fetched while the
+// document is built, which takes the tree apart.
+func (b *builder) icons(root *html.Node) []string {
 	var refs []string
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
@@ -42,11 +44,19 @@ func (b *builder) icon(ctx context.Context, root *html.Node) []byte {
 		}
 	}
 	walk(root)
+	var at []string
 	for _, ref := range append(refs, "/favicon.ico")[:min(len(refs)+1, maxIcons)] {
-		address := b.resolve(ref)
-		if address == "" {
-			continue
+		if address := b.resolve(ref); address != "" {
+			at = append(at, address)
 		}
+	}
+	return at
+}
+
+// icon is the site's icon: the first of the addresses that answers
+// with a picture light can draw.
+func (b *builder) icon(ctx context.Context, at []string) []byte {
+	for _, address := range at {
 		answer, err := b.loader.Client.Get(asking(netlog.As(ctx, b.loader.by(), netlog.Image), identity.Image), address,
 			identity.Accept(identity.Image))
 		if err != nil || !answer.OK() {

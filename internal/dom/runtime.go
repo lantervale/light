@@ -13,6 +13,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/html"
@@ -128,6 +129,12 @@ type Cookies interface {
 type Host struct {
 	// Console is told each line of the console.
 	Console func(Message)
+	// Ask shows the user a question a script asks and reports whether
+	// it did: the script then waits for Answer (asking.go).
+	Ask func(Question) bool
+	// Hold is shared by the documents of one tab: while a script of one
+	// waits for an answer, no script of another runs.
+	Hold *Hold
 	// Cleared is told the console was cleared by a script.
 	Cleared func()
 	// Navigate opens address in the page's tab, in place of the page in
@@ -170,6 +177,12 @@ type Host struct {
 	Origin    func() string
 	Sandboxed Sandboxed
 	Windows   Windows
+	// Broadcast gives a message of a BroadcastChannel of that name to
+	// the other documents of the page's origin; nil reaches none.
+	// Loading reports whether a frame of the page is still on its way:
+	// the window hears load once none is.
+	Broadcast func(name string, message Posted)
+	Loading   func() bool
 	// Bases is the IndexedDB databases of the page's site, asked for
 	// when a script first uses them; without them, they last as long
 	// as the page.
@@ -215,6 +228,10 @@ type Runtime struct {
 	kept     map[int]bool
 	// answering is the body of the answer a script is being told of.
 	answering []byte
+	// posted are the bytes of the message the page is being told of,
+	// and airing how many messages of BroadcastChannels wait for it.
+	posted []byte
+	airing atomic.Int64
 	// cookies are what document.cookie reads and sets (jar), and stores
 	// the storage areas the browser has none for.
 	cookies Cookies
@@ -232,6 +249,8 @@ type Runtime struct {
 	// bases is the page's use of its site's databases (indexeddb.go).
 	bases  bases
 	closed bool
+	// asking is how the scripts wait for an answer (asking.go).
+	asking parking
 }
 
 // New makes the Runtime of page, loaded with its scripts (web.Loader's
@@ -241,16 +260,17 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 		return nil, errors.New("the page was not loaded for scripts to run")
 	}
 	r := &Runtime{
-		host: host, page: page, doc: page.Doc, tree: page.Tree, began: time.Now(),
+		page: page, doc: page.Doc, tree: page.Tree, began: time.Now(),
 		handles: newHandles(), selectors: map[string]selectors{}, stores: map[string]Storage{},
 		ran: map[*html.Node]bool{}, requests: map[int]func(){}, kept: map[int]bool{}, loaded: newModuleMap(),
 	}
+	r.host = r.framed(host)
 	r.ops = r.table()
 	r.sheets = newSheets()
 	r.sheetOps()
 	r.fontOps()
 	r.seedSheets()
-	ctx, err := script.New(script.Options{Budget: host.Budget, Rejected: r.rejected, Import: r.imported,
+	ctx, err := r.engine(script.Options{Budget: host.Budget, Rejected: r.rejected, Import: r.imported,
 		Resolve: r.specified})
 	if err != nil {
 		return nil, err
@@ -314,7 +334,9 @@ func (r *Runtime) call(args []any) (any, error) {
 // Start runs the page's scripts in their order, then tells the page it
 // is ready and loaded: at once, unless a module waits for what it
 // imports, which the frames to come bring.
-func (r *Runtime) Start() {
+func (r *Runtime) Start() { r.whenFree(r.start) }
+
+func (r *Runtime) start() {
 	r.starting = true
 	for _, s := range r.page.Scripts {
 		if s.Node != nil {
@@ -415,6 +437,12 @@ func (r *Runtime) tell(m Message) {
 // they added, the answers that landed, the timers that are due and the
 // frame callbacks. It reports whether anything is left to run later.
 func (r *Runtime) Frame() bool {
+	more := true
+	r.free(func() { more = r.frame() })
+	return more
+}
+
+func (r *Runtime) frame() bool {
 	if r.closed {
 		return false
 	}
@@ -429,6 +457,9 @@ func (r *Runtime) Frame() bool {
 	}
 	r.watchFocus()
 	r.watchTitle()
+	if r.state == interactive {
+		r.proceed()
+	}
 	left, _ := r.enter("tick", r.now(), float64(frameBudget.Milliseconds())).(float64)
 	if time.Since(r.swept) > sweepEvery {
 		r.swept = time.Now()
@@ -460,6 +491,12 @@ func (r *Runtime) land(fn func()) {
 // Evaluate runs source as the console's line does, and gives its value
 // as the console prints it.
 func (r *Runtime) Evaluate(source string) (string, error) {
+	text, err := "", ErrAsking
+	r.free(func() { text, err = r.evaluated(source) })
+	return text, err
+}
+
+func (r *Runtime) evaluated(source string) (string, error) {
 	value, err := r.quietly("evaluate", source)
 	var thrown *script.Error
 	if errors.As(err, &thrown) {
@@ -473,13 +510,13 @@ func (r *Runtime) Evaluate(source string) (string, error) {
 }
 
 // Arrived tells the page its tab is back at an address it pushed.
-func (r *Runtime) Arrived(address string) { r.enter("arrived", address) }
+func (r *Runtime) Arrived(address string) { r.whenFree(func() { r.enter("arrived", address) }) }
 
 // Nodes is how many nodes of the page scripts hold a number for.
 func (r *Runtime) Nodes() int { return len(r.nodes) }
 
 // Sweep forgets now the nodes scripts let go of.
-func (r *Runtime) Sweep() { r.enter("sweep") }
+func (r *Runtime) Sweep() { r.whenFree(func() { r.enter("sweep") }) }
 
 // Close stops the page's scripts for good and frees their context.
 func (r *Runtime) Close() {
@@ -487,6 +524,7 @@ func (r *Runtime) Close() {
 		return
 	}
 	r.closed = true
+	r.unanswered()
 	for id, cancel := range r.requests {
 		if !r.kept[id] {
 			cancel()

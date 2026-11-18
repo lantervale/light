@@ -76,6 +76,8 @@ type Profile struct {
 
 	// system is the system light runs on, as runtime.GOOS names it.
 	system string
+	// asks are the questions scripts ask the user (asking.go).
+	modals modals
 
 	// screens are the open windows' screens, the oldest first; windows
 	// the windows to open at the next frame, closed those that closed,

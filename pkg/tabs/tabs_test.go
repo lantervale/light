@@ -224,3 +224,138 @@ func TestATabOpenedBesideTheShownOneFollowsThoseItOpened(t *testing.T) {
 		t.Fatalf("the tabs are %q, %q shown", got, b.Tab().Current())
 	}
 }
+
+// travels is a tab's history played from a script: "visit a", "push
+// a#x", "frame 0 b", "pushframe 0 b#x", "replaceframe 0 c", "go -1",
+// "gone 0" (the page has no frame there any more), "here 0",
+// "redirect a2", "renameframe 0 b#y", then what the tab is at: its page and its
+// frames.
+func travels(t *testing.T, script string) (*tabs.Tab, string) {
+	t.Helper()
+	h := tabs.NewTab("start")
+	gone := map[string]bool{}
+	has := func(path string) bool { return !gone[path] }
+	var changes []string
+	for _, line := range strings.Split(script, ";") {
+		word := strings.Fields(line)
+		switch word[0] {
+		case "visit":
+			h.Visit(word[1])
+		case "push":
+			h.Push(word[1])
+		case "frame":
+			h.VisitFrame(word[1], word[2])
+		case "pushframe":
+			h.PushFrame(word[1], word[2])
+		case "replaceframe":
+			h.ReplaceFrame(word[1], word[2])
+		case "redirect":
+			h.Redirect(h.Current(), word[1])
+		case "renameframe":
+			h.RenameFrame(word[1], word[2])
+		case "gone":
+			gone[word[1]] = true
+		case "here":
+			delete(gone, word[1])
+		case "go":
+			delta := 1
+			if word[1] == "-1" {
+				delta = -1
+			} else if word[1] != "1" {
+				delta = map[string]int{"-2": -2, "2": 2, "-3": -3, "3": 3, "-9": -9}[word[1]]
+			}
+			c := h.Travel(delta, has)
+			change := strings.Join(c.Frames, ",")
+			if c.Top {
+				change = "top"
+			}
+			changes = append(changes, change)
+		default:
+			t.Fatalf("no step %q", line)
+		}
+	}
+	at := h.Current()
+	for _, path := range []string{"0", "0/0", "1", "named"} {
+		if to := h.Frame(path); to != "" {
+			at += " " + path + "=" + to
+		}
+	}
+	return h, at + " | " + strings.Join(changes, " ")
+}
+
+func TestATabsHistoryGoesThroughItsFrames(t *testing.T) {
+	for _, c := range []struct{ name, script, want string }{
+		{"a frame's step is one of the tab's", "visit a;frame 0 b;go -1", "a | 0"},
+		{"and forward again", "visit a;frame 0 b;go -1;go 1", "a 0=b | 0 0"},
+		{"two frames in the order they went", "visit a;frame 0 b;frame 1 c;frame 0 d;go -1;go -1",
+			"a 0=b | 0 1"},
+		{"two frames, all the way back, then the page", "visit a;frame 0 b;frame 1 c;go -1;go -1;go -1",
+			"start | 1 0 top"},
+		{"several steps at once", "visit a;frame 0 b;frame 1 c;frame 0 d;go -3;go 2", "a 0=b 1=c | 0,1 0,1"},
+		{"past either end nothing moves", "visit a;frame 0 b;go -9;go 2", "a 0=b |  "},
+		{"a step after going back drops what was ahead", "visit a;frame 0 b;frame 0 c;go -1;frame 1 d;go 1;go -1",
+			"a 0=b | 0  1"},
+		{"a frame in a frame", "visit a;frame 0 b;frame 0/0 c;go -1;go 1", "a 0=b 0/0=c | 0/0 0/0"},
+		{"a frame that moves starts those in it again", "visit a;frame 0 b;frame 0/0 c;frame 0 d", "a 0=d | "},
+		{"back over it brings them back, the outer one told", "visit a;frame 0 b;frame 0/0 c;frame 0 d;go -1",
+			"a 0=b 0/0=c | 0"},
+		{"a frame that is no more is passed over", "visit a;frame 0 b;frame 1 c;gone 1;go -1", "a | 0"},
+		{"and the step before it is taken when only it is behind", "visit a;frame 1 c;gone 1;go -1", "start | top"},
+		{"a frame gone at the first step leaves the tab there", "frame 1 c;gone 1;go -1", "start 1=c | "},
+		{"a frame that came back is stepped through again", "visit a;frame 1 c;gone 1;here 1;go -1", "a | 1"},
+		{"going forward passes over it too", "visit a;frame 1 c;frame 0 b;go -2;gone 1;go 1", "a 0=b 1=c | 0,1 0"},
+		{"replacing adds no step", "visit a;frame 0 b;replaceframe 0 c;go -1;go 1", "a 0=c | 0 0"},
+		{"replacing the first document of a frame adds none", "visit a;replaceframe 0 c;go -1", "start | top"},
+		{"a named frame", "visit a;frame named b;go -1;go 1", "a named=b | named named"},
+		{"an address a frame's document gave itself keeps the frames in it",
+			"visit a;frame 0 b;frame 0/0 c;pushframe 0 b#x;go -1", "a 0=b 0/0=c | 0"},
+		{"an address the page gave itself keeps its frames", "visit a;frame 0 b;push a#x;go -1", "a 0=b | top"},
+		{"another page starts with its frames where their elements ask", "visit a;frame 0 b;visit c", "c | "},
+		{"back to a page brings its frames back", "visit a;frame 0 b;visit c;go -1", "a 0=b | top"},
+		{"a redirect keeps the frames", "visit a;frame 0 b;redirect a2", "a2 0=b | "},
+		{"an address a frame's document took in place of its own adds no step",
+			"visit a;frame 0 b;frame 0/0 c;renameframe 0 b#y;go -1;go 1", "a 0=b#y 0/0=c | 0 0"},
+		{"the same address twice is one step", "visit a;frame 0 b;frame 0 b;go -1;go -1", "start | 0 top"},
+	} {
+		if _, got := travels(t, c.script); got != c.want {
+			t.Errorf("%s (%s): the tab is at %q, want %q", c.name, c.script, got, c.want)
+		}
+	}
+}
+
+func TestATabCountsItsFramesSteps(t *testing.T) {
+	h, _ := travels(t, "visit a;frame 0 b;pushframe 0 b#x;replaceframe 0 c;frame 1 d")
+	if h.Len() != 5 || h.At() != 4 || !h.CanBack() || h.CanForward() {
+		t.Errorf("a tab of five steps counts %d, at %d", h.Len(), h.At())
+	}
+	ahead := h.Ahead(-2, nil)
+	if h.At() != 4 || !ahead.Moved() || strings.Join(ahead.Frames, ",") != "0,1" {
+		t.Errorf("looking ahead moved the tab to %d, or told %v", h.At(), ahead)
+	}
+	h.Back()
+	h.Take(ahead)
+	if h.At() != 3 {
+		t.Errorf("a move told of from another step was made: the tab is at %d", h.At())
+	}
+	if since := h.Since(4, nil); since.Top || strings.Join(since.Frames, ",") != "1" {
+		t.Errorf("since the last step %v changed", since)
+	}
+}
+
+func TestADuplicateKeepsItsOwnFrames(t *testing.T) {
+	b := tabs.NewBrowser("start")
+	b.Tab().VisitFrame("0", "b")
+	b.Duplicate(0)
+	b.Tabs[1].ReplaceFrame("0", "c")
+	b.Tabs[1].Back()
+	b.Tabs[1].Forward()
+	if b.Tabs[0].Frame("0") != "b" || b.Tabs[1].Frame("0") != "c" || b.Tabs[1].Len() != 2 {
+		t.Errorf("the tab's frame is at %q and its copy's at %q", b.Tabs[0].Frame("0"), b.Tabs[1].Frame("0"))
+	}
+}
+
+func TestAFramesPathIsItsKeysFromThePageDown(t *testing.T) {
+	if got := tabs.FramePath("0", "a/b", "é 1"); got != "0/a%2Fb/%C3%A9%201" {
+		t.Errorf("the path is %q", got)
+	}
+}

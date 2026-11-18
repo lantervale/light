@@ -17,6 +17,7 @@ import (
 	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
+	"github.com/lantervale/light/pkg/frames"
 	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/script"
 	"github.com/lantervale/light/pkg/tabs"
@@ -106,6 +107,9 @@ func (s *Screen) end(session *session) {
 // until the console starts them. A tab that is not shown runs nothing.
 func (s *Screen) runScripts() {
 	defer s.settle()
+	if s.asked() {
+		return
+	}
 	tab, session := s.browser.Tab(), s.session()
 	page := session.pages[tab.Current()]
 	if s.host == nil || page == nil || page.Err != nil {
@@ -127,6 +131,9 @@ func (s *Screen) runScripts() {
 		live.rt.Frame()
 	}
 	s.runFrames(set)
+	if set != nil {
+		set.deliver()
+	}
 	s.click(page, set)
 	s.keys(set)
 }
@@ -291,6 +298,8 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 			session.said.Add(console.Line{Level: console.Level(m.Level), Text: m.Text, Source: m.Source, Line: m.Line,
 				Stack: m.Stack, Depth: m.Depth, At: m.At})
 		},
+		Ask:     s.pageDialogs(tab, session, live),
+		Hold:    &s.modalOf(tab).hold,
 		Cleared: session.said.Clear,
 		Navigate: func(address string, replace bool) {
 			by := live.by(s)
@@ -314,28 +323,24 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 			if how == "replace" {
 				tab.Redirect(tab.Current(), address)
 			} else {
-				tab.Visit(address)
+				tab.Push(address)
 			}
 			session.pages[address], live.at = live.page, address
 			later(s.showNavigation)
 		},
-		Travel: func(delta int) {
-			later(func() {
-				for ; delta < 0; delta++ {
-					tab.Back()
-				}
-				for ; delta > 0; delta-- {
-					tab.Forward()
-				}
-				s.show()
-			})
-		},
+		Travel:  func(delta int) { later(func() { s.travel(nil, live.acting, delta) }) },
 		Steps:   tab.Len,
 		Fetch:   func(q dom.Request, done func(dom.Response)) func() { return s.fetchFor(session, live, q, done) },
 		Cookies: s.jar.Page(live.address),
 		Storage: func(area string) dom.Storage { return s.storageIn(session, "", originOf(live.page.Address), area) },
 		Bases:   s.pageDatabases(live),
 		Windows: &windows{s: s, set: s.framesOf(tab, live.page)},
+		Loading: func() bool { return s.framesOf(tab, live.page).loading(nil) },
+		Broadcast: func(name string, m dom.Posted) {
+			if origin := frames.Origin(live.page.Base); origin != opaqueOrigin && origin != "" {
+				s.broadcast(live, district{origin: origin}, name, m)
+			}
+		},
 		Viewport: func() (float32, float32) {
 			if s.host == nil {
 				return 0, 0
@@ -549,7 +554,13 @@ func (s *Screen) evaluate(source string) (string, error) {
 	if live == nil {
 		return "", errNoScripts
 	}
-	live.rt.Inspect(s.inspect.Selected())
+	s.name()
+	return s.evaluated(live, source)
+}
+
+// evaluated is what a line of the console gives in a document's
+// scripts.
+func (s *Screen) evaluated(live *running, source string) (string, error) {
 	began := time.Now()
 	value, err := live.rt.Evaluate(source)
 	if err != nil && time.Since(began) > time.Second {

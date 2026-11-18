@@ -14,13 +14,17 @@ const framed = (name) => {
   return child < 0 ? undefined : windowOf(child);
 };
 const [opaque, noModals] = host("sandbox");
-// asks is a function that would ask the user something, which light
-// only notes in the console: a sandboxed frame without allow-modals is
-// refused even that.
-const asks = (name, said, answer) => function (message) {
-  if (noModals) host("log", "error", `Ignored call to '${name}()'. The document is sandboxed, and the 'allow-modals' keyword is not set.`);
-  else host("log", "info", said(message));
-  return answer;
+// asks is a function that asks the user something and waits for the
+// answer: answered is what it gives of one, and unasked what it gives
+// when light shows nothing, which a sandboxed frame without
+// allow-modals is refused.
+const asks = (name, answered, unasked) => function (message, value) {
+  if (noModals) {
+    host("log", "error", `Ignored call to '${name}()'. The document is sandboxed, and the 'allow-modals' keyword is not set.`);
+    return unasked;
+  }
+  const answer = host("ask", name, message === undefined ? "" : String(message), value === undefined ? "" : String(value));
+  return answer ? answered(answer[0], answer[1]) : unasked;
 };
 const stored = (area) => {
   const kept = storage(area);
@@ -84,9 +88,9 @@ define(window, {
   },
   visualViewport: undefined, name: "", closed: false, opener: null, frameElement: null,
   isSecureContext: here.protocol === "https:", origin: host("origin"), crossOriginIsolated: false, event: undefined, status: "",
-  alert: asks("alert", (message) => "alert: " + (message === undefined ? "" : String(message)), undefined),
-  confirm: asks("confirm", (message) => "confirm, answered no: " + String(message), false),
-  prompt: asks("prompt", (message) => "prompt, left unanswered: " + String(message), null),
+  alert: asks("alert", () => undefined, undefined),
+  confirm: asks("confirm", (ok) => ok, false),
+  prompt: asks("prompt", (ok, text) => (ok ? text : null), null),
   print() {}, focus() {}, blur() {}, stop() {}, close() {},
   open() { host("log", "warn", "light opens no window for a script"); return null; },
   postMessage,
@@ -215,15 +219,43 @@ const calls = {
   },
   // message tells the window of what another posted it: what it wrote
   // down, read here, with the origin and the window light knows it by.
-  message(text, origin, source) {
-    let data;
-    try {
-      data = read(text);
-    } catch (_) {
-      dispatch(window, messageOf({ origin, source: windowOf(source) }, "messageerror"));
-      return;
+  message(origin, source, text, ends, size) {
+    const sent = incoming(text, ends, size);
+    if (sent) dispatch(window, messageOf({ ...sent, origin, source: windowOf(source) }));
+    else dispatch(window, messageOf({ origin, source: windowOf(source) }, "messageerror"));
+  },
+  // port tells a port of what came through its end from another
+  // document, and portClosed that the other end was closed.
+  port(end, text, ends, size) {
+    const port = remotes.get(end), sent = incoming(text, ends, size);
+    if (!port) {
+      if (sent) for (const lost of sent.ports) lost.close();
+    } else if (!sent) dispatch(port, messageOf({}, "messageerror"));
+    else {
+      portOf(port).queue.push(sent);
+      arrive(port);
     }
-    dispatch(window, messageOf({ data, origin, source: windowOf(source), ports: [] }));
+  },
+  portClosed(end) {
+    const port = remotes.get(end);
+    if (!port) return;
+    remotes.delete(end);
+    portOf(port).remote = 0;
+    setTimeout(dispatch, 0, port, new Event("close"));
+  },
+  // broadcast tells the channels of that name of what one of another
+  // document of the page's origin posted.
+  broadcast(name, origin, text, ends, size) {
+    const bytes = taken(size);
+    for (const channel of Array.from(broadcasts.get(name) || [])) {
+      let data;
+      try {
+        ({ data } = read(text, bytes, []));
+      } catch (_) {
+        continue;
+      }
+      if (!broadcastOf(channel).closed) dispatch(channel, messageOf({ data, origin }));
+    }
   },
   // script names the script element that runs, null between two.
   script(ref) { document.currentScript = wrap(ref); },

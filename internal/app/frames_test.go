@@ -138,13 +138,6 @@ func (s *shown) framedText(id string) string {
 	return strings.Join(strings.Fields(f.page.Doc.Body().Text()), " ")
 }
 
-func (set *framed) frameList() []*frame {
-	if set == nil {
-		return nil
-	}
-	return set.all
-}
-
 // quiet waits for every frame of the shown page to have loaded.
 func (s *shown) quiet() {
 	s.t.Helper()

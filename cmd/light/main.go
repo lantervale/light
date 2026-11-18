@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -48,6 +49,10 @@ type CLI struct {
 
 	Dir       string `env:"LIGHT_DIR" placeholder:"FOLDER" help:"The folder the settings, the history, the list of downloads and what pages store are kept in (light's folder in the user's config folder by default; none in a hidden run, which keeps them in memory)."`
 	Downloads string `env:"LIGHT_DOWNLOADS" placeholder:"FOLDER" help:"The folder files are saved to, whatever the settings say (theirs, else ~/Downloads, by default)."`
+	WebDriver string `name:"webdriver" env:"LIGHT_WEBDRIVER" placeholder:"HOST:PORT" help:"Serve W3C WebDriver there, to drive light from a test runner: an address of this machine only (127.0.0.1:4444). Off by default. A driven light keeps its settings, history and cookies in memory unless --dir names a folder."`
+
+	HostMap map[string]string `name:"host-map" placeholder:"NAME=ADDRESS;…" help:"For a test runner, with --webdriver only: names, and the names under them, that light finds at an address of this machine (web-platform.test=127.0.0.1), whatever the system resolves them to."`
+	TrustCA string            `name:"trust-ca" placeholder:"FILE" help:"For a test runner, with --webdriver only: a certificate authority (PEM) this run trusts beside the system's. Every certificate is still checked."`
 
 	Version kong.VersionFlag `help:"Say which light this is."`
 }
@@ -57,14 +62,25 @@ func main() {
 	cmd := parser(&cli)
 	_, err := cmd.Parse(os.Args[1:])
 	cmd.FatalIfErrorf(err)
-	profile := app.NewProfile(cli.options())
+	opts := cli.options()
+	opts.Transport, err = cli.transport()
+	cmd.FatalIfErrorf(err)
+	profile := app.NewProfile(opts)
 	win := app.Window(nil)
 	screen := profile.Screen(win)
 	if cli.Address != "" {
 		screen.Open(tabs.Resolve(cli.Address))
 	}
 	win.Add(screen.Document())
-	ember.New().AddEntities(win).AddSystems(profile).MustRun()
+	world := ember.New().AddEntities(win).AddSystems(profile)
+	if cli.WebDriver != "" {
+		driver, failed := app.Drive(context.Background(), profile, cli.WebDriver)
+		cmd.FatalIfErrorf(failed)
+		defer func() { _ = driver.Close() }()
+		log.Print("light: WebDriver at http://", driver.Address())
+		world.AddSystems(driver)
+	}
+	world.MustRun()
 	if err = profile.Close(); err != nil {
 		log.Print(err)
 	}
@@ -87,14 +103,14 @@ func parse(args []string, opts ...kong.Option) (CLI, error) {
 }
 
 // dir is the folder given, else light's folder in the user's config
-// folder; none for a hidden run not given one, which must leave the
-// player's files alone.
+// folder; none for a hidden run and for one driven over WebDriver not
+// given one, which must leave the player's files alone.
 func (c CLI) dir() string {
 	if c.Dir != "" {
 		return c.Dir
 	}
 	config, err := os.UserConfigDir()
-	if err != nil || os.Getenv("EMBER_HIDDEN") != "" {
+	if err != nil || os.Getenv("EMBER_HIDDEN") != "" || c.WebDriver != "" {
 		return ""
 	}
 	return filepath.Join(config, "light")
@@ -107,7 +123,7 @@ func (c CLI) options() app.Options {
 	return app.Options{
 		Dir: c.dir(), Downloads: c.Downloads, DefaultDownloads: systemDownloads(),
 		Files: shell.System{}, Version: version,
-		Languages: identity.System(), Driven: identity.Driven(os.Environ()),
+		Languages: identity.System(), Driven: c.WebDriver != "" || identity.Driven(os.Environ()),
 	}
 }
 

@@ -355,6 +355,7 @@ let adopted = Object.freeze([]);
 Object.defineProperty(Document.prototype, "styleSheets", {
   get() {
     const list = new StyleSheetList();
+    if (!this[PAGE]) return list;
     for (const id of host("sheets")) list.push(sheetOf(id));
     return list;
   },

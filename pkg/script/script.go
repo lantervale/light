@@ -54,6 +54,10 @@ type Context interface {
 	JSON(text, address string) (Module, error)
 	// Interrupt stops the script that is running, from any goroutine.
 	Interrupt()
+	// Pause stops the clock of the script that is running, from a
+	// function it called: the time until resume is called is none of
+	// its budget.
+	Pause() (resume func())
 	// Close frees the context; it is safe to call twice.
 	Close()
 }

@@ -1,23 +1,31 @@
 // ---- the windows of other frames
 
-// written is value as another window's page reads it back (read): its
-// structured clone, written down. Each object met is numbered in the
-// order it is met, so one met again, or within itself, is named by its
-// number. Nothing of this page goes with it: a text is all that leaves.
+// written is value as another document reads it back (read): its
+// structured clone, written down as a text and the bytes of what it
+// holds that is no text. Each object met is numbered in the order it is
+// met, so one met again, or within itself, is named by its number, and
+// a port by its place among those that leave. Nothing is taken from the
+// page until given says so, and nothing of the page goes with it.
 const written = (value, transfer) => {
+  const leaving = [], buffers = [];
   for (const item of transfer) {
-    if (item instanceof MessagePort) throw uncloneable("A MessagePort sent to another frame, which light does not carry yet,");
-    if (!(item instanceof ArrayBuffer)) throw uncloneable("A value that cannot be transferred");
-    if (item.detached) throw uncloneable("An ArrayBuffer that was transferred");
+    if (item instanceof MessagePort) {
+      if (portOf(item).detached) throw uncloneable("A port that was closed or transferred");
+      leaving.push(item);
+    } else if (item instanceof ArrayBuffer) {
+      if (item.detached) throw uncloneable("An ArrayBuffer that was transferred");
+      buffers.push(item);
+    } else throw uncloneable("A value that cannot be transferred");
   }
   if (new Set(transfer).size !== transfer.length) throw uncloneable("A value listed twice to transfer");
-  const seen = new Map();
+  const seen = new Map(), chunks = [];
+  let size = 0;
   const note = (object) => { seen.set(object, seen.size); };
-  const bytes = (buffer) => {
-    const from = new Uint8Array(buffer);
-    let text = "";
-    for (let i = 0; i < from.length; i += 8192) text += String.fromCharCode.apply(null, from.subarray(i, i + 8192));
-    return text;
+  const bytes = (view) => {
+    const at = size;
+    chunks.push(view);
+    size += view.length;
+    return [at, view.length];
   };
   const pairs = (object) => Object.keys(object).map((key) => [key, walk(object[key])]);
   const walk = (v) => {
@@ -30,6 +38,10 @@ const written = (value, transfer) => {
       case "symbol": throw uncloneable("A symbol");
     }
     if (v === null) return null;
+    if (v instanceof MessagePort) {
+      if (!leaving.includes(v)) throw uncloneable("A MessagePort that is not transferred");
+      return ["P", leaving.indexOf(v)];
+    }
     if (seen.has(v)) return ["r", seen.get(v)];
     if (v instanceof Boolean || v instanceof Number || v instanceof String || v instanceof BigInt) {
       note(v);
@@ -40,7 +52,7 @@ const written = (value, transfer) => {
     if (v instanceof ArrayBuffer) {
       if (v.detached) throw uncloneable("An ArrayBuffer that was transferred");
       note(v);
-      return ["b", bytes(v)];
+      return ["b", ...bytes(new Uint8Array(v))];
     }
     if (ArrayBuffer.isView(v)) {
       if (!(v.buffer instanceof ArrayBuffer)) throw uncloneable("A view of shared memory");
@@ -60,7 +72,8 @@ const written = (value, transfer) => {
       const stack = typeof v.stack === "string" ? v.stack : null;
       return Object.hasOwn(v, "cause") ? ["e", kind, String(v.message), stack, walk(v.cause)] : ["e", kind, String(v.message), stack];
     }
-    if (v instanceof Blob) throw uncloneable("A Blob sent to another frame, which light does not carry yet,");
+    if (v instanceof File) { note(v); return ["F", String(v.name), String(v.type), Number(v.lastModified), ...bytes(v._bytes)]; }
+    if (v instanceof Blob) { note(v); return ["B", String(v.type), ...bytes(v._bytes)]; }
     if (v instanceof EventTarget || v instanceof Event || platform.has(v) || facades.has(v)) throw uncloneable("An object of the page");
     if (v instanceof WeakMap || v instanceof WeakSet || v instanceof WeakRef || v instanceof Promise || v instanceof SharedBuffer) {
       throw uncloneable(`A ${v.constructor && v.constructor.name || "value"}`);
@@ -69,14 +82,72 @@ const written = (value, transfer) => {
     return Array.isArray(v) ? ["a", v.length, pairs(v)] : ["o", pairs(v)];
   };
   const text = JSON.stringify(walk(value));
-  for (const item of transfer) item.transfer();
-  return text;
+  return { text, bytes: size ? joined(chunks) : null, leaving, buffers };
 };
 
-// read is the value another window's page wrote down, made of this
-// page's own objects alone. A text that is not one written throws.
-const read = (text) => {
+// remotes are the ports whose other end is in another document, by
+// the number light knows their own end by.
+const remotes = new Map();
+
+// leave takes a port out of this document, to go with a message: the
+// number of the end that goes. A port whose other end is here gets a
+// channel through light, that end kept; what waited in the port goes
+// with it.
+const leave = (port) => {
+  const state = portOf(port);
+  let end = state.remote;
+  if (end) {
+    remotes.delete(end);
+    for (const m of state.queue) host("channel", "requeue", end, ...given(written(m.data, m.ports)));
+  } else {
+    const pair = host("channel", "pipe");
+    end = pair[1];
+    const other = state.other;
+    if (other) {
+      const kept = portOf(other);
+      kept.other = null;
+      kept.remote = pair[0];
+      remotes.set(pair[0], other);
+      for (const m of state.queue) host("channel", "send", pair[0], ...given(written(m.data, m.ports)));
+    } else host("channel", "shut", pair[0]);
+  }
+  state.queue = [];
+  state.other = null;
+  state.remote = 0;
+  state.detached = true;
+  return end;
+};
+
+// given is what light is handed of a message written down, once what
+// it transfers has left the page: its text, its bytes and its ends.
+const given = (w) => {
+  const ends = w.leaving.map(leave);
+  for (const buffer of w.buffers) buffer.transfer();
+  return [w.text, w.bytes ? shared(w.bytes) : null, ends];
+};
+
+// taken are the bytes of the message light is telling the page of.
+const taken = (size) => {
+  if (!size) return new Uint8Array(0);
+  const buffer = new SharedBuffer(size);
+  host("window", "bytes", buffer);
+  return new Uint8Array(buffer);
+};
+
+// marks are the marks read knows, those of frames.Carries.
+const marks = ["u", "n", "i", "r", "p", "d", "x", "b", "v", "m", "s", "e", "a", "o", "B", "F", "P"];
+
+// read is the value another document wrote down, made of this page's
+// own objects alone, and the ports that came with it, each the holder
+// of one of ends. A text that is not one written throws.
+const read = (text, bytes, ends) => {
   const made = [];
+  const ports = ends.map((end) => {
+    const port = new MessagePort(token);
+    portOf(port).remote = end;
+    remotes.set(end, port);
+    return port;
+  });
   const keep = (object) => { made.push(object); return object; };
   const wrong = () => new TypeError("The message is not one light wrote down.");
   const count = (n, most) => {
@@ -86,6 +157,10 @@ const read = (text) => {
   const list = (items) => {
     if (!Array.isArray(items)) throw wrong();
     return items;
+  };
+  const cut = (at, length) => {
+    count(at, bytes.length);
+    return bytes.slice(at, at + count(length, bytes.length - at));
   };
   const fill = (object, entries) => {
     for (const entry of list(entries)) {
@@ -97,12 +172,13 @@ const read = (text) => {
   const build = (n) => {
     if (n === null || typeof n === "boolean" || typeof n === "string") return n;
     if (typeof n === "number") return n;
-    const [kind, a, b, c, d] = list(n);
+    const [kind, a, b, c, d, e] = list(n);
     switch (kind) {
       case "u": return undefined;
       case "n": if (!["NaN", "Infinity", "-Infinity", "-0"].includes(a)) throw wrong(); return Number(a);
       case "i": if (typeof a !== "string" || !/^-?\d+$/.test(a)) throw wrong(); return BigInt(a);
       case "r": return made[count(a, made.length - 1)];
+      case "P": return ports[count(a, ports.length - 1)];
       case "p": {
         const value = build(a);
         if (value === null || typeof value === "object" || value === undefined) throw wrong();
@@ -110,12 +186,9 @@ const read = (text) => {
       }
       case "d": return keep(new Date(Number(build(a))));
       case "x": return keep(new RegExp(String(a), String(b)));
-      case "b": {
-        if (typeof a !== "string") throw wrong();
-        const into = new Uint8Array(a.length);
-        for (let i = 0; i < a.length; i++) into[i] = a.charCodeAt(i) & 0xff;
-        return keep(into.buffer);
-      }
+      case "b": return keep(cut(a, b).buffer);
+      case "B": return keep(new Blob([cut(b, c)], { type: String(a) }));
+      case "F": return keep(new File([cut(d, e)], String(a), { type: String(b), lastModified: Number(c) }));
       case "v": {
         const buffer = build(b);
         if (!(buffer instanceof ArrayBuffer)) throw wrong();
@@ -149,7 +222,22 @@ const read = (text) => {
     }
     throw wrong();
   };
-  return build(JSON.parse(text));
+  try {
+    return { data: build(JSON.parse(text)), ports };
+  } catch (failure) {
+    for (const port of ports) port.close();
+    throw failure;
+  }
+};
+
+// incoming is a message light tells the page of, read: null, with what
+// came with it closed, for one that cannot be.
+const incoming = (text, ends, size) => {
+  try {
+    return read(text, taken(size), ends);
+  } catch (_) {
+    return null;
+  }
 };
 
 // A window of another frame is a facade made here, of this page's own
@@ -247,12 +335,13 @@ const facade = (id) => {
     postMessage: function postMessage(message, target, transfer) {
       if (arguments.length === 0) throw new TypeError("postMessage needs a message");
       const [origin, list] = targeted(target, transfer);
-      host("window", "post", id, written(message, list), origin);
+      host("window", "aims", origin);
+      host("window", "post", id, origin, ...given(written(message, list)));
     },
-    // light gives the keyboard to the document last clicked in, and a
-    // frame is no window a script opened: these three do nothing.
+    // A frame is no window a script opened, so close does nothing; and
+    // blur gives the keyboard to no one else.
     close: function close() {},
-    focus: function focus() {},
+    focus: function focus() { host("window", "keyboard", id); },
     blur: function blur() {},
   };
   const shapes = {
@@ -282,6 +371,7 @@ const facade = (id) => {
   for (const name of Object.keys(crossTable.window)) {
     if (!Object.hasOwn(shapes, crossTable.window[name])) throw new Error(`light: no window answers a ${crossTable.window[name]}`);
   }
+  if (marks.join() !== crossTable.carries.join()) throw new Error("light: what a message carries and its table differ");
   return made;
 };
 // The table is read once, as the page begins: a name with nothing to

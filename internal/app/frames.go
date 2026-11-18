@@ -59,6 +59,22 @@ type frame struct {
 	held   frames.Sandbox
 	origin string
 	run    *running
+	// loads is whether its element is still to hear load: once the
+	// window of the document it shows did.
+	loads bool
+	// at is the address the tab's history has it at, "" for what its
+	// element asks, and asked the src it last followed. home is the
+	// address its document came as, first the one it came from, and
+	// pushed those it gave itself since (framehistory.go).
+	at, asked   string
+	home, first string
+	pushed      map[string]bool
+	// ord is its number among the frames its document ever had, and
+	// born how many the document it shows had.
+	ord, born int
+	// began is what its element asked for when it came into its page:
+	// where the tab's history has it before its first step.
+	began wanted
 }
 
 func (f *frame) depth() int {
@@ -96,10 +112,16 @@ type framed struct {
 	session *session
 	top     *web.Page
 	all     []*frame
-	// last is the id of the window made last, and mail what the windows
+	// last is the id of the window made last, born how many frames the
+	// page ever had, and mail what the windows
 	// posted each other that has not come yet (framescripts.go).
 	last int
+	born int
 	mail []letter
+	// ports are the ends of the channels between its documents, by
+	// their number, and lastPort the number given last (frameports.go).
+	ports    map[int]*end
+	lastPort int
 }
 
 // frames are the frames of a page of the tab, made when first asked.
@@ -114,10 +136,25 @@ func (s *Screen) framesOf(tab *tabs.Tab, top *web.Page) *framed {
 // adopt takes the iframe elements built for the Document of in since it
 // last did.
 func (set *framed) adopt(parent *frame, in *web.Page) {
+	born := &set.born
+	if parent != nil {
+		born = &parent.born
+	}
 	for _, n := range in.Frames.Take() {
 		set.last++
-		set.all = append(set.all, &frame{set: set, node: n, in: in, parent: parent, id: set.last, origin: opaqueOrigin})
+		set.all = append(set.all, &frame{set: set, node: n, in: in, parent: parent, id: set.last, origin: opaqueOrigin,
+			ord: *born})
+		*born++
 	}
+}
+
+// frameList are the frames of the page, none for a page that has no
+// set of them yet.
+func (set *framed) frameList() []*frame {
+	if set == nil {
+		return nil
+	}
+	return set.all
 }
 
 // count is how many frames the tab holds beside f.
@@ -191,7 +228,7 @@ func (set *framed) release() {
 			f.drop()
 		}
 	}
-	set.mail = nil
+	set.mail, set.ports = nil, nil
 }
 
 // pause stops the loads on their way while the page is not the one its
@@ -247,10 +284,7 @@ func (s *Screen) frames() {
 			f.blank()
 			f.live, f.admitted, f.key = false, false, ""
 		case placed && (!f.live || key != f.key):
-			f.live, f.key = true, key
-			src, _ := f.node.Attr("src")
-			inline, has := f.node.Attr("srcdoc")
-			s.navigate(f, wanted{from: f.in, ref: src, inline: inline, isInline: has})
+			s.follow1(f, key)
 		}
 		if raised := panicOf(f.in.Doc, f.node); raised != nil && f.page != nil {
 			set.session.said.Add(console.Line{Level: console.Error,
@@ -262,6 +296,14 @@ func (s *Screen) frames() {
 		}
 		if !f.live {
 			idle++
+		}
+	}
+	if set.session.returned {
+		set.session.returned = false
+		for _, f := range slices.Clone(set.all) {
+			if f.live && !f.gone && (f.parent == nil || f.parent.load == nil) {
+				s.bring(f, tab.Frame(f.path()))
+			}
 		}
 	}
 	for i := 0; idle > idleFrames && i < len(set.all); i++ {
@@ -325,6 +367,8 @@ type wanted struct {
 	isInline bool
 	form     *web.Submission
 	user     bool
+	// how is what the tab's history keeps of it: a step, unless told.
+	how stepping
 }
 
 // MixedError is a frame in the clear that a page loaded over https
@@ -378,6 +422,7 @@ func (s *Screen) navigate(f *frame, q wanted) {
 		}
 		address = to.String()
 	}
+	s.stepped(f, q, address)
 	loader, links := s.frameLoader(f), s.frameLinks(f)
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
 	ctx, trail := netlog.Trailed(s.frameAsks(ctx, f, q, loader.Frame))
@@ -525,7 +570,9 @@ func (s *Screen) landFrame(f *frame, l *load, page *web.Page, row int) {
 	case page.Kind == content.Page:
 		s.showIn(f, page)
 		f.origin = f.originOf(page)
-		s.tellFrame(f, "load")
+		if f.loads = s.runs(f); !f.loads {
+			s.tellFrame(f, "load")
+		}
 	case page.Kind == content.Text:
 		page.Doc, page.Base = web.Text(page.Source), f.in.Base
 		s.showIn(f, page)
@@ -548,7 +595,8 @@ func (s *Screen) unshown(f *frame, page *web.Page, why string) {
 // showIn has f show page in place of what it showed.
 func (s *Screen) showIn(f *frame, page *web.Page) {
 	f.blank()
-	f.page, f.held, f.origin = page, f.sandbox, opaqueOrigin
+	f.page, f.held, f.origin, f.loads = page, f.sandbox, opaqueOrigin, false
+	f.home, f.first, f.pushed, f.born = f.at, page.Address, nil, 0
 	f.in.Doc.SetFrame(f.node, page.Doc)
 }
 
