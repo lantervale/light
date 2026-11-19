@@ -95,8 +95,10 @@ type Profile struct {
 	// saves runs the downloads.
 	saves *downloads.Manager
 
-	// system is the system light runs on, as runtime.GOOS names it.
+	// system is the system light runs on, as runtime.GOOS names it, and
+	// clock the seconds its frames have taken.
 	system string
+	clock  float32
 	// asks are the questions scripts ask the user (asking.go).
 	modals modals
 
@@ -250,6 +252,7 @@ func (p *Profile) Update(f world.Frame) {
 	for gone := range p.closed.Read(f.World) {
 		p.letGo(gone.Window)
 	}
+	p.clock = f.Time.RealElapsed
 	for _, s := range slices.Clone(p.screens) {
 		s.tick()
 	}

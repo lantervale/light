@@ -32,6 +32,13 @@ type site struct {
 	body                 func(s *Screen) []*ui.Node
 }
 
+// made is a page of light's the model makes, with the feature it is
+// of.
+type made struct {
+	site
+	feature string
+}
+
 // pages are light's own pages, the start page first: what an address of
 // its scheme opens, and what the start page, a search, the About page
 // and the page of an unknown one list.
@@ -53,11 +60,35 @@ func pages() []site {
 	}
 }
 
+// assisted are the pages of light's the model makes, each with the
+// feature it is of: they are listed nowhere while it does not help.
+func assisted() []made {
+	return []made{{site{translateName, translateTitle, "A text typed or pasted, translated by the model on this " +
+		"device.", translateBody}, translateFeature}}
+}
+
+// lists are light's own pages as its lists have them: those the model
+// makes among them only while it does.
+func (s *Screen) lists() []site {
+	all := pages()
+	for _, page := range assisted() {
+		if s.helps(page.feature) {
+			all = append(all, page.site)
+		}
+	}
+	return all
+}
+
 // pageNamed is light's page of that name.
 func pageNamed(name string) (site, bool) {
 	for _, page := range pages() {
 		if page.name == name {
 			return page, true
+		}
+	}
+	for _, page := range assisted() {
+		if page.name == name {
+			return page.site, true
 		}
 	}
 	return site{}, false
@@ -66,7 +97,7 @@ func pageNamed(name string) (site, bool) {
 // ownPages lists light's pages by their addresses.
 func (s *Screen) ownPages() *ui.Node {
 	list := ui.Div(ui.ID("own-pages"), ui.Class("list"))
-	for _, page := range pages() {
+	for _, page := range s.lists() {
 		list.Append(ui.Div(s.link(tabs.Page(page.name), tabs.Page(page.name)), ui.Text(": "+page.summary)))
 	}
 	return list
@@ -179,7 +210,7 @@ func adapted() *ui.Node {
 func (s *Screen) results(query string) []*ui.Node {
 	body := []*ui.Node{ui.H1(ui.Text("Results for “" + query + "”"))}
 	words := strings.Fields(strings.ToLower(query))
-	for _, found := range pages() {
+	for _, found := range s.lists() {
 		text := strings.ToLower(found.title + " " + found.summary)
 		if len(words) == 0 || !containsAll(text, words) {
 			continue

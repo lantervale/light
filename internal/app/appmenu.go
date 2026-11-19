@@ -98,6 +98,7 @@ func (s *Screen) followChoices() {
 	s.closeAnswer(false)
 	s.closePicked()
 	s.closeSorting(false)
+	s.closeTranslation(false)
 	if zoom := percent(s.zoomOf(s.session()), ""); s.zoomed.Text() != zoom {
 		s.zoomed.SetText(zoom)
 	}

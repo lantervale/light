@@ -87,12 +87,14 @@ func drawings() map[string]drawing {
 		"check":   {path: `<path d="M5 12l5 5 9-10"/>`, stroke: "#cfe1ff"},
 		"folder":  {path: `<path d="M3 7h6l2 2h10v10H3z"/>`, stroke: "#8f8c9c"},
 
-		"fetch":             {path: `<path d="M12 4v12M6 11l6 6 6-6M5 21h14"/>`, stroke: dim},
-		"tick":              {path: tick, stroke: ready, fill: ready},
-		"check-dark":        {path: `<path d="M5 12l5 5 9-10"/>`, stroke: "#0f1b2b"},
-		"robot":             {path: robot, stroke: "#efecf4"},
-		"robot-tile":        {path: robot, stroke: "#0f1b2b"},
-		"find":              {path: lens, stroke: navy},
+		"fetch":      {path: `<path d="M12 4v12M6 11l6 6 6-6M5 21h14"/>`, stroke: dim},
+		"tick":       {path: tick, stroke: ready, fill: ready},
+		"check-dark": {path: `<path d="M5 12l5 5 9-10"/>`, stroke: "#0f1b2b"},
+		"robot":      {path: robot, stroke: "#efecf4"},
+		"robot-tile": {path: robot, stroke: "#0f1b2b"},
+		"find":       {path: lens, stroke: navy},
+		"translate": {path: `<path d="M4 5h9M8.5 3v2M11 5c-.6 3.6-3 6.6-6.5 8M6 9c1 2 3 4 5.5 5M13 20l4-9 4 9M14.5 ` +
+			`17h5"/>`, stroke: "#cfe1ff"},
 		"robot-ready":       {path: `<circle cx="12" cy="12" r="9"/>`, stroke: ready, fill: ready},
 		"robot-working":     {path: `<rect x="4" y="4" width="16" height="16" rx="3"/>`, stroke: accent, fill: accent},
 		"robot-preparing":   {path: `<circle cx="12" cy="12" r="8"/>`, stroke: accent},
@@ -119,6 +121,7 @@ func drawings() map[string]drawing {
 		"model":     robot,
 		"model-on":  robot,
 		"sorted":    `<path d="M3 3h8.5l9.5 9.5-8.5 8.5L3 11.5z"/><circle cx="8" cy="8" r="1"/>`,
+		"translate": `<path d="M4 5h9M8.5 3v2M11 5c-.6 3.6-3 6.6-6.5 8M6 9c1 2 3 4 5.5 5M13 20l4-9 4 9M14.5 17h5"/>`,
 	} {
 		glyphs["row-"+name] = drawing{path: path, stroke: row}
 	}

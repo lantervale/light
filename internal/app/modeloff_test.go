@@ -29,7 +29,8 @@ func (s *shown) nothingHelped(where string) {
 		case n.HasClass("robot-toggle"), strings.Contains(src, "robot") && n.Parent().ID() != "menu-model-on",
 			strings.HasPrefix(id, "category"), strings.HasPrefix(id, "answer"), strings.HasPrefix(id, "picked"),
 			strings.HasPrefix(id, "history-ask"), strings.HasPrefix(id, "find-pass"), strings.HasPrefix(id, "set-recall"),
-			id == "robot", id == "menu-ask", id == "menu-sorted", id == "menu-model", id == "find-robot",
+			strings.HasPrefix(id, "translat"), strings.HasPrefix(id, "set-translat"), id == "menu-translate",
+			id == "go-translate", id == "robot", id == "menu-ask", id == "menu-sorted", id == "menu-model", id == "find-robot",
 			id == "continue-robot", id == "bookmark-robot":
 			s.t.Errorf("%s: without a model the screen shows <%s id=%q src=%q>", where, n.Tag(), id, src)
 		}
@@ -41,7 +42,8 @@ func (s *shown) nothingHelped(where string) {
 			s.t.Errorf("%s: without a model the screen says %q", where, f.label)
 		}
 	}
-	for _, said := range []string{"by your categories", "by meaning", "what pages said", "on this device, nothing sent"} {
+	for _, said := range []string{"by your categories", "by meaning", "what pages said", "on this device, nothing sent",
+		"nothing is sent", "always translated", translatePage} {
 		if strings.Contains(text, said) {
 			s.t.Errorf("%s: without a model the screen says %q", where, said)
 		}
@@ -73,7 +75,8 @@ func TestWithoutAModelNothingOfWhatItHelpsWithShowsAnywhere(t *testing.T) {
 		s.click("menu")
 		s.nothingHelped(name + ", the menu")
 		s.press(input.KeyEscape)
-		for _, address := range []string{s.config.StartPage, historyPage, bookmarksPage, configPage} {
+		for _, address := range []string{s.config.StartPage, historyPage, bookmarksPage, configPage, own + aboutName,
+			translatePage} {
 			s.Open(address)
 			s.frame()
 			s.frame()

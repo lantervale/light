@@ -138,6 +138,12 @@ type Screen struct {
 	excerpt  pickedCard
 	// find is the card that finds words in the page, and its marks.
 	find findCard
+	// desk is the page that translates a text, rendered what the window
+	// shows of the pages translated in place, and relink what lists
+	// light's own pages again on the start page.
+	desk     desk
+	rendered rendered
+	relink   func()
 
 	// sought shows the search engine's mark in the address field while
 	// words are typed there.
@@ -289,6 +295,7 @@ func (s *Screen) build() {
 		s.shortcuts(),
 		s.menu.Node())
 	s.buildSorting()
+	s.buildTranslation()
 	ui.OnContextMenu(s.contextMenu).Apply(s.doc.Body())
 }
 
@@ -343,6 +350,8 @@ func (s *Screen) tick() {
 	s.watchModel()
 	s.watchRecall()
 	s.watchSorting()
+	s.watchTranslation()
+	s.followDesk()
 	s.followChoices()
 	s.measure()
 	s.drew()
@@ -380,7 +389,7 @@ func (s *Screen) tick() {
 // overlaid reports whether a menu or a list of light's is open over the
 // page: a press or a key is then not the page's scripts' to hear.
 func (s *Screen) overlaid() bool {
-	return s.sortingOpen() || s.covered() ||
+	return s.sortingOpen() || s.covered() || s.translationOpen() ||
 		s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
 		s.panelOpen() || s.choosing() || s.cardOpen() || s.answerOpen() || s.pickedOpen()
 }
@@ -395,11 +404,12 @@ func (s *Screen) show() {
 	s.closeChoices()
 	s.closeCard(false)
 	s.closeSorting(false)
+	s.closeTranslation(false)
 	s.closeAnswer(false)
 	s.closePicked()
 	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
-	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks = nil, nil, nil, nil, nil, nil
+	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks, s.relink = nil, nil, nil, nil, nil, nil, nil
 	s.view.Append(s.page(tab.Current()))
 	s.showTabs()
 	s.leave(tab, session)

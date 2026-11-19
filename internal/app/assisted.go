@@ -28,7 +28,8 @@ const (
 // features are what the model helps with, in the order its card lists
 // them.
 func features() []feature {
-	return []feature{{answersFeature, "Answers in the address bar"}, {pickedFeature, "Actions on selected text"},
+	return []feature{{answersFeature, "Answers in the address bar"}, {translateFeature, "Translation"},
+		{pickedFeature, "Actions on selected text"},
 		{findFeature, "Find by meaning"}, {filingFeature, "Bookmark suggestions"},
 		{summariesFeature, "Page summaries"}, {sortingFeature, sortedTitle},
 		{recallFeature, recallLabel}}
@@ -259,6 +260,9 @@ func (s *Screen) closeSheets(keep *ui.Node) {
 	}
 	if keep != s.sorting.card {
 		s.closeSorting(false)
+	}
+	if keep != s.rendered.card {
+		s.closeTranslation(false)
 	}
 	if keep != s.find.root && s.find.root.HasClass("shown") {
 		s.closeFind()
