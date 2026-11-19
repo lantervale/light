@@ -106,6 +106,9 @@ type Config struct {
 	// HideSummaries is whether the start page keeps to itself what the
 	// model wrote of the pages visited.
 	HideSummaries bool `json:"hide_summaries"`
+	// TranslateInto is the language a selection is translated into, by
+	// its tag, "" for the reader's.
+	TranslateInto string `json:"translate_into"`
 	// RecallExcluded are the sites whose pages are never remembered for
 	// the history asked by meaning, by their hosts, as "bank.example,
 	// mail.example".

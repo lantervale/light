@@ -229,8 +229,8 @@ With the model on, it helps with these, each of which can be turned off alone:
 
 - **Answers in the address bar**: a line that starts with `?` is a question about the shown page, answered in a
   card under the address field, with the sentence of the page it comes from selected.
-- **Actions on selected text**: Explain, Summarise and Translate (into your language) in a card under the
-  selection.
+- **Actions on selected text**: Explain, Summarise and Translate in a card under the selection. A translation is
+  into British English, American English or French, and the language chosen is kept (`translate_into`).
 - **Find by meaning**: Find in page (Cmd+F) works without the model; with a model that embeds text, it also finds
   the passages that mean what you typed when the words are not on the page.
 - **Bookmark suggestions**: a name, a line of what the page says and a folder for a bookmark just made, in its
@@ -239,7 +239,8 @@ With the model on, it helps with these, each of which can be turned off alone:
 - **Page summaries**: a page you leave or close is summed up in one line, kept with its visit in the history and
   shown on its card of the start page; the robot by "Continue" hides the lines (`hide_summaries`).
 - **Page categories**: categories you name and describe in your own words; the model judges each page, and a
-  category can mark its pages, warn first, or dim them. You can correct a page or a whole site.
+  category can mark its pages, warn first, or dim them. The page's category stands at the end of the address
+  field, three dots while it is judged. You can correct a page or a whole site.
 - **Remember what pages said** (off until you turn it on, apart from the model): the history page then takes a
   question and lists the pages that said something like it. Sites you exclude, local files and light's own
   pages are never remembered, and the page forgets what it holds on request.

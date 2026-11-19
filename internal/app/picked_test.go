@@ -158,3 +158,60 @@ func TestASelectionGetsNoCardWithoutTheModel(t *testing.T) {
 		}
 	}
 }
+
+func TestATranslationIsIntoTheLanguageChosenAndTheChoiceIsKept(t *testing.T) {
+	s, fake, page := reading(t)
+	fake.Reply = func(model.Request) (string, error) { return "Le bateau.", nil }
+	s.selects(page, "cost")
+	if s.doc.ByID("picked-into") != nil {
+		t.Fatal("the languages show before a translation is asked for")
+	}
+	s.click("picked-translate")
+	s.until("the model is asked", func() bool { return len(fake.Asked()) == 1 })
+	s.frame()
+	if got := strings.Join(s.texts("picked-into", "folder"), ", "); got != "English (UK), English (US), Français" ||
+		s.pressed("picked-into") != "English (US)" {
+		t.Fatalf("the card offers %q, chosen %q", got, s.pressed("picked-into"))
+	}
+	if told := fake.Asked()[0].System; !strings.Contains(told, "into American English") {
+		t.Fatalf("the model is told %q", told)
+	}
+	s.clean()
+	s.click("picked-into-fr")
+	s.until("the model is asked again", func() bool { return len(fake.Asked()) == 2 })
+	fake.Finish()
+	fake.Finish()
+	s.frame()
+	s.frame()
+	if told := fake.Asked()[1].System; !strings.Contains(told, "into French") || s.pressed("picked-into") != "Français" ||
+		s.config.TranslateInto != "fr" || s.node("picked-text").Text() != "Le bateau." {
+		t.Fatalf("French chosen, the model is told %q, %q is chosen, the setting is %q and the card reads %q", told,
+			s.pressed("picked-into"), s.config.TranslateInto, s.node("picked-text").Text())
+	}
+	s.click("picked-explain")
+	s.until("the model is asked to explain", func() bool { return len(fake.Asked()) == 3 })
+	s.frame()
+	if s.doc.ByID("picked-into") != nil {
+		t.Fatal("the languages show for an explanation")
+	}
+	page.ClearSelection()
+	s.frame()
+	s.frame()
+	s.selects(page, "cost")
+	s.click("picked-translate")
+	s.until("the model is asked for another selection", func() bool { return len(fake.Asked()) == 4 })
+	s.frame()
+	if told := fake.Asked()[3].System; !strings.Contains(told, "into French") || s.pressed("picked-into") != "Français" {
+		t.Fatalf("for the next selection the model is told %q and %q is chosen", told, s.pressed("picked-into"))
+	}
+	s.configure(func(c *config.Config) { c.TranslateInto = "tlh" })
+	if got := s.translatesInto().tag; got != "en-US" {
+		t.Fatalf("a language light does not offer is read as %q", got)
+	}
+	for languages, want := range map[string]string{"fr-CA, en": "fr", "en-GB": "en-GB", "de": "en-US"} {
+		s.configure(func(c *config.Config) { c.TranslateInto, c.Languages = "", languages })
+		if got := s.translatesInto().tag; got != want {
+			t.Errorf("a reader of %q is translated for into %q", languages, got)
+		}
+	}
+}

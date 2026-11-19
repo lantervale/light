@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -10,8 +9,8 @@ import (
 	"github.com/lantervale/light/pkg/categories"
 )
 
-// sortingNotch is how far from the left edge of the categories' card
-// the middle of its notch is, in points.
+// sortingNotch is how far from the right edge of the categories' card
+// its notch is.
 const sortingNotch = 26
 
 // tag is the glyph of the card's tile.
@@ -76,27 +75,17 @@ func (s *Screen) closeSorting(refocus bool) {
 }
 
 // sortingAnchor is what the card hangs from: the page's label, and the
-// address field's lock for a page that has none.
+// address field's star for a page that has none.
 func (s *Screen) sortingAnchor() *ui.Node {
 	if s.sorting.label.HasClass("shown") {
 		return s.sorting.label
 	}
-	return s.lock
+	return s.star
 }
 
 // hangSorting places the card so its notch points at the middle of
 // what it hangs from.
-func (s *Screen) hangSorting() {
-	stage, _ := s.doc.BoxOf(s.view.Parent())
-	anchor, ok := s.doc.BoxOf(s.sortingAnchor())
-	if !ok {
-		return
-	}
-	style := fmt.Sprintf("left: %gpx", max(anchor.Center().X-stage.X-sortingNotch, 0))
-	if s.sorting.card.Style() != style {
-		s.sorting.card.SetStyle(style)
-	}
-}
+func (s *Screen) hangSorting() { s.hang(s.sorting.card, s.sortingAnchor(), sortingNotch) }
 
 // followSorting keeps the open card under what it hangs from, shows in
 // it what changed of the page's judgment, and closes it when it is

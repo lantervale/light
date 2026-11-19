@@ -9,7 +9,7 @@
 .tab.warns .face { padding-left: 34px; }
 .category-sign .mark { width: 14px; height: 14px; }
 
-#bar #category-label { display: none; align-items: center; width: auto; margin-left: -8px; border-radius: 0;
+#bar #category-label { display: none; flex: none; align-items: center; width: auto; border-radius: 0;
 	background: transparent; }
 #bar #category-label.shown { display: flex; }
 #category-label .pill { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px;
@@ -45,7 +45,7 @@
 
 #categories { width: 420px; max-height: calc(100% - 12px); }
 #categories.shown { display: flex; flex-direction: column; }
-#categories .notch { left: 21px; }
+#categories .notch { right: 21px; }
 #categories .head, #categories .inset, #categories .foot { flex: none; }
 #categories .head { align-items: center; }
 #categories .site svg { display: block; width: 20px; height: 20px; }

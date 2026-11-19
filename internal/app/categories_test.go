@@ -306,8 +306,12 @@ func TestAnAnswerThatIsNoCategoryIsDefaultAndNothingSaysAPageIsSafe(t *testing.T
 	if len(sortAsks(fake)) != 1 {
 		t.Fatalf("a page of Default was asked about %d times", len(sortAsks(fake)))
 	}
-	if s.visible("category-label") || s.visible("category-bar") || s.covered() {
-		t.Fatal("a page of Default is marked")
+	if label := s.node("category-label"); !s.visible("category-label") || label.Text() != categories.DefaultName ||
+		label.Children()[0].Children()[0].Tag().String() == "svg" {
+		t.Fatalf("the label of a page of Default reads %q, or has a mark", label.Text())
+	}
+	if s.visible("category-bar") || s.covered() {
+		t.Fatal("a page of Default is warned of or covered")
 	}
 	if name, line, sign := s.tabCategory(0); name != "" || line || sign {
 		t.Fatalf("the tab of a page of Default shows %q, %v, %v", name, line, sign)
@@ -344,8 +348,10 @@ func TestAMarkedPageHasItsLabelInTheAddressFieldAndALineUnderItsTab(t *testing.T
 	if aria, _ := label.Attr("aria-label"); aria != "This page: Politics. Page categories" {
 		t.Fatalf("the label is said %q", aria)
 	}
-	if l, lock := s.box("category-label"), s.box("lock"); l.X+l.W > lock.X || l.X < s.box("field").X {
-		t.Fatalf("the label at %v is not at the left of the address field, before its lock at %v", l, lock)
+	l, address, star, field := s.box("category-label"), s.box("address"), s.box("star"), s.box("field")
+	if l.X < address.X+address.W || l.X+l.W > star.X || l.X+l.W > field.X+field.W {
+		t.Fatalf("the label at %v is not at the end of the address field %v, after the address %v and before the "+
+			"star %v", l, field, address, star)
 	}
 	if name, line, sign := s.tabCategory(0); name != "Politics" || !line || sign {
 		t.Fatalf("the tab shows %q, its line %v, its sign %v", name, line, sign)
@@ -363,8 +369,8 @@ func TestAMarkedPageHasItsLabelInTheAddressFieldAndALineUnderItsTab(t *testing.T
 	s.clean()
 	s.OpenInNewTab(srv.URL + "/bread")
 	s.settledAs()
-	if s.visible("category-label") {
-		t.Fatal("a page of Default has a label")
+	if got := s.node("category-label").Text(); !s.visible("category-label") || got != categories.DefaultName {
+		t.Fatalf("the label of a page of Default reads %q", got)
 	}
 	if name, line, _ := s.tabCategory(0); name != "Politics" || !line {
 		t.Fatal("the tab behind lost its line")
@@ -875,5 +881,37 @@ func TestTheCategoriesAreKeptWithTheProfile(t *testing.T) {
 	again.settings()
 	if again.doc.ByID("categories-problem") == nil || len(again.Profile.sorted.list.Names()) != 5 {
 		t.Fatal("a file that does not read is not said, or is not the shipped list")
+	}
+}
+
+func TestThreeDotsStandForTheCategoryWhileThePageIsJudged(t *testing.T) {
+	srv := port(t)
+	s, fake := sortingOn(t, Options{})
+	fake.Manual = true
+	s.visit(srv.URL + "/council")
+	s.until("the model is asked for the category", func() bool { return len(sortAsks(fake)) == 1 })
+	s.frame()
+	label := s.node("category-label")
+	if !s.visible("category-label") || label.Text() != "…" {
+		t.Fatalf("while the page is judged the label reads %q", label.Text())
+	}
+	if aria, _ := label.Attr("aria-label"); aria != "This page is being sorted. Page categories" {
+		t.Fatalf("the label is said %q", aria)
+	}
+	if name, line, sign := s.tabCategory(0); name != "" || line || sign {
+		t.Fatalf("the tab of a page being judged shows %q, %v, %v", name, line, sign)
+	}
+	s.clean()
+	fake.Finish()
+	s.until("the model is asked why", func() bool { return len(sortAsks(fake)) == 2 })
+	fake.Finish()
+	if got := s.settledAs(); got != "Politics" || label.Text() != "Politics" {
+		t.Fatalf("judged, the page is of %q and its label reads %q", got, label.Text())
+	}
+	s.Open(tabs.Home)
+	s.frame()
+	s.frame()
+	if s.visible("category-label") {
+		t.Fatal("a page of light's own has a label")
 	}
 }

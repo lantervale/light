@@ -152,7 +152,7 @@ func (p *Profile) count(address, name string) {
 }
 
 // buildSorting makes what the window shows of the categories, all of
-// it hidden: the label first in the address field, the bar, the cover
+// it hidden: the label at the end of the address field, the bar, the cover
 // and the card on the stage.
 func (s *Screen) buildSorting() {
 	g := &s.sorting
@@ -165,12 +165,8 @@ func (s *Screen) buildSorting() {
 		}
 		s.openSorting()
 	}))
-	rest := slices.Clone(s.field.Children())
-	for _, n := range rest {
-		s.field.Remove(n)
-	}
-	s.field.Append(g.label)
-	s.field.Append(rest...)
+	s.field.Remove(s.star)
+	s.field.Append(g.label, s.star)
 	g.bar = ui.Div(ui.ID("category-bar"), ui.Attr("role", "alert"))
 	g.cover = ui.Div(ui.ID("category-cover"), ui.Attr("role", "region"), ui.Attr("aria-label", "This page is covered"))
 	g.card = ui.Div(ui.ID("categories"), ui.Class("sheet"), ui.Attr("role", "dialog"),
@@ -417,19 +413,29 @@ func (s *Screen) showSorting() {
 	page := s.sortedPage(s.browser.Tab())
 	v, judged := s.verdictOf(page)
 	passed := judged && g.judged[page].passed
-	key := fmt.Sprint(judged, v, passed)
+	j := g.judged[page]
+	waited := !judged && j != nil && j.pending && s.helps(sortingFeature)
+	key := fmt.Sprint(judged, v, passed, waited)
 	if key == g.drawn {
 		return
 	}
 	g.drawn = key
-	labelled := judged && v.Action != categories.NoMark
+	marked := judged && v.Action != categories.NoMark
 	empty(g.label)
-	toggle(g.label, "shown", labelled)
-	if labelled {
+	toggle(g.label, "shown", judged || waited)
+	switch {
+	case waited:
+		g.label.Append(ui.Span(ui.Class("pill"), ui.Span(ui.Text("…"))))
+		g.label.SetAttr("aria-label", "This page is being sorted. "+sortedTitle)
+	case marked:
 		g.label.Append(ui.Span(ui.Class("pill"), markOf(v.Mark), ui.Span(ui.Text(v.Name))))
+	case judged:
+		g.label.Append(ui.Span(ui.Class("pill"), ui.Span(ui.Text(v.Name))))
+	}
+	if judged {
 		g.label.SetAttr("aria-label", "This page: "+v.Name+". "+sortedTitle)
 	}
-	shown := labelled && !passed
+	shown := marked && !passed
 	warned, covered := shown && v.Action == categories.Warn, shown && v.Action == categories.Dim
 	empty(g.bar)
 	empty(g.cover)

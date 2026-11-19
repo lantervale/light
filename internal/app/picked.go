@@ -8,7 +8,7 @@ import (
 	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/ui"
 
-	"github.com/lantervale/light/pkg/identity"
+	"github.com/lantervale/light/pkg/config"
 )
 
 const (
@@ -21,10 +21,12 @@ const (
 // action is something the model does with a selection.
 type action struct {
 	id, label, title, did string
-	// system is what the model is told, which language names the
-	// language of its reader in.
-	system func(language string) string
+	// system is what the model is told, into naming the language a
+	// translation is made in.
+	system func(into string) string
 }
+
+const translating = "translate"
 
 func actions() []action {
 	passage := "The passage a reader selected on a web page" + untrusted
@@ -35,10 +37,42 @@ func actions() []action {
 		{"summarise", "Summarise", "In short", "Summarised", func(string) string {
 			return passage + "Say what it says in one or two sentences."
 		}},
-		{"translate", "Translate", "Translated", "Translated", func(language string) string {
-			return passage + "Translate it into the language whose tag is " + language + ". Give the translation only."
+		{translating, "Translate", "Translated", "Translated", func(into string) string {
+			return passage + "Translate it into " + into + ". Give the translation only."
 		}},
 	}
+}
+
+// translation is a language a selection is translated into: its tag,
+// its name as its readers write it, and as the model is told it.
+type translation struct{ tag, label, name string }
+
+func translations() []translation {
+	return []translation{
+		{"en-GB", "English (UK)", "British English"},
+		{"en-US", "English (US)", "American English"},
+		{"fr", "Français", "French"},
+	}
+}
+
+// translatesInto is the language a selection is translated into: the
+// one chosen last, else the first of the reader's that is offered,
+// else American English.
+func (s *Screen) translatesInto() translation {
+	offered := translations()
+	for _, t := range offered {
+		if t.tag == s.config.TranslateInto {
+			return t
+		}
+	}
+	for _, tag := range s.languages() {
+		for _, t := range offered {
+			if base, _, _ := strings.Cut(tag, "-"); t.tag == tag || t.tag == base {
+				return t
+			}
+		}
+	}
+	return offered[1]
 }
 
 // pickedCard is the card of the page's selection: what the model does
@@ -121,9 +155,9 @@ func (s *Screen) openPicked(text string) {
 func (s *Screen) do(a action) {
 	p := &s.excerpt
 	p.asked.stop()
-	language := identity.Languages(s.opts.Languages)[0]
 	p.did, p.off = &a, false
-	p.asked = s.inquire(a.system(language), "The passage:\n", strings.Join(strings.Fields(p.text), " "), pickedTokens)
+	p.asked = s.inquire(a.system(s.translatesInto().name), "The passage:\n", strings.Join(strings.Fields(p.text), " "),
+		pickedTokens)
 	s.fillPicked()
 }
 
@@ -153,6 +187,16 @@ func (s *Screen) fillPicked() {
 					p.did != nil && p.did.id == a.id, func() { s.do(a) }))
 			}
 			p.root.Append(ui.Div(ui.Class("part"), ui.Span(ui.Text("With the selection")), chips))
+			if p.did != nil && p.did.id == translating {
+				into, chosen := ui.Div(ui.ID("picked-into")), s.translatesInto()
+				for _, t := range translations() {
+					into.Append(s.pill("picked-into-"+t.tag, t.label, "Translate into "+t.name, t == chosen, func() {
+						s.configure(func(c *config.Config) { c.TranslateInto = t.tag })
+						s.do(*p.did)
+					}))
+				}
+				p.root.Append(ui.Div(ui.Class("part"), ui.Span(ui.Text("Into")), into))
+			}
 		}
 		var stop *ui.Node
 		if shows && !p.asked.done {
