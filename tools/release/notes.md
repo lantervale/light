@@ -53,7 +53,7 @@ runs them on your machine only. The README's
 
 - Windows runs no script, so pages that build themselves in JavaScript show little there.
 - No notarization on macOS, no installer or package on any system, no automatic update.
-- No cache, no sign-in prompt (401, 407), no file upload or `multipart/form-data` form, gzip only, no AVIF, and
+- No cache, no sign-in prompt (401, 407), no file upload or `multipart/form-data` form, no AVIF, and
   `window.open` opens nothing.
 - It draws what ember's UI draws: many pages look right, many do not.
 - Only the macOS app (Apple silicon) was started by hand before this release; the other archives were built and
