@@ -134,7 +134,7 @@ jobs:
           name: release
           path: dist
 
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.3
 
       - name: Sign the checksums
         run: |
