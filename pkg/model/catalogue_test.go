@@ -16,6 +16,11 @@ func TestLightsOwnManifestIsPinnedToItsPublishers(t *testing.T) {
 	if err := m.Check(); err != nil {
 		t.Fatal(err)
 	}
+	// The version the library of that tag says it is, which the helper
+	// compares before it uses it.
+	if m.Runtime.Tag != "b12359" || m.Runtime.Version != "1.0.0-dev" {
+		t.Errorf("the library is %s, which says it is %q", m.Runtime.Tag, m.Runtime.Version)
+	}
 	for _, system := range []string{"darwin/arm64", "darwin/amd64", "linux/amd64", "linux/arm64", "windows/amd64"} {
 		goos, goarch, _ := strings.Cut(system, "/")
 		a, ok := m.Archive(goos, goarch)

@@ -32,7 +32,7 @@ func dev(t *testing.T) wire.Command {
 	if value == "" {
 		t.Skipf("%s names no llama.cpp and no model on this machine", envDev)
 	}
-	hello := wire.Command{Op: wire.OpHello, Protocol: wire.Protocol, Llama: "1.0.0", GPU: true, Threads: 4,
+	hello := wire.Command{Op: wire.OpHello, Protocol: wire.Protocol, Llama: "1.0.0-dev", GPU: true, Threads: 4,
 		Context: 8192, Dev: true}
 	if v := os.Getenv("LIGHT_MODEL_TEST_LLAMA"); v != "" {
 		hello.Llama = v

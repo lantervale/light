@@ -5,7 +5,7 @@
     "name": "llama.cpp",
     "publisher": "ggml-org",
     "licence": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.0-dev",
     "tag": "b12359",
     "archives": [
       {
