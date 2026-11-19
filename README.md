@@ -231,6 +231,9 @@ With the model on, it helps with these, each of which can be turned off alone:
 - **Answers in the address bar**: a line that starts with `?` is a question about the shown page, answered in a
   card under the address field, with the sentence of the page it comes from selected. Words typed there without
   the `?` get a first row in the list under the field, "Ask this page: …", which asks the same.
+- **Translation**: `light://translate` translates a text you type or paste. A page in a language you do not read
+  has a label in the address field, "FR → EN", that translates it in place, a paragraph at a time, and puts the
+  original back; per language you can ask each time, always translate, or never (`translate_always`, `translate_never`).
 - **Actions on selected text**: Explain, Summarise and Translate in a card under the selection. A translation is
   into British English, American English or French, and the language chosen is kept (`translate_into`).
 - **Find by meaning**: Find in page (Cmd+F) works without the model; with a model that embeds text, it also finds
@@ -963,6 +966,8 @@ menu's "Turn on a model on this device…" and its section of `light://config`. 
 | `model_threads` | `0` | The threads it computes on (up to 64); 0 is half the fast cores, at least 2, at most 8 |
 | `model_cpu` | `false` | Leave the graphics card out of it |
 | `hide_summaries` | `false` | Keep what the model wrote of the pages visited off the start page |
+| `translate_always` | `""` | The languages whose pages are translated as they show, as `fr, de` |
+| `translate_never` | `""` | The languages whose pages are offered no translation |
 | `recall_excluded` | `""` | The sites whose pages are never remembered, by their hosts, as `bank.example, mail.example` |
 | `category_hours` | `24` | The hours a page keeps the category the model gave it before the model reads it again (0 to 720); 0 keeps none |
 

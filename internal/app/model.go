@@ -344,7 +344,8 @@ func (s *Screen) showModel(status model.Status) {
 		c.dot.SetAttr("src", "robot-"+class+".svg")
 		c.state.SetText(word)
 	}
-	if listed := fmt.Sprint(on, s.helps(answersFeature), s.helps(sortingFeature)); listed != c.listed {
+	if listed := fmt.Sprint(on, s.helps(answersFeature), s.helps(sortingFeature), s.helps(translateFeature)); listed !=
+		c.listed {
 		c.listed, c.ask = listed, nil
 		empty(c.slot)
 		empty(c.rows)
@@ -361,6 +362,9 @@ func (s *Screen) showModel(status model.Status) {
 		}
 		if s.helps(sortingFeature) {
 			c.rows.Append(s.choice("sorted", sortedTitle, "", s.openSorting))
+		}
+		if s.helps(translateFeature) {
+			c.rows.Append(s.choice("translate", translateTitle, "", func() { s.Open(translatePage) }))
 		}
 		c.rows.Append(row, ui.Div(ui.Attr("role", "separator")))
 	}

@@ -52,11 +52,17 @@ func homePage(s *Screen) []*ui.Node {
 	}
 	s.relist, s.relistMarks = fill, fill
 	fill()
-	links := ui.Nav(ui.ID("own-links"), ui.Span(ui.Text("light's own pages:")))
-	for _, page := range pages()[1:] {
-		links.Append(s.anchor(tabs.Page(page.name), ui.ID("go-"+page.name), ui.Text(page.title)))
+	links := ui.Nav(ui.ID("own-links"))
+	link := func() {
+		empty(links)
+		links.Append(ui.Span(ui.Text("light's own pages:")))
+		for _, page := range s.lists()[1:] {
+			links.Append(s.anchor(tabs.Page(page.name), ui.ID("go-"+page.name), ui.Text(page.title)))
+		}
+		links.Append(s.anchor(demo, ui.ID("go-demo"), ui.Text("CSS Zen Garden")))
 	}
-	links.Append(s.anchor(demo, ui.ID("go-demo"), ui.Text("CSS Zen Garden")))
+	s.relink = link
+	link()
 	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")),
 		ui.Div(ui.ID("search-box"), mark, search), held,
 		ui.P(ui.ID("home-note"), ui.Text("Made from what is on this device. Nothing was fetched to show this page.")),
