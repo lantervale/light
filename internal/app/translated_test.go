@@ -179,7 +179,8 @@ func TestAClickOnTheLabelTranslatesThePageInPlaceAPassageAtATime(t *testing.T) {
 	asked := fake.Asked()[0]
 	if !strings.Contains(asked.System, "from French into American English") || !strings.Contains(asked.System,
 		"never") || strings.Contains(asked.System, "conseil") || asked.Priority != model.Interactive ||
-		asked.Messages[0].Text != "The passage, in Markdown:\n"+asData("Le conseil vote le retrait du ferry diesel") {
+		asked.Messages[0].Text != "The passage, in Markdown:\n"+asData("Le conseil vote le retrait du ferry diesel")+
+			"\n\nThe translation into American English:" {
 		t.Fatalf("the model is told %q and asked %q", asked.System, asked.Messages[0].Text)
 	}
 	if got := s.node("translation-title").Text() + " | " + s.node("translation-sub").Text() + " | " +
@@ -485,7 +486,7 @@ func TestOpenInTranslateBringsThePagesTextAsItWasWritten(t *testing.T) {
 	}
 	s.until("the text is translated", func() bool { return len(fake.Asked()) > asked })
 	if told := fake.Asked()[asked]; !strings.Contains(told.System, "from French into American English") ||
-		told.Messages[0].Text != "The text:\n"+asData(want) {
+		told.Messages[0].Text != asData(want)+"\n\nThe translation into American English:" {
 		t.Fatalf("the model is told %q and asked %q", told.System, told.Messages[0].Text)
 	}
 	s.clean()

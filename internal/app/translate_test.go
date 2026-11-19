@@ -88,7 +88,8 @@ func TestTheTranslationPageTranslatesWhatIsTypedOnceTypingStops(t *testing.T) {
 	asked, named := fake.Asked()[0], fake.Asked()[1]
 	if !strings.Contains(asked.System, "into American English") || !strings.Contains(asked.System, "never") ||
 		strings.Contains(asked.System, "Bonjour") || strings.Contains(asked.System, "from") ||
-		asked.Messages[0].Text != "The text:\n"+asData("Bonjour le monde") || asked.Priority != model.Interactive ||
+		asked.Messages[0].Text != asData("Bonjour le monde")+"\n\nThe translation into American "+
+			"English:" || asked.Priority != model.Interactive ||
 		asked.Grammar != "" {
 		t.Fatalf("the model is told %q and asked %q", asked.System, asked.Messages[0].Text)
 	}
@@ -160,7 +161,8 @@ func TestATextOrALanguageThatChangesStopsTheTranslationAndBeginsItAgain(t *testi
 	}
 	s.pauses()
 	s.until("the model is asked for the new text", func() bool { return len(fake.Asked()) == 4 })
-	if asked := fake.Asked()[3]; asked.Messages[0].Text != "The text:\n"+asData("Bonjour le monde") {
+	if asked := fake.Asked()[3]; asked.Messages[0].Text != asData("Bonjour le monde")+
+		"\n\nThe translation into French:" {
 		t.Fatalf("for the new text the model is asked %q", asked.Messages[0].Text)
 	}
 	s.frame()
@@ -182,7 +184,8 @@ func TestATextOrALanguageThatChangesStopsTheTranslationAndBeginsItAgain(t *testi
 	s.until("the model is asked the other way", func() bool { return len(fake.Asked()) == 6 })
 	s.replied(fake)
 	if asked := fake.Asked()[5]; !strings.Contains(asked.System, "from French into American English") ||
-		asked.Messages[0].Text != "The text:\n"+asData("Hello **world**") || s.config.TranslateInto != "en-US" ||
+		asked.Messages[0].Text != asData("Hello **world**")+"\n\nThe translation into American "+
+			"English:" || s.config.TranslateInto != "en-US" ||
 		s.doc.Value(s.node("translate-text")) != "Hello **world**" || s.pressed("translate-from") != "Français" {
 		t.Fatalf("swapped, the model is told %q and asked %q", asked.System, asked.Messages[0].Text)
 	}
@@ -194,7 +197,8 @@ func TestATextOrALanguageThatChangesStopsTheTranslationAndBeginsItAgain(t *testi
 	s.win.SetClipboard("Au revoir")
 	s.click("translate-paste")
 	s.until("what was pasted is translated", func() bool { return len(fake.Asked()) == 7 })
-	if asked := fake.Asked()[6]; asked.Messages[0].Text != "The text:\n"+asData("Au revoir") ||
+	if asked := fake.Asked()[6]; !strings.HasPrefix(asked.Messages[0].Text, asData("Au revoir")+
+		"\n\nThe translation into ") ||
 		s.node("translate-count").Text() != "9 characters" {
 		t.Fatalf("pasted, the model is asked %q", asked.Messages[0].Text)
 	}

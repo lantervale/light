@@ -59,6 +59,13 @@ type begun struct {
 // lead introduces: the data cut to what the model holds, counted off
 // the frame, and given as data between marks that it cannot hold.
 func (s *Screen) inquire(system, lead, data string, tokens int) *inquiry {
+	return s.inquireThen(system, lead, data, "", tokens)
+}
+
+// inquireThen is inquire with then after the data: a small model does
+// what is asked after a text far more surely than what was asked before
+// it.
+func (s *Screen) inquireThen(system, lead, data, then string, tokens int) *inquiry {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &inquiry{cancel: cancel, begun: make(chan begun, 1)}
 	m := s.opts.Model
@@ -67,14 +74,14 @@ func (s *Screen) inquire(system, lead, data string, tokens int) *inquiry {
 		room = fallbackContext
 	}
 	go func() {
-		given, capped, err := fitted(ctx, m, room-tokens-spare, system+lead, data)
+		given, capped, err := fitted(ctx, m, room-tokens-spare, system+lead+then, data)
 		if err != nil {
 			a.begun <- begun{err: err}
 			return
 		}
 		stream, err := m.Generate(ctx, model.Request{
 			System:    system,
-			Messages:  []model.Message{{Role: model.User, Text: lead + asData(given)}},
+			Messages:  []model.Message{{Role: model.User, Text: lead + asData(given) + then}},
 			MaxTokens: tokens, Priority: model.Interactive,
 		})
 		a.begun <- begun{stream, capped, err}

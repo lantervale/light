@@ -263,10 +263,9 @@ func (s *Screen) advance(t *rendition) bool {
 	}
 	t.at = slices.Index(v.settled, false)
 	given := t.wordings[t.at].markdown()
-	t.asked = s.inquire("You translate a web page, a passage at a time. The passage"+untrusted+onlyText+
-		"Translate it from "+tongue(t.from)+" into "+t.into.name+". Give the translation only, on one line, and "+
-		"keep its marks where they are: what stands between ** and **, between * and *, between [ and ], and "+
-		"between ` and `, which stays as it is.", "The passage, in Markdown:\n", given,
+	t.asked = s.inquireThen(translatorTold("from "+tongue(t.from)+" ", t.into.name, "Answer on one line, and keep its "+
+		"marks where they are: what stands between ** and **, between * and *, between [ and ], and between ` and "+
+		"`, which stays as it is. "), "The passage, in Markdown:\n", given, rendering(t.into.name),
 		min(max(len(given)/2, wordingFewest), wordingMost))
 	return false
 }

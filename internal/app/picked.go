@@ -42,8 +42,7 @@ func actions() []action {
 			return passage + "Say what it says in one or two sentences."
 		}},
 		{translating, "Translate", "Translated", "Translated", func(into string) string {
-			return passage + "Translate it into " + into + ". Give the translation only, and keep its Markdown: " +
-				"its headings, its lists and what is bold."
+			return translatorTold("", into, keepMarkdown)
 		}},
 	}
 }
@@ -189,7 +188,11 @@ func (s *Screen) do(a action) {
 	p := &s.excerpt
 	p.asked.stop()
 	p.did, p.off = &a, false
-	p.asked = s.inquire(a.system(s.translatesInto().name), "The passage, in Markdown:\n", p.written, pickedTokens)
+	into, then := s.translatesInto().name, ""
+	if a.id == translating {
+		then = rendering(into)
+	}
+	p.asked = s.inquireThen(a.system(into), "The passage, in Markdown:\n", p.written, then, pickedTokens)
 	s.fillPicked()
 }
 

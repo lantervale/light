@@ -138,7 +138,7 @@ func TestASelectionIsExplainedSummarisedAndTranslatedAsItComes(t *testing.T) {
 	s.until("the model stops", func() bool { return fake.Status().State == model.Ready })
 	s.frame()
 	if got := s.node("picked-title").Text(); got != "Translated" || s.node("picked-sub").Text() != "Stopped" ||
-		!strings.Contains(fake.Asked()[2].System, "Translate") || !strings.Contains(fake.Asked()[2].System, "en") {
+		!strings.Contains(fake.Asked()[2].System, "translator") || !strings.Contains(fake.Asked()[2].System, "en") {
 		t.Fatalf("translated then stopped, the card is titled %q and says %q, the model told %q", got,
 			s.node("picked-sub").Text(), fake.Asked()[2].System)
 	}
@@ -234,7 +234,8 @@ func TestASelectionIsGivenInMarkdownAndItsAnswerShownInItsShapeWithinTheStage(t 
 	want := "## Browser not supported\n\nYour browser is *too old*.\n\n1. **Switch your browser**. Try another.\n" +
 		"2. Update it.\n\n- See the list."
 	if asked := fake.Asked()[0]; !strings.Contains(asked.Messages[0].Text, want) ||
-		!strings.Contains(asked.System, "keep its Markdown") {
+		!strings.Contains(asked.System, "Keep its Markdown") ||
+		!strings.HasSuffix(asked.Messages[0].Text, ends+"\n\nThe translation into American English:") {
 		t.Fatalf("the model is told %q and given %q", asked.System, asked.Messages[0].Text)
 	}
 	fake.Finish()
