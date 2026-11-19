@@ -413,3 +413,38 @@ func TestDownloadsGoOverHTTPSOnly(t *testing.T) {
 		})
 	}
 }
+
+func TestTwoModelsInstalledTogetherBringTheLibraryOnce(t *testing.T) {
+	b := on(t)
+	b.site.gate = make(chan struct{})
+	for _, id := range []string{small, embeds} {
+		if err := b.Install(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eventually(t, "both download", func() bool {
+		return b.entry(small).Install.State == model.Installing && b.entry(embeds).Install.State == model.Installing
+	})
+	close(b.site.gate)
+	for _, id := range []string{small, embeds} {
+		eventually(t, id+" is installed", func() bool {
+			got := b.entry(id).Install
+			if got.State == model.InstallFailed {
+				t.Fatalf("%s: %s", id, got.Err)
+			}
+			return got.State == model.Installed
+		})
+	}
+	if got := b.entry(model.RuntimeID).Install.State; got != model.Installed {
+		t.Fatalf("the library is %v", got)
+	}
+	libraries := 0
+	for _, asked := range b.site.asked() {
+		if strings.Contains(asked, "llama") {
+			libraries++
+		}
+	}
+	if libraries != 1 {
+		t.Fatalf("the library was asked for %d times: %q", libraries, b.site.asked())
+	}
+}

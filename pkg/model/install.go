@@ -27,6 +27,9 @@ type part struct {
 	name string
 	// land puts the checked file where it is used.
 	land func(checked string) error
+	// shared is set on the library, which every install that lacks it
+	// carries: one brings it at a time, and the others find it there.
+	shared bool
 }
 
 // download is one install that runs.
@@ -54,6 +57,8 @@ type installer struct {
 	failed  map[string]string
 	closed  bool
 	running sync.WaitGroup
+	// library is held by the install that brings the library.
+	library chan struct{}
 }
 
 func newInstaller(f files, m Manifest, transport http.RoundTripper, changed, settled func()) *installer {
@@ -69,6 +74,7 @@ func newInstaller(f files, m Manifest, transport http.RoundTripper, changed, set
 	return &installer{
 		files: f, manifest: m, client: client, changed: changed, settled: settled,
 		active: map[string]*download{}, failed: map[string]string{},
+		library: make(chan struct{}, 1),
 	}
 }
 
@@ -112,7 +118,7 @@ func (in *installer) parts(id string) ([]part, error) {
 		}
 		parts = append(parts, part{
 			url: archive.URL, sha256: archive.SHA256, size: archive.Size, name: path.Base(archive.URL),
-			land: in.landRuntime,
+			land: in.landRuntime, shared: true,
 		})
 	}
 	if id == RuntimeID {
@@ -174,15 +180,11 @@ func (in *installer) run(ctx context.Context, d *download, parts []part) error {
 	}
 	var before int64
 	for _, p := range parts {
-		partial := filepath.Join(in.files.downloads(), p.name+".part")
-		err := in.fetch(ctx, p, partial, func(came int64) {
+		err := in.bring(ctx, p, func(came int64) {
 			d.done.Store(before + came)
 			in.changed()
 		})
 		if err != nil {
-			return err
-		}
-		if err = p.land(partial); err != nil {
 			return err
 		}
 		before += p.size
@@ -190,6 +192,27 @@ func (in *installer) run(ctx context.Context, d *download, parts []part) error {
 		in.changed()
 	}
 	return nil
+}
+
+// bring downloads p and lands it, a shared part only when no other
+// install brought it meanwhile.
+func (in *installer) bring(ctx context.Context, p part, progress func(int64)) error {
+	if p.shared {
+		select {
+		case in.library <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		defer func() { <-in.library }()
+		if in.installed(RuntimeID) {
+			return nil
+		}
+	}
+	partial := filepath.Join(in.files.downloads(), p.name+".part")
+	if err := in.fetch(ctx, p, partial, progress); err != nil {
+		return err
+	}
+	return p.land(partial)
 }
 
 // fetch downloads p into the file at partial, going on from what an
