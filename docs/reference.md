@@ -102,8 +102,9 @@ What does not, in short:
 - **Tabs in the title bar are macOS only.**
 
 light runs a subset of the [web-platform-tests](https://web-platform-tests.org) (`task wpt`): the whole of `dom/`
-but the tests that need what light does not have, `domxpath/`, and a few of `url`, `html`, `css` and `domparsing`. No pass rate
-is published here yet: the repository records no dated result.
+but the tests that need what light does not have, `domxpath/`, and a few of `url`, `html`, `css` and `domparsing`. On
+19 November 2026, 461 of those 625 tests passed whole, and 122,244 of their 124,986 subtests
+([the result](#the-result-of-19-november-2026)): a figure of this subset, not of the web-platform-tests.
 
 The full lists are below: [What it does not do](#what-it-does-not-do) and
 [Limits of its JavaScript](#limits-of-its-javascript).
@@ -1209,9 +1210,9 @@ Three more options are a test runner's, so they are `light drive`'s alone and un
 
 `task wpt` runs a subset of the [web-platform-tests](https://web-platform-tests.org) against light, with
 their own runner (`wpt run`) driving light over WebDriver. The subset (`tools/wpt/subset.txt`) is a few tests of
-`url`, `html` and `css`, and the whole of `dom/` but the tests that need what light does not have (workers,
-shadow trees, custom elements, `Observable`, `OpaqueRange`, scrolling by script, touch and wheel input over
-WebDriver): the file names each test left out under its reason.
+`url`, `html`, `css` and `domparsing`, the whole of `domxpath/`, and the whole of `dom/` but the tests that need
+what light does not have (workers, shadow trees, custom elements, `Observable`, `OpaqueRange`, scrolling by script,
+touch and wheel input over WebDriver): the file names each test left out under its reason.
 
 ```sh
 task wpt                                          # the tests of tools/wpt/subset.txt
@@ -1224,6 +1225,37 @@ time, in one light for the script tests and one for the reference tests. The rep
 wpt.fyi reads), `raw.log` (every event, the screenshots of a failed reference test included) and `summary.txt`: a
 line a test, with its status and its subtests passed over all. No result fails the task yet: there is no list of
 expected results to compare with.
+
+#### The result of 19 November 2026
+
+`task wpt` on light `383208f`, ember `3f64950` and web-platform-tests `d6179d3` (the commit `wpt.lock` pins),
+on macOS 26.6 (arm64), took 20 minutes, `.wpt/` already set up. A test passes when its harness is OK and every
+subtest passes, or, for a reference test, when it matches its reference:
+
+| Directory | Tests passed | Subtests passed |
+|---|---|---|
+| `dom` | 408 / 566 | 61,256 / 63,983 |
+| `domxpath` | 30 / 35 | 1,158 / 1,171 |
+| `html` | 10 / 10 | 59,735 / 59,735 |
+| `css` | 7 / 7 | (reference tests, no subtests) |
+| `domparsing` | 3 / 4 | 84 / 86 |
+| `url` | 3 / 3 | 11 / 11 |
+| **Total** | **461 / 625 (74%)** | **122,244 / 124,986 (97.8%)** |
+
+Of the 625 tests, 544 ran to the end (OK), 8 reference tests passed, 23 stopped on an error and 50 timed out; a test
+that times out counts the subtests it reached. Read the figures for what they are:
+
+- They are this subset's, not a pass rate of the web-platform-tests: six directories, of which only `dom/` and
+  `domxpath/` are taken whole, and of `html`, `css`, `url` and `domparsing` only 24 tests. Nothing of the other
+  directories (`fetch`, `IndexedDB`, the rest of `css` and `html`…) is counted.
+- `dom/` leaves out 247 tests light cannot pass yet, each named with its reason in `tools/wpt/subset.txt`; the two
+  crash tests of `domxpath/` the subset lists are not run, as light's product runs only script and reference tests.
+- Subtests weigh unevenly: the ten `html/dom/reflection-*` tests are 59,735 of them, and a few `dom/ranges` tests
+  thousands each. Without `html`, 62,509 of 65,251 subtests pass (95.8%).
+
+The figures, the commits and the command are kept in `tools/wpt/results/2026-11-19.json`, and the line a test of
+that run in `tools/wpt/results/2026-11-19.txt`. To run it again, check out those commits (ember beside light in the
+workspace) and run `task wpt`; a new dated result goes beside it.
 
 The first run sets up `.wpt/`, which git ignores (`task wpt:setup` alone does only that; about 250 MB, 375 MB with
 the light it builds):

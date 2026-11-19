@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-19",
+  "started": "2026-11-19T22:06:12Z",
+  "finished": "2026-11-19T22:26:30Z",
+  "light": "383208f4088c5f7046e9d057c3eeed8840cdab70",
+  "ember": "3f649508a1ef864eff91e5b9c47abe6b7dd81702",
+  "wpt": "d6179d36cdff2a6285822f3043edbdfa7bdf09e3",
+  "machine": "macOS 26.6.2, arm64, Go 1.27.0, light built with -tags v8, hidden (EMBER_HIDDEN=1)",
+  "command": "task wpt",
+  "subset": "tools/wpt/subset.txt",
+  "test_passed": "a script test whose harness is OK and every subtest PASS, a reference test that is PASS",
+  "listed_not_run": [
+    "/domxpath/variables-in-expression-crash.html",
+    "/domxpath/xpath-evaluate-crash.html"
+  ],
+  "listed_not_run_why": "crash tests: light's product for wptrunner runs only testharness and reftest",
+  "directories": {
+    "css": {
+      "tests": 7,
+      "tests_passed": 7,
+      "subtests": 0,
+      "subtests_passed": 0
+    },
+    "dom": {
+      "tests": 566,
+      "tests_passed": 408,
+      "subtests": 63983,
+      "subtests_passed": 61256
+    },
+    "domparsing": {
+      "tests": 4,
+      "tests_passed": 3,
+      "subtests": 86,
+      "subtests_passed": 84
+    },
+    "domxpath": {
+      "tests": 35,
+      "tests_passed": 30,
+      "subtests": 1171,
+      "subtests_passed": 1158
+    },
+    "html": {
+      "tests": 10,
+      "tests_passed": 10,
+      "subtests": 59735,
+      "subtests_passed": 59735
+    },
+    "url": {
+      "tests": 3,
+      "tests_passed": 3,
+      "subtests": 11,
+      "subtests_passed": 11
+    }
+  },
+  "total": {
+    "tests": 625,
+    "tests_passed": 461,
+    "subtests": 124986,
+    "subtests_passed": 122244
+  }
+}
