@@ -5,9 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>light: a web browser written from scratch</title>
 <meta name="description" content="light is a small web browser written from scratch in Go. No WebKit, no Chromium, no Gecko. A very early preview.">
-<meta property="og:title" content="light: a web browser written from scratch">
+<meta property="og:title" content="light: built from scratch">
 <meta property="og:description" content="No WebKit. No Chromium. No Gecko. Its own CSS, layout, text and paint, in Go. A very early preview.">
-<meta property="og:image" content="https://lantervale.github.io/light/tour.jpg">
+<meta property="og:image" content="https://lantervale.github.io/light/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://lantervale.github.io/light/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
@@ -49,6 +54,18 @@ h1 s { text-decoration: line-through var(--orange) .12em; color: var(--dim); }
 .button.main { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .button:hover { transform: translateY(-1px); }
 .small { font-size: 14px; color: var(--dim); }
+.latest { display: inline-flex; gap: 8px; align-items: center; margin-bottom: 22px; padding: 5px 14px 5px 6px;
+	border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 14px;
+	text-decoration: none; color: var(--dim); }
+.latest b { padding: 2px 9px; border-radius: 999px; background: var(--orange); color: #fff; font-size: 12px; }
+.latest:hover { color: var(--ink); }
+.stage video { cursor: pointer; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px 16px; }
+.gallery figure { margin: 0; }
+.gallery img { width: 100%; height: auto; display: block; border-radius: 14px; border: 1px solid var(--line); }
+.gallery figcaption { margin-top: 8px; font-size: 14px; color: var(--dim); }
+.get .choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.get .choices .button { margin-top: 0; }
 .status { display: flex; gap: 14px; align-items: flex-start; text-align: left; max-width: 760px; margin: 30px auto 0;
 	padding: 16px 20px; border: 1px solid var(--warn-line); border-radius: 16px; background: var(--warn-bg);
 	color: var(--warn-ink); font-size: 16px; }
@@ -109,6 +126,7 @@ footer a:first-child { margin-left: 0; }
 	<a class="brand" href="."><img src="logo.svg" alt="">light</a>
 	<nav>
 		<a class="wide" href="#why">Why</a>
+		<a class="wide" href="#pages">Pages</a>
 		<a class="wide" href="#inside">What you get</a>
 		<a class="wide" href="#not-yet">Not yet</a>
 		<a href="#get">Download</a>
@@ -118,6 +136,8 @@ footer a:first-child { margin-left: 0; }
 
 <main>
 <div class="hero">
+	<a class="latest" href="https://github.com/lantervale/light/releases/tag/v__VERSION__"><b>New</b>
+		v__VERSION__: what changed →</a><br>
 	<button class="logo" id="switch" title="Switch the dark mode, as in light" aria-label="Switch the dark mode">
 		<img src="logo.svg" alt="light's logo: a disc with eight orange rays">
 	</button>
@@ -125,7 +145,7 @@ footer a:first-child { margin-left: 0; }
 	<p class="lead">light is a small web browser in Go. No WebKit, no Chromium, no Gecko, no system web view: it
 		parses, lays out and paints every page with its own code.</p>
 	<div class="cta">
-		<a class="button main" href="#get">Download the preview</a>
+		<a class="button main" id="download" href="#get">Download the preview</a>
 		<a class="button" href="https://github.com/lantervale/light">Read the source</a>
 	</div>
 	<p class="small">Free and open source, MIT. macOS, Linux and Windows.</p>
@@ -138,7 +158,8 @@ footer a:first-child { margin-left: 0; }
 	</div>
 
 	<div class="stage">
-		<video src="tour.mp4" poster="tour.jpg" autoplay muted loop playsinline controls preload="metadata"></video>
+		<video id="tour" src="tour.mp4" poster="tour.jpg" autoplay muted loop playsinline preload="metadata"
+			aria-label="A recording of light in use; a click pauses it" title="A click pauses it"></video>
 	</div>
 	<p class="small caption">A search, Wikipedia, and the model on the device explaining and translating a selection.
 		Played at twice the speed.</p>
@@ -158,9 +179,25 @@ footer a:first-child { margin-left: 0; }
 		<tr><td>HTML parsing</td><td>golang.org/x/net/html</td></tr>
 		<tr><td>Network</td><td>Go's standard library</td></tr>
 	</table>
-	<div class="shots">
-		<img src="zen-garden.png" alt="light showing CSS Zen Garden" loading="lazy">
-		<img src="developer-tools.png" alt="light's developer tools: the requests of a tab and the details of one" loading="lazy">
+</section>
+
+<section id="pages">
+	<h2>Real pages, drawn by light.</h2>
+	<p class="sub">Not mock-ups: these are light's own captures of the live sites, scripts and all. Plenty of other
+		sites still come out wrong; these are some that come out right.</p>
+	<div class="gallery">
+		<figure><img src="wikipedia.png" alt="Wikipedia's article Web browser, drawn by light" loading="lazy">
+			<figcaption>Wikipedia</figcaption></figure>
+		<figure><img src="mdn.png" alt="MDN's page on CSS, drawn by light" loading="lazy">
+			<figcaption>MDN Web Docs</figcaption></figure>
+		<figure><img src="python.png" alt="python.org's home page, drawn by light" loading="lazy">
+			<figcaption>python.org</figcaption></figure>
+		<figure><img src="w3c.png" alt="The W3C's home page, drawn by light" loading="lazy">
+			<figcaption>W3C</figcaption></figure>
+		<figure><img src="zen-garden.png" alt="CSS Zen Garden, drawn by light" loading="lazy">
+			<figcaption>CSS Zen Garden</figcaption></figure>
+		<figure><img src="developer-tools.png" alt="light's developer tools: the requests of a tab and the details of one"
+			loading="lazy"><figcaption>Its developer tools</figcaption></figure>
 	</div>
 </section>
 
@@ -214,15 +251,19 @@ footer a:first-child { margin-left: 0; }
 		<div class="card"><h3>macOS</h3>
 			<p>13 or later, Apple silicon or Intel. Not notarized: the first launch needs
 				<b>Open Anyway</b> in System Settings → Privacy &amp; Security.</p>
-			<a class="button main" href="https://github.com/lantervale/light/releases/latest">Get light.app</a></div>
+			<div class="choices"><a class="button main" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___darwin_arm64.zip">Apple silicon</a>
+				<a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___darwin_amd64.zip">Intel</a></div></div>
 		<div class="card"><h3>Linux</h3>
 			<p>x86-64 or arm64, glibc 2.35 or later. Needs Vulkan, X11 and ALSA.</p>
-			<a class="button" href="https://github.com/lantervale/light/releases/latest">Get the archive</a></div>
+			<div class="choices"><a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___linux_amd64.tar.gz">x86-64</a>
+				<a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___linux_arm64.tar.gz">arm64</a></div></div>
 		<div class="card"><h3>Windows</h3>
 			<p>10 or later, x86-64. Pages show without their scripts there.</p>
-			<a class="button" href="https://github.com/lantervale/light/releases/latest">Get the archive</a></div>
+			<div class="choices"><a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___windows_amd64.zip">x86-64</a></div></div>
 	</div>
-	<p class="small" style="margin-top:22px">Checksums are signed with cosign and each archive has its SBOM. Or build
+	<p class="small" style="margin-top:22px">v__VERSION__, published __DATE__. Every file and the
+		<a href="https://github.com/lantervale/light/releases/tag/v__VERSION__">release notes</a> are on GitHub.
+		Checksums are signed with cosign and each archive has its SBOM. Or build
 		it: <a href="https://github.com/lantervale/light/blob/main/docs/development.md">from source</a>.</p>
 </section>
 </main>
@@ -237,6 +278,23 @@ footer a:first-child { margin-left: 0; }
 
 </div>
 <script>
+(function () {
+	var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+	var to = "", say = "";
+	if (/mac/i.test(platform)) { to = "darwin_arm64.zip"; say = "Download for Mac"; }
+	else if (/win/i.test(platform)) { to = "windows_amd64.zip"; say = "Download for Windows"; }
+	else if (/linux/i.test(platform) && !/android/i.test(navigator.userAgent)) {
+		to = /aarch64|arm/i.test(platform) ? "linux_arm64.tar.gz" : "linux_amd64.tar.gz"; say = "Download for Linux";
+	}
+	if (to && "__VERSION__".indexOf("__") !== 0) {
+		var link = document.getElementById("download");
+		link.href = "https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___" + to;
+		link.textContent = say;
+	}
+})();
+document.getElementById("tour").addEventListener("click", function () {
+	if (this.paused) this.play(); else this.pause();
+});
 document.getElementById("switch").addEventListener("click", function () {
 	var dark = document.documentElement.classList.toggle("dark");
 	try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}

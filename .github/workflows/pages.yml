@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths: [site/**, .github/workflows/pages.yml]
+  workflow_run:
+    workflows: [release]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -17,12 +20,24 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Name the latest release in the page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r tag date < <(gh release view --repo "$GITHUB_REPOSITORY" --json tagName,publishedAt \
+            --jq '"\(.tagName) \(.publishedAt | fromdate | strftime("%-d %B %Y"))"')
+          version=${tag#v}
+          sed -i "s/__VERSION__/$version/g; s/__DATE__/$date/g" site/index.html
+          ! grep -q '__VERSION__\|__DATE__' site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
