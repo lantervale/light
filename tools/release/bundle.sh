@@ -22,6 +22,9 @@
 #	LIGHT_OS, LIGHT_ARCH  the target
 #	LIGHT_BIN             the binary
 #	LIGHT_VERSION         the version, for the archive's name and the app
+#	LIGHT_WGPU_LIB        a wgpu-native library already on this machine,
+#	                      used in place of a download (task app); it is
+#	                      checked like one
 #
 # The library is fetched by ember's own fetch.sh, at the version the
 # ember light is built on vendors the header of: the script and that
@@ -53,8 +56,13 @@ cp -R "$ember/internal/wgpu/scripts" "$wgpu/scripts"
 cp "$ember/internal/wgpu/include/VERSION" "$wgpu/include/VERSION"
 cp "$ember"/internal/wgpu/include/webgpu/LICENSE-wgpu-native.* "$wgpu/"
 chmod -R u+w "$wgpu"
-sh "$wgpu/scripts/fetch.sh" "$goos" "$goarch"
 src=$wgpu/lib/$goos-$goarch/$lib
+if [ -n "${LIGHT_WGPU_LIB:-}" ]; then
+	mkdir -p "$(dirname "$src")"
+	cp "$LIGHT_WGPU_LIB" "$src"
+else
+	sh "$wgpu/scripts/fetch.sh" "$goos" "$goarch"
+fi
 
 # fetch.sh checks nothing of what it downloads: the library must be the
 # one wgpu-native.sha256 lists for this version and target.

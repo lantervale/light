@@ -111,6 +111,7 @@ cd light
 task run                       # light with its JavaScript engine (the v8 build tag)
 task run -- https://csszengarden.com
 task run:plain                 # light without a JavaScript engine: go run ./cmd/light
+task app                       # macOS: dist/light.app, as a release ships it, then `open dist/light.app`
 ```
 
 `task run` is `CGO_CXXFLAGS=-nostdinc++ go run -tags v8 ./cmd/light`: V8's headers need their own libc++. Without

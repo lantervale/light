@@ -72,6 +72,28 @@ tasks:
       - go vet ./...
       - go test ./...
 
+  # The same app a release ships (tools/release/bundle.sh), without GoReleaser: built for this Mac, on the ember
+  # beside light inside the workspace, whose wgpu-native library it takes when `task wgpu` fetched it there.
+  app:
+    desc: Build light.app into dist (macOS) - light with its JavaScript engine, its library and light-model inside, signed ad hoc; open dist/light.app starts it
+    platforms: [darwin]
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty | sed 's/^v//'
+      WGPU:
+        sh: ls "$(go list -m -f '{{"{{.Dir}}"}}' github.com/lantervale/ember)/internal/wgpu/lib/darwin-{{ARCH}}/libwgpu_native.dylib" 2>/dev/null || true
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      CGO_CFLAGS: -O2 -g -mmacosx-version-min=13.0
+      CGO_LDFLAGS: -O2 -g -mmacosx-version-min=13.0
+    cmds:
+      - go build -trimpath -tags v8 -ldflags "-s -w -X main.version={{.VERSION}}" -o dist/app/light ./cmd/light
+      - LIGHT_OS=darwin LIGHT_ARCH={{ARCH}} LIGHT_BIN=dist/app/light LIGHT_VERSION={{.VERSION}} LIGHT_WGPU_LIB={{.WGPU}} sh tools/release/bundle.sh
+      - rm -rf dist/light.app
+      - ditto dist/stage/light_{{.VERSION}}_darwin_{{ARCH}}/light.app dist/light.app
+      - codesign --verify --deep --strict dist/light.app
+      - echo "dist/light.app ({{.VERSION}})"
+
   release:snapshot:
     desc: Build this system's release archive into dist, as the release workflow does, publishing nothing (needs GoReleaser v2 - brew install goreleaser; inside the workspace it builds on the ember beside light)
     preconditions:
