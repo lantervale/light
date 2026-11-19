@@ -293,3 +293,23 @@ func TestTheAboutPageSaysWhereTheFilesAreKept(t *testing.T) {
 		t.Fatalf("with no folder the page says %q", text)
 	}
 }
+
+func TestEachStepOfTheZoomStartsFromTheZoomShown(t *testing.T) {
+	srv, _ := crypt(t)
+	s := show(t)
+	doc := s.visit(srv.URL + "/vaults")
+	s.doc.Focus(nil)
+	s.command(input.KeyEqual)
+	s.command(input.KeyEqual)
+	if doc.Zoom() != 1.2 {
+		t.Fatalf("zoomed in twice, the page is at %v", doc.Zoom())
+	}
+	s.command(input.KeyMinus)
+	if doc.Zoom() != 1.1 {
+		t.Fatalf("zoomed out once from 120 %%, the page is at %v", doc.Zoom())
+	}
+	s.command(input.KeyMinus)
+	if doc.Zoom() != 1 || s.status.Text() != "Zoom 100 %" {
+		t.Fatalf("zoomed back, the page is at %v, the bubble says %q", doc.Zoom(), s.status.Text())
+	}
+}

@@ -169,8 +169,9 @@ func (s *Screen) zoomPages(session *session) {
 // settings' bounds; no step is back to the settings' zoom.
 func (s *Screen) zoom(steps int) {
 	session := s.session()
-	session.zoom = 0
-	if steps != 0 {
+	if steps == 0 {
+		session.zoom = 0
+	} else {
 		session.zoom = min(max(s.zoomOf(session)+steps*zoomStep, config.MinZoom), config.MaxZoom)
 	}
 	s.zoomPages(session)
