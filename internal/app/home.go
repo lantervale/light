@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	// demo is the page of the web the start page offers.
-	demo = "https://csszengarden.com"
 	// homeChips is how many bookmarks and folders the start page shows,
 	// homeCards how many of the last pages visited, and homeShut how
 	// many of the tabs closed.
@@ -32,9 +30,9 @@ type shutTab struct {
 
 // homePage is the start page: the logo, the search field, then what
 // light holds of its user's, the bookmarks over two columns, the last
-// pages visited beside what was read this week and the tabs closed,
-// and its own pages in a row of links. Nothing is fetched to show it: a
-// site's tile is its icon only when light has it already.
+// pages visited beside what was read this week and the tabs closed.
+// Nothing is fetched to show it: a site's tile is its icon only when
+// light has it already.
 func homePage(s *Screen) []*ui.Node {
 	search := ui.Input(ui.ID("search"), ui.Type("search"), ui.Placeholder(s.searches()), ui.Attr("autofocus", ""))
 	ui.On(search, ui.EventSubmit, func() { s.Open(s.Resolve(s.doc.Value(search))) })
@@ -52,21 +50,8 @@ func homePage(s *Screen) []*ui.Node {
 	}
 	s.relist, s.relistMarks = fill, fill
 	fill()
-	links := ui.Nav(ui.ID("own-links"))
-	link := func() {
-		empty(links)
-		links.Append(ui.Span(ui.Text("light's own pages:")))
-		for _, page := range s.lists()[1:] {
-			links.Append(s.anchor(tabs.Page(page.name), ui.ID("go-"+page.name), ui.Text(page.title)))
-		}
-		links.Append(s.anchor(demo, ui.ID("go-demo"), ui.Text("CSS Zen Garden")))
-	}
-	s.relink = link
-	link()
 	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")),
-		ui.Div(ui.ID("search-box"), mark, search), held,
-		ui.P(ui.ID("home-note"), ui.Text("Made from what is on this device. Nothing was fetched to show this page.")),
-		links}
+		ui.Div(ui.ID("search-box"), mark, search), held}
 }
 
 // homeColumns is the start page's two columns: the last pages visited,

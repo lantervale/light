@@ -75,7 +75,7 @@ func seeded(t *testing.T) (*shown, *atomic.Int32) {
 	return s, asked
 }
 
-func TestTheStartPageOfANewLightHasItsLogoItsFieldAndItsOwnPages(t *testing.T) {
+func TestTheStartPageOfANewLightHasItsLogoAndItsFieldAndNoFooter(t *testing.T) {
 	s := show(t)
 	for _, id := range []string{"home-bookmarks", "continue", "home-side", "tiles", "recently-closed"} {
 		if s.doc.ByID(id) != nil {
@@ -87,26 +87,24 @@ func TestTheStartPageOfANewLightHasItsLogoItsFieldAndItsOwnPages(t *testing.T) {
 		t.Fatalf("the logo %v, the wordmark %v and the field %v are not one under the other, the field focused", logo,
 			word, field)
 	}
-	if note := s.node("home-note").Text(); note != "Made from what is on this device. Nothing was fetched to show "+
-		"this page." {
-		t.Fatalf("the note reads %q", note)
+	s.doc.Body().Walk(func(n *ui.Node) bool {
+		if id := n.ID(); id == "home-note" || id == "own-links" || strings.HasPrefix(id, "go-") {
+			t.Errorf("the start page has a footer: <%s id=%q>", n.Tag(), id)
+		}
+		return !n.IsText()
+	})
+	if links := s.texts("page", "link"); len(links) > 0 {
+		t.Errorf("the start page of a new light has links: %q", links)
 	}
-	want := "light's own pages: | The ui guide | Examples | About | Bookmarks | History | Downloads | Settings | " +
-		"Scripts | CSS Zen Garden"
-	if got := strings.Join(s.texts("page", "link"), " | "); "light's own pages: | "+got != want {
-		t.Fatalf("the links are %q, want %q", got, want)
-	}
-	links, note := s.box("own-links"), s.box("home-note")
-	if links.Y < note.Y+note.H || links.H > 20 {
-		t.Fatalf("the links %v are not one row under the note %v", links, note)
+	if all := s.node("page").Children(); all[len(all)-1] != s.node("held") {
+		t.Errorf("the start page ends with <%s id=%q>, not with what it holds", all[len(all)-1].Tag(),
+			all[len(all)-1].ID())
 	}
 	if text := s.node("page").Text(); strings.Contains(strings.ToLower(text), "model") ||
 		strings.Contains(strings.ToLower(text), "summar") {
 		t.Fatalf("the start page speaks of a model: %q", text)
 	}
 	s.clean()
-	s.click("go-about")
-	s.at(tabs.Page(aboutName))
 }
 
 func TestTheStartPageShowsTheBookmarksAsChipsAndAFolderAsOne(t *testing.T) {
@@ -315,10 +313,10 @@ func TestTheStartPageHasTheSizesOfItsMockup(t *testing.T) {
 		field.W != 560 || field.H != 44 {
 		t.Fatalf("in a view %v the logo is at %v, the wordmark %v, the field %v", view, logo, word, field)
 	}
-	held, marks, pages, note := s.box("held"), s.box("home-bookmarks"), s.box("continue"), s.box("home-note")
+	held, marks, pages := s.box("held"), s.box("home-bookmarks"), s.box("continue")
 	if held.W != 960 || held.Y != field.Y+field.H+28 || pages.Y != marks.Y+marks.H+28 || pages.X != held.X ||
-		pages.W != 580 || note.Y != held.Y+held.H+28 {
-		t.Fatalf("what the page holds is at %v: the bookmarks %v, the pages %v, the note %v", held, marks, pages, note)
+		pages.W != 580 {
+		t.Fatalf("what the page holds is at %v: the bookmarks %v, the pages %v", held, marks, pages)
 	}
 	head, cards := s.node("continue").Children()[0].Box(), s.node("continue").Children()[1].Children()
 	if card := cards[0].Box(); head.H != 30 || card.Y != head.Y+head.H+10 || card.H != 66 {

@@ -134,12 +134,12 @@ func TestTheAboutPageListsEveryAdaptation(t *testing.T) {
 	}
 }
 
-func TestATileOpensItsPageAndBackReturns(t *testing.T) {
+func TestBackReturnsFromAPageAndForwardGoesToItAgain(t *testing.T) {
 	s := show(t)
 	if !s.disabled("back") || !s.disabled("forward") {
 		t.Fatal("a new tab can already go back or forward")
 	}
-	s.click("go-guide")
+	s.enter("light://guide")
 	s.at("light://guide")
 	if s.disabled("back") {
 		t.Fatal("back stays disabled after a visit")
@@ -180,7 +180,7 @@ func TestAnAddressOfAnotherSchemeHasNoPage(t *testing.T) {
 
 func TestTabsKeepTheirOwnPage(t *testing.T) {
 	s := show(t)
-	s.click("go-about")
+	s.enter("light://about")
 	s.click("new-tab")
 	s.at(tabs.Home)
 	s.click("tab-0")
@@ -195,14 +195,3 @@ func TestTabsKeepTheirOwnPage(t *testing.T) {
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestTheStartPagesDemoTileOpensCSSZenGarden(t *testing.T) {
-	s := showWith(t, Options{Transport: roundTrip(func(*http.Request) (*http.Response, error) {
-		return nil, errors.New("no network in tests")
-	})})
-	s.click("go-demo")
-	s.until("the demo's answer landed", func() bool { return !s.loading() })
-	if got := s.browser.Tab().Current(); got != "https://csszengarden.com" {
-		t.Fatalf("the demo tile opened %q", got)
-	}
-}

@@ -38,8 +38,8 @@ func TestEveryPageOfLightsOwnIsOpenedListedAndFound(t *testing.T) {
 		}
 		s.Open(tabs.Home)
 		s.frame()
-		if tile := s.doc.ByID("go-" + page.name); (tile != nil) != (page.name != tabs.HomeName) {
-			t.Errorf("the start page has a tile for %s: %v", page.name, tile != nil)
+		if s.doc.ByID("go-"+page.name) != nil || s.doc.ByID("own-links") != nil || s.doc.ByID("home-note") != nil {
+			t.Errorf("the start page has a footer, or a link to %s in it", address)
 		}
 	}
 	if warns := s.doc.Warnings(); len(warns) > 0 {

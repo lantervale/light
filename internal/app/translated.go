@@ -126,9 +126,6 @@ func (s *Screen) watchTranslation() {
 	r := &s.rendered
 	if helps := s.helps(translateFeature); helps != r.helped {
 		r.helped = helps
-		if s.relink != nil {
-			s.relink()
-		}
 		for _, refresh := range s.fields {
 			refresh()
 		}

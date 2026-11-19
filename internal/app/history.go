@@ -11,12 +11,12 @@ import (
 const historyPage = own + historyName
 
 // visit notes a move to a page of light's own, but those that list what
-// light keeps and the one the model's categories are edited on; one of
-// the web is noted when it lands, under the address that answered and
-// its title.
+// light keeps and those of the model, where its categories are edited
+// and where a text is translated; one of the web is noted when it
+// lands, under the address that answered and its title.
 func (s *Screen) visit(address string) {
 	if _, _, lights := tabs.Own(address); lights && address != tabs.Home && address != historyPage &&
-		address != bookmarksPage && address != categoriesPage {
+		address != bookmarksPage && address != categoriesPage && address != translatePage {
 		s.record(address, s.title(address))
 	}
 }

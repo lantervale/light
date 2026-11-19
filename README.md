@@ -231,9 +231,10 @@ With the model on, it helps with these, each of which can be turned off alone:
 - **Answers in the address bar**: a line that starts with `?` is a question about the shown page, answered in a
   card under the address field, with the sentence of the page it comes from selected. Words typed there without
   the `?` get a first row in the list under the field, "Ask this page: …", which asks the same.
-- **Translation**: `light://translate` translates a text you type or paste. A page in a language you do not read
-  has a label in the address field, "FR → EN", that translates it in place, a paragraph at a time, and puts the
-  original back; per language you can ask each time, always translate, or never (`translate_always`, `translate_never`).
+- **Translation**: `light://translate` translates a text you type or paste, and is not noted in the history. A
+  page in a language you do not read has a label in the address field, "FR → EN", that translates it in place, a
+  paragraph at a time, and puts the original back; per language you can ask each time, always translate, or never
+  (`translate_always`, `translate_never`).
 - **Actions on selected text**: Explain, Summarise and Translate in a card under the selection. A translation is
   into British English, American English or French, and the language chosen is kept (`translate_into`).
 - **Find by meaning**: Find in page (Cmd+F) works without the model; with a model that embeds text, it also finds

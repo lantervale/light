@@ -31,7 +31,7 @@ func (s *shown) nothingHelped(where string) {
 			strings.HasPrefix(id, "history-ask"), strings.HasPrefix(id, "find-pass"), strings.HasPrefix(id, "set-recall"),
 			strings.HasPrefix(id, "complete-ask"),
 			strings.HasPrefix(id, "translat"), strings.HasPrefix(id, "set-translat"), id == "menu-translate",
-			id == "go-translate", id == "robot", id == "menu-ask", id == "menu-sorted", id == "menu-model", id == "find-robot",
+			id == "robot", id == "menu-ask", id == "menu-sorted", id == "menu-model", id == "find-robot",
 			id == "continue-robot", id == "bookmark-robot":
 			s.t.Errorf("%s: without a model the screen shows <%s id=%q src=%q>", where, n.Tag(), id, src)
 		}

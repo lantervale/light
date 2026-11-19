@@ -30,9 +30,10 @@ func (s *shown) settings() {
 	s.frame()
 }
 
-func TestTheSettingsAreReachedByTheirTileTheirKeysAndTheMenu(t *testing.T) {
+func TestTheSettingsAreReachedByTheMenuTheirKeysAndARightClick(t *testing.T) {
 	s := show(t)
-	s.click("go-config")
+	s.click("menu")
+	s.click("menu-settings")
 	s.at(configPage)
 	s.Open(tabs.Page(guideName))
 	s.frame()

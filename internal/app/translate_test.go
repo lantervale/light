@@ -265,6 +265,23 @@ func TestTheTranslationPageOnlyOffersAModelWithoutOne(t *testing.T) {
 	s.clean()
 }
 
+func TestTheTranslationPageIsNoVisit(t *testing.T) {
+	s, _ := translator(t)
+	s.desked()
+	s.configure(func(c *config.Config) { c.Model = false })
+	s.desked()
+	if got, _ := lastVisit(s.Profile.visits, translatePage); got.Address != "" {
+		t.Fatal("the translation page is noted in the history")
+	}
+	s.Open(tabs.Home)
+	s.frame()
+	s.frame()
+	if s.doc.ByID("continue") != nil {
+		t.Fatalf("with the model off the start page offers to continue: %q", s.node("continue").Text())
+	}
+	s.nothingHelped("the start page")
+}
+
 func TestTheTranslationPageIsListedOnlyWhileTheModelTranslates(t *testing.T) {
 	s, _ := translator(t)
 	listed := func() string {
@@ -272,7 +289,7 @@ func TestTheTranslationPageIsListedOnlyWhileTheModelTranslates(t *testing.T) {
 		s.Open(s.config.StartPage)
 		s.frame()
 		s.frame()
-		if s.doc.ByID("go-translate") != nil {
+		if strings.Contains(s.node("page").Text(), translateTitle) {
 			out = append(out, "the start page")
 		}
 		s.click("menu")
@@ -292,7 +309,7 @@ func TestTheTranslationPageIsListedOnlyWhileTheModelTranslates(t *testing.T) {
 		}
 		return strings.Join(out, ", ")
 	}
-	if got := listed(); got != "the start page, the menu, the About page, a search" {
+	if got := listed(); got != "the menu, the About page, a search" {
 		t.Fatalf("with the model translating the page is listed on %q", got)
 	}
 	s.Open(s.config.StartPage)
@@ -301,9 +318,6 @@ func TestTheTranslationPageIsListedOnlyWhileTheModelTranslates(t *testing.T) {
 	s.redrawModel()
 	s.frame()
 	s.frame()
-	if s.doc.ByID("go-translate") != nil {
-		t.Fatal("the start page keeps its link once the feature is off")
-	}
 	if got := listed(); got != "" {
 		t.Fatalf("with the feature off the page is listed on %q", got)
 	}

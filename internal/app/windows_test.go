@@ -81,7 +81,7 @@ func TestEachWindowHearsItsOwnInput(t *testing.T) {
 	s.newWindow(s.config.StartPage)
 	s.frame()
 	second := s.window(1)
-	second.click("go-guide")
+	second.enter("light://guide")
 	second.at("light://guide")
 	s.at(tabs.Home)
 	second.command(input.KeyT)
@@ -89,7 +89,7 @@ func TestEachWindowHearsItsOwnInput(t *testing.T) {
 		t.Fatalf("after a new tab's keys in the second window, the windows have %d and %d tabs", len(s.browser.Tabs),
 			len(second.browser.Tabs))
 	}
-	s.click("go-about")
+	s.enter("light://about")
 	s.at("light://about")
 	second.at(tabs.Home)
 	second.rightClick("page")

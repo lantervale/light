@@ -144,12 +144,10 @@ type Screen struct {
 	completing completion
 	// find is the card that finds words in the page, and its marks.
 	find findCard
-	// desk is the page that translates a text, rendered what the window
-	// shows of the pages translated in place, and relink what lists
-	// light's own pages again on the start page.
+	// desk is the page that translates a text, and rendered what the
+	// window shows of the pages translated in place.
 	desk     desk
 	rendered rendered
-	relink   func()
 
 	// sought shows the search engine's mark in the address field while
 	// words are typed there.
@@ -417,7 +415,7 @@ func (s *Screen) show() {
 	s.closePicked()
 	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
-	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks, s.relink = nil, nil, nil, nil, nil, nil, nil
+	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks = nil, nil, nil, nil, nil, nil
 	s.view.Append(s.page(tab.Current()))
 	s.showTabs()
 	s.leave(tab, session)

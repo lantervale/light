@@ -6,6 +6,7 @@ import (
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/tabs"
 )
@@ -39,6 +40,29 @@ func (s *shown) middle(id string) geom.Vec2 {
 	r, ok := s.doc.BoxOf(s.node(id))
 	if !ok {
 		s.t.Fatalf("%q is not shown", id)
+	}
+	return r.Center()
+}
+
+// ownLink is the middle of the link to light's page name in the list of
+// its own pages the About page shows, scrolled into view.
+func (s *shown) ownLink(name string) geom.Vec2 {
+	s.t.Helper()
+	var link *ui.Node
+	s.node("own-pages").Walk(func(n *ui.Node) bool {
+		if address, _ := n.Attr(linked); !n.IsText() && address == tabs.Page(name) {
+			link = n
+		}
+		return !n.IsText()
+	})
+	if link == nil {
+		s.t.Fatalf("light's own pages list none named %q", name)
+	}
+	s.doc.ScrollIntoView(link)
+	s.frame()
+	r, ok := s.doc.BoxOf(link)
+	if !ok {
+		s.t.Fatalf("the link to %q is not shown", name)
 	}
 	return r.Center()
 }
@@ -228,13 +252,15 @@ func TestALinkThatGoesNowhereOpensNoTab(t *testing.T) {
 func TestLinksOfLightsOwnPagesOpenInTabsToo(t *testing.T) {
 	s := showWith(t, Options{Now: clock()})
 	s.system = "darwin"
-	s.clickHolding(s.middle("go-guide"), input.KeyLeftSuper)
-	s.clickHolding(s.middle("go-about"), input.KeyLeftSuper)
-	s.middleClickAt(s.middle("go-examples"))
-	if got, want := s.opened(), "[light://home] light://guide light://about light://examples"; got != want {
+	s.Open(tabs.Page(aboutName))
+	s.frame()
+	s.clickHolding(s.ownLink(guideName), input.KeyLeftSuper)
+	s.clickHolding(s.ownLink(configName), input.KeyLeftSuper)
+	s.middleClickAt(s.ownLink(examplesName))
+	if got, want := s.opened(), "[light://about] light://guide light://config light://examples"; got != want {
 		t.Fatalf("the tabs are %s, want %s", got, want)
 	}
-	if got, want := s.tabNames(), "New Tab | The ui guide | About | Examples"; got != want {
+	if got, want := s.tabNames(), "About | The ui guide | Settings | Examples"; got != want {
 		t.Errorf("the tabs are named %q, want %q", got, want)
 	}
 	s.Open(historyPage)
@@ -252,7 +278,7 @@ func TestLinksOfLightsOwnPagesOpenInTabsToo(t *testing.T) {
 	}
 	s.clickHolding(row, input.KeyLeftSuper)
 	if got, want := s.opened(),
-		"[light://history] light://guide light://about light://examples light://guide"; got != want {
+		"[light://history] light://guide light://config light://examples light://guide"; got != want {
 		t.Fatalf("from the history the tabs are %s, want %s", got, want)
 	}
 	if got := s.doc.Value(filter); got != "guide" || s.node("history-filter") != filter {
@@ -274,8 +300,13 @@ func TestACommandClickWhileAFieldHasTheKeyboard(t *testing.T) {
 	s.Open(tabs.Home)
 	s.frame()
 	s.frame()
-	s.clickHolding(s.middle("go-guide"), input.KeyLeftSuper)
-	if got, want := s.opened(), "[light://home] "+srv.URL+"/vaults light://guide"; got != want {
+	if !s.doc.Focused(s.node("search")) {
+		t.Fatal("the start page's search field has no focus")
+	}
+	card := s.node("continue").Children()[1].Children()[0]
+	last, _ := card.Attr(linked)
+	s.clickHolding(card.Box().Center(), input.KeyLeftSuper)
+	if got, want := s.opened(), "[light://home] "+srv.URL+"/vaults "+last; got != want {
 		t.Fatalf("from the start page, its search focused, the tabs are %s, want %s", got, want)
 	}
 }

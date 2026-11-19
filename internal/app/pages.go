@@ -43,8 +43,8 @@ type made struct {
 }
 
 // pages are light's own pages, the start page first: what an address of
-// its scheme opens, and what the start page, a search, the About page
-// and the page of an unknown one list.
+// its scheme opens, and what a search, the About page and the page of
+// an unknown one list.
 func pages() []site {
 	return []site{
 		{tabs.HomeName, "New Tab", "The start page: a search box and the pages light knows.", homePage},

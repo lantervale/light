@@ -118,7 +118,7 @@ func (s *shown) nothingTranslates(where string) {
 			return !n.IsText()
 		}
 		if id := n.ID(); strings.HasPrefix(id, "translat") || strings.HasPrefix(id, "set-translat") ||
-			id == "menu-translate" || id == "go-translate" {
+			id == "menu-translate" {
 			s.t.Errorf("%s: the screen shows <%s id=%q>", where, n.Tag(), id)
 		}
 		return true
@@ -509,7 +509,7 @@ func TestWithoutAModelAPageInAnotherLanguageIsOfferedNothing(t *testing.T) {
 	} {
 		s := build()
 		s.visit(srv.URL + "/")
-		if s.label() != "" || s.doc.ByID("go-translate") != nil {
+		if s.label() != "" {
 			t.Errorf("%s: the label reads %q", name, s.label())
 		}
 		s.nothingTranslates(name + ", a page in French")

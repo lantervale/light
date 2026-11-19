@@ -123,9 +123,6 @@ button img, .tab img, #lock { display: block; }
 .shut .text { display: flex; flex: 1; align-items: baseline; gap: 10px; min-width: 0; }
 .shut .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shut .when { flex: none; color: var(--dim); font-size: 12px; }
-#page #home-note { align-self: stretch; margin: 28px 0 0; font-size: 12px; line-height: 18px; color: var(--dim); }
-#own-links { align-self: stretch; margin-top: 4px; font-size: 12px; line-height: 18px; color: var(--dim); }
-#own-links .link { margin-left: 12px; }
 @media (max-width: 880px) {
 	.columns { flex-direction: column; align-items: stretch; }
 	#continue, #home-side { flex: none; }

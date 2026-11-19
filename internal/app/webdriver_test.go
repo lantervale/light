@@ -436,7 +436,7 @@ func TestDeletingTheSessionLeavesLightUsable(t *testing.T) {
 			d.browser.Tab().Current())
 	}
 	d.fails(webdriver.InvalidSessionID, "GET", "/{s}/url", "")
-	d.click("go-guide")
+	d.enter("light://guide")
 	d.at("light://guide")
 	d.begin("{}")
 	d.open(srv.URL + "/vaults")

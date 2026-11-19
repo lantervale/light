@@ -106,7 +106,7 @@ func TestTabsShrinkAsTheyMultiply(t *testing.T) {
 
 func TestTheTabListChoosesATab(t *testing.T) {
 	s := show(t)
-	s.click("go-guide")
+	s.enter("light://guide")
 	s.click("new-tab")
 	if _, laid := s.doc.BoxOf(s.list); laid {
 		t.Fatal("the tab list shows before its button is pressed")
@@ -128,7 +128,7 @@ func TestTheTabListChoosesATab(t *testing.T) {
 
 func TestAMiddleClickClosesItsTab(t *testing.T) {
 	s := show(t)
-	s.click("go-guide")
+	s.enter("light://guide")
 	s.click("new-tab")
 	s.in.SetMouse(s.box("tab-0").Center())
 	s.frame()
@@ -354,7 +354,8 @@ func TestTheUsualKeysDriveLight(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	s := show(t)
-	s.click("go-guide")
+	s.Open(tabs.Page(guideName))
+	s.frame()
 	s.command(input.KeyLeftBracket)
 	s.at(tabs.Home)
 	if !s.doc.Focused(s.doc.ByID("search")) {
