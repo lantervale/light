@@ -117,10 +117,27 @@ type Screen struct {
 	// keeps. again is the entry the menu opens on again once chosen.
 	star, more, choices, zoomed, keeps, again *ui.Node
 	panel                                     bookmarkPanel
+	// hint is what the model suggests for the panel's bookmark, and read
+	// the page of the web the shown tab showed at the last frame, which
+	// is summed up once it is left.
+	hint hinting
+	read *web.Page
 	// card is the model's card and marks, and features what the model
 	// helps with.
 	card     modelCard
 	features []feature
+	// settled is the shown page as what it says is remembered, and
+	// asking the history page's question (recall.go, historyask.go).
+	settled settling
+	asking  *historyAsk
+	// sorting is what the window shows of the page categories.
+	sorting sorter
+	// replying is the card of an answer from the page, excerpt the card of
+	// the page's selection.
+	replying answerCard
+	excerpt  pickedCard
+	// find is the card that finds words in the page, and its marks.
+	find findCard
 
 	// sought shows the search engine's mark in the address field while
 	// words are typed there.
@@ -205,6 +222,7 @@ func (p *Profile) screen(win *platform.Window, address string) *Screen {
 	}
 	s.savesSeen = p.saves.Version()
 	s.apply()
+	s.features = features()
 	s.doc = ui.NewDocument(ui.CSS(sheet), ui.CSS(menu.Sheet), ui.CSS(devtools.Sheet), ui.Images(icons()),
 		ui.FetchImages(s.picture))
 	s.build()
@@ -219,6 +237,7 @@ func (p *Profile) screen(win *platform.Window, address string) *Screen {
 // shut ends what the screen's tabs hold, as its window closes: their
 // loads, their scripts and the frames of their pages.
 func (s *Screen) shut() {
+	s.digest(s.read)
 	s.menu.Close()
 	s.doc.SetFrame(s.host, nil)
 	s.browser.Tabs = nil
@@ -265,10 +284,11 @@ func (s *Screen) build() {
 		s.tabs,
 		s.navigation(),
 		ui.Div(ui.ID("split"), ui.Div(ui.ID("stage"), s.view, s.loadline(), s.inspect.Overlay(), s.status, s.list,
-			s.recent, s.buildPanel(), s.choices, s.card.root),
+			s.recent, s.buildPanel(), s.choices, s.card.root, s.buildAnswer(), s.buildPicked(), s.buildFind()),
 			s.tools.Node()),
 		s.shortcuts(),
 		s.menu.Node())
+	s.buildSorting()
 	ui.OnContextMenu(s.contextMenu).Apply(s.doc.Body())
 }
 
@@ -321,12 +341,20 @@ func (s *Screen) tick() {
 	s.watchHistory()
 	s.watchBookmarks()
 	s.watchModel()
+	s.watchRecall()
+	s.watchSorting()
 	s.followChoices()
 	s.measure()
 	s.drew()
 	s.stopByKey()
 	s.followPanel()
 	s.followCard()
+	s.followSorting()
+	s.followHint()
+	s.followSummaries()
+	s.followAnswer()
+	s.followPicked()
+	s.followFind()
 	s.runScripts()
 	if s.host != nil {
 		page := s.session().pages[s.browser.Tab().Current()]
@@ -352,8 +380,9 @@ func (s *Screen) tick() {
 // overlaid reports whether a menu or a list of light's is open over the
 // page: a press or a key is then not the page's scripts' to hear.
 func (s *Screen) overlaid() bool {
-	return s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
-		s.panelOpen() || s.choosing() || s.cardOpen()
+	return s.sortingOpen() || s.covered() ||
+		s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
+		s.panelOpen() || s.choosing() || s.cardOpen() || s.answerOpen() || s.pickedOpen()
 }
 
 // show redraws the screen from the browser: the tabs, the shown tab's
@@ -365,6 +394,9 @@ func (s *Screen) show() {
 	s.closePanel(false)
 	s.closeChoices()
 	s.closeCard(false)
+	s.closeSorting(false)
+	s.closeAnswer(false)
+	s.closePicked()
 	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
 	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks = nil, nil, nil, nil, nil, nil

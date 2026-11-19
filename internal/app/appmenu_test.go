@@ -108,6 +108,7 @@ func TestTheMenuHangsFromItsButtonAndListsWhatLightDoes(t *testing.T) {
 		"-",
 		"Zoom100 % (Zoom out, Zoom in, Full screen)",
 		"-",
+		"Find in page " + shows(findKeys) + " (off)",
 		"Save page as… (off)",
 		"-",
 		"Developer tools " + shows(keys.tools),

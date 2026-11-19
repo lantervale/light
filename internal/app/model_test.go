@@ -361,7 +361,8 @@ func TestTheMenuOfAModelThatIsOnOpensItsCard(t *testing.T) {
 	s.click("menu")
 	rows := s.rows()
 	at := slices.Index(rows, "Model on this device Ready")
-	if at < 1 || rows[at-1] != "-" || rows[at+1] != "-" || slices.Contains(rows, "Turn on a model on this device…") {
+	if at < 1 || rows[at+1] != "-" || !slices.Contains(rows[:at], "Ask about this page (off)") ||
+		slices.Contains(rows, "Turn on a model on this device…") {
 		t.Fatalf("the menu lists\n%s", strings.Join(rows, "\n"))
 	}
 	s.press(input.KeyEscape)
@@ -399,7 +400,7 @@ func TestTheCardOfAModelThatIsOnSaysWhatRunsAndCloses(t *testing.T) {
 	if got := s.pressed("model-choices"); got != proposed.Name+" (proposed)" {
 		t.Fatalf("the model chosen is %q", got)
 	}
-	for _, id := range []string{"model-proposal", "model-later", "model-confirm", "model-progress", "model-helps"} {
+	for _, id := range []string{"model-proposal", "model-later", "model-confirm", "model-progress"} {
 		if s.doc.ByID(id) != nil {
 			t.Errorf("the card of a ready model has #%s", id)
 		}

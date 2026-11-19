@@ -38,13 +38,13 @@ type feature struct {
 // there only while the model is on, the menu's rows, and the card that
 // proposes a model, shows the one that runs and changes it.
 type modelCard struct {
-	root, slot, robot, dot, rows, state *ui.Node
+	root, slot, robot, dot, rows, state, ask *ui.Node
 	// seq is the model's status as the marks show it, drawn whether they
 	// were ever shown, and listed the rows the menu has: none, the one
 	// that turns the model on, the one of a model that is on.
 	seq    uint64
 	drawn  bool
-	listed int
+	listed string
 	// pick is the model picked and file the file named, neither agreed
 	// to yet; owning whether the field of a file shows.
 	pick, file string
@@ -116,6 +116,7 @@ func (s *Screen) openCard() {
 	s.menu.Close()
 	s.closePanel(false)
 	s.closeChoices()
+	s.closeSheets(nil)
 	s.list.RemoveClass("shown")
 	s.recent.RemoveClass("shown")
 	c := &s.card
@@ -252,8 +253,8 @@ func (s *Screen) showModel(status model.Status) {
 		c.dot.SetAttr("src", "robot-"+class+".svg")
 		c.state.SetText(word)
 	}
-	if listed := map[bool]int{false: 1, true: 2}[on]; listed != c.listed {
-		c.listed = listed
+	if listed := fmt.Sprint(on, s.helps(answersFeature), s.helps(sortingFeature)); listed != c.listed {
+		c.listed, c.ask = listed, nil
 		empty(c.slot)
 		empty(c.rows)
 		toggle(c.slot, "shown", on)
@@ -262,6 +263,13 @@ func (s *Screen) showModel(status model.Status) {
 			c.slot.Append(c.robot)
 			row = s.choice("model", modelName, "", s.openCard)
 			row.Append(c.state)
+		}
+		if s.helps(answersFeature) {
+			c.ask = s.choice("ask", "Ask about this page", "", s.askAbout)
+			c.rows.Append(c.ask)
+		}
+		if s.helps(sortingFeature) {
+			c.rows.Append(s.choice("sorted", sortedTitle, "", s.openSorting))
 		}
 		c.rows.Append(row, ui.Div(ui.Attr("role", "separator")))
 	}
@@ -309,10 +317,13 @@ func (s *Screen) fillCard() {
 		c.root.Append(s.fileField())
 	}
 	target, proposing := s.offered()
+	settled := true
 	if coming := s.coming(target.ID); len(coming) > 0 && c.file == "" {
 		c.root.Append(s.progressOf(coming))
+		settled = false
 	} else if proposing {
 		c.root.Append(s.proposal(target))
+		settled = false
 	}
 	problem := c.problem
 	if problem == "" && target.Install.State == model.InstallFailed {
@@ -324,8 +335,11 @@ func (s *Screen) fillCard() {
 	if problem != "" {
 		c.root.Append(ui.P(ui.ID("model-problem"), ui.Attr("role", "alert"), ui.Text(problem)))
 	}
-	if on && len(s.features) > 0 {
+	if on && settled && len(s.features) > 0 {
 		c.root.Append(ui.Div(ui.Class("part"), ui.Span(ui.Text("It helps with")), s.helpChips()))
+		if offer := s.forgetOffer("model-recall"); offer != nil {
+			c.root.Append(offer)
+		}
 	}
 	c.root.Append(ui.P(ui.ID("model-note"), ui.Text("What pages say stays on this device.")),
 		s.cardFoot(target, proposing))
@@ -557,6 +571,7 @@ func (s *Screen) helpChips() *ui.Node {
 		chips.Append(s.pill("model-helps-"+f.id, f.label, f.label, on, func() {
 			s.assists.Set(f.id, !on)
 			s.assisted.touch()
+			s.assistChanged(f.id)
 			s.redrawModel()
 			s.fillCard()
 		}))

@@ -2,146 +2,362 @@
 
 # <img src="logo.svg" width="36" align="absmiddle" alt=""> light
 
-**A small web browser, made as a demo of [ember](https://github.com/lantervale/ember).**
+**A small web browser written from scratch in Go, with no WebKit, no Chromium and no Gecko inside.**
 
 [![Go 1.27](https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
 [![MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
-[![Status: demo](https://img.shields.io/badge/status-demo-orange)](#what-it-does-not-do)
 [![Made with ember](https://img.shields.io/badge/made%20with-ember-orange)](https://github.com/lantervale/ember)
 
 <img src=".github/readme/zen-garden.png" width="640" alt="light showing CSS Zen Garden: tabs in the title bar, a navigation row, the page below">
 
-<sub>[CSS Zen Garden 001](https://csszengarden.com/001/), fetched from the web and drawn by ember.</sub>
+<sub>[CSS Zen Garden 001](https://csszengarden.com/001/), fetched from the web and drawn by light.</sub>
 
 </div>
 
-ember is a 2D game engine in plain Go. Its UI is HTML elements built from Go and styled by a CSS subset. This demo asks
-how far that UI goes on pages written for real browsers: it fetches a page, turns it into ember elements and draws it.
+## What it is
 
-It is a demo, not a browser to live in: see [what it does not do](#what-it-does-not-do).
+light is a web browser whose engine is not one of the three everyone else builds on. It embeds no WebKit, no
+Blink or Chromium, no Gecko, and no web view of the system. It is written in Go on
+[ember](https://github.com/lantervale/ember), a game engine in Go by the same people, and it draws every page
+itself:
 
-## Highlights
+- **HTML** is read by [golang.org/x/net/html](https://pkg.go.dev/golang.org/x/net/html), the Go project's HTML5
+  parser. light did not write that parser; it builds its own tree and its own DOM from what the parser gives.
+  XHTML and XML documents are read by light's own code.
+- **CSS, layout, text and painting** are ember's `ui` package: its own CSS parser and cascade, its own block,
+  inline, flex, grid and table layout, its own text shaping and line breaking, its own painter. It is checked
+  against headless Chrome in ember's tests, and it shares no code with any browser.
+- **Drawing** goes to the GPU through WebGPU. The header, the menus, the developer tools and the page are all the
+  same kind of element, drawn the same way.
+- **JavaScript** runs in V8, through the [gost-dom/v8go](https://github.com/gost-dom/v8go) binding and cgo, on
+  macOS and Linux. The Windows build has no JavaScript engine: pages show without their scripts.
+- **The DOM and the web APIs** a script sees (elements, events, `fetch`, `XMLHttpRequest`, storage, IndexedDB,
+  XPath, frames, messages, modules) are light's own Go code and a JavaScript prelude over it. V8 brings the
+  language and nothing of the web.
+- **The network** is Go's standard library: HTTP/1.1, HTTP/2 and TLS. Cookies, CORS, mixed content, the local
+  network rule and the request headers are light's own.
 
-- 🗂️ **Tabs in the title bar**: the header sits where the system's title bar is, as a browser's does (macOS).
-- 🪟 **Windows**: Shift+click on a link or Cmd+N opens another window, with its own tabs; they share the settings,
-  the history, the cookies and the downloads, and light ends with the last one.
-- 🧭 **Navigation**: back, forward, reload and stop, an address field, a list of the open tabs, favicons.
-- 🔎 **Search**: words typed in the address field go to DuckDuckGo, on Enter and not before
-  ([below](#the-address-field-and-search)).
-- 🌐 **Real pages**: an `http` or `https` address is fetched with its stylesheets, pictures and fonts, through its redirects.
-- 🪟 **Frames**: an `iframe` shows its document, another site's included, in the page: its `src` or its `srcdoc`,
-  its own sheets, pictures, links and forms. A document that refuses to be framed is not shown, and a frame gets
-  the cookies of its tab's site alone ([below](#frames)).
-- 🧾 **Other kinds of answer**: a picture alone on a dark page (PNG, JPEG, GIF, WebP, SVG, an ICO holding a PNG; a
-  click switches between fitted and its own size), text kinds (CSS, JavaScript, JSON, XML, plain text…) as they were sent.
-  The rest (PDF, archives, audio, video, fonts, AVIF…) is downloaded.
-- ⬇️ **Downloads**: a button in the navigation row with the progress and the latest files, and `light://downloads`
-  with all of them: open, show in folder, cancel, retry, remove. A link with `download`, "Save link as…",
-  "Save image as…" and "Save page as…" go the same way.
-- ⚙️ **Settings**: `light://config` sets the start page, the search engine, the dark mode, the downloads folder, the history, the zoom,
-  pictures, timeouts, redirects and the User-Agent. They apply at once and are kept between runs.
-- 🌙 **Dark mode**: light's own pages on black, the logo's navy and white swapped, and "light" struck through. A
-  click on the start page's logo switches it; pages of the web stay as their sites made them.
-- 🏠 **Its own pages**: `light://home`, `guide`, `examples`, `scripts`, `about`, `history`, `downloads` and `config`.
-- 🕘 **History**: `light://history` lists every visit by day, filtered as you type, kept between runs.
-- 🖱️ **Right click**: a menu for what is under the pointer — a link, a picture, selected text, a text field, the
-  page, a tab, a request.
-- 📄 **View source**: `view-source:<address>`, with line numbers.
-- ⚡ **JavaScript**, in a build with the `v8` tag: a page's scripts, classic and modules, run in V8 against a DOM of light's own:
-  the page as its parser made it, of which ember draws what it has an element for. Elements, events, timers, `fetch`, `localStorage`, IndexedDB, `history`. `light://scripts` shows it.
-- 🍪 **Cookies**: one jar for every request, by the rules browsers apply (`Secure`, `HttpOnly`, `SameSite`, the
-  public suffixes), kept between runs; those of other sites than the page's are blocked unless the settings say
-  otherwise (below).
-- 🛠️ **Developer tools**, in the manner of Firefox's: a tool bar of tabs, a panel whose top edge is dragged to size
-  it, dark or light as the dark mode says. Its Network tab lists every request of the tab (below), its Console tab
-  what the page said (below), its Warnings tab what ember's ui refused, and its Storage tab the cookies, the
-  `localStorage` and the IndexedDB databases of the page's site (each one's version, its stores, how many records
-  a store holds and its indexes), to read only, as they stood when the tab was shown.
-- 🔍 **Zoom**, from 80 % to 200 %, and **text you can select** and copy.
-- 🧱 **All of it is ember**: the header, the menus, the tools and the page are plain ui elements and stylesheets.
+What is borrowed, in full:
+
+| Part | From |
+|---|---|
+| JavaScript engine | V8, through [gost-dom/v8go](https://github.com/gost-dom/v8go) (prebuilt V8 libraries from [tommie/v8go](https://github.com/tommie/v8go)) |
+| HTML tokenizer and tree builder | [golang.org/x/net/html](https://pkg.go.dev/golang.org/x/net/html) |
+| GPU access | [wgpu-native](https://github.com/gfx-rs/wgpu-native), loaded at run time, through ember's own binding |
+| Window, keyboard and mouse | [GLFW](https://www.glfw.org) 3.3, through [go-gl/glfw](https://github.com/go-gl/glfw) |
+| HTTP, TLS, gzip, PNG, JPEG and GIF decoding | Go's standard library |
+| WebP decoding, font file reading and rasterising | [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) |
+| Brotli decoding | [andybalholm/brotli](https://github.com/andybalholm/brotli) |
+| Grapheme clusters | [rivo/uniseg](https://github.com/rivo/uniseg), in ember |
+| Fonts | The Go fonts and Source Code Pro, embedded in ember; the fonts installed on the system; the fonts pages bring |
+| Command line | [alecthomas/kong](https://github.com/alecthomas/kong) |
+| The optional model | [llama.cpp](https://github.com/ggml-org/llama.cpp) through [yzma](https://github.com/hybridgroup/yzma), in a separate program, downloaded only if you turn it on |
+
+Everything else is this repository and ember.
+
+It is a first release, 0.1.0. Many pages show well, many do not, and it is not hardened as the large browsers
+are: read [What works and what does not](#what-works-and-what-does-not) before you rely on it.
 
 | | |
 |---|---|
-| <img src=".github/readme/home.png" width="400" alt="light's start page: its logo, a search field and eight tiles"> | <img src=".github/readme/developer-tools.png" width="400" alt="The developer tools under CSS Zen Garden: the requests of the tab and the details of one"> |
-| <img src=".github/readme/settings.png" width="400" alt="The settings page: the start page, the downloads folder, the history, the zoom"> | <img src=".github/readme/downloads.png" width="400" alt="The downloads page: one file failed, one done, one in progress"> |
-| <img src=".github/readme/history.png" width="400" alt="The history page: visits of a day, newest first"> | <img src=".github/readme/context-menu.png" width="400" alt="The menu of a right click on a link"> |
-| <img src=".github/readme/view-source.png" width="400" alt="The source of a page, its lines numbered"> | <img src=".github/readme/picture.png" width="400" alt="A JPEG shown alone on a dark page"> |
+| <img src=".github/readme/home.png" width="400" alt="light's start page: its logo, a search field and tiles"> | <img src=".github/readme/developer-tools.png" width="400" alt="The developer tools under CSS Zen Garden: the requests of the tab and the details of one"> |
+| <img src=".github/readme/settings.png" width="400" alt="The settings page"> | <img src=".github/readme/context-menu.png" width="400" alt="The menu of a right click on a link"> |
 
 ## Install
 
-Each [release](https://github.com/lantervale/light/releases) has one archive per system, holding light, the
-wgpu-native library it draws with and their licences:
+Each [release](https://github.com/lantervale/light/releases) has one archive per system:
 
 | System | Archive | JavaScript |
 |---|---|---|
-| macOS 13 or later, Apple silicon | `light_<version>_darwin_arm64.zip` | yes |
-| macOS 13 or later, Intel | `light_<version>_darwin_amd64.zip` | yes |
-| Linux, x86-64 (glibc 2.35 or later) | `light_<version>_linux_amd64.tar.gz` | yes |
-| Linux, arm64 (glibc 2.35 or later) | `light_<version>_linux_arm64.tar.gz` | yes |
-| Windows 10 or later, x86-64 | `light_<version>_windows_amd64.zip` | no |
+| macOS 13 or later, Apple silicon | `light_<version>_darwin_arm64.zip` | yes (V8) |
+| macOS 13 or later, Intel | `light_<version>_darwin_amd64.zip` | yes (V8) |
+| Linux, x86-64 (glibc 2.35 or later) | `light_<version>_linux_amd64.tar.gz` | yes (V8) |
+| Linux, arm64 (glibc 2.35 or later) | `light_<version>_linux_arm64.tar.gz` | yes (V8) |
+| Windows 10 or later, x86-64 | `light_<version>_windows_amd64.zip` | **no**: pages show without their scripts |
 
 - **macOS**: unzip and move `light.app` to Applications. The app is signed ad hoc and not notarized by Apple, so
-  macOS refuses its first launch ("Apple could not verify…"): open System Settings → Privacy & Security and choose
+  the first launch is refused ("Apple could not verify…"): open System Settings → Privacy & Security and choose
   **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/light.app` once. From a terminal, light is
   `/Applications/light.app/Contents/MacOS/light`.
 - **Linux**: unpack and run `./light` from its folder, where `libwgpu_native.so` must stay beside it. It needs a
   Vulkan driver with the Vulkan loader, X11 (or XWayland) and ALSA; on Debian and Ubuntu:
   `sudo apt install libvulkan1 libx11-6 libxrandr2 libxinerama1 libxcursor1 libxi6 libxxf86vm1 libasound2`.
-- **Windows**: unzip and run `light.exe`, which must stay beside `wgpu_native.dll`. This build has no JavaScript
-  engine: pages show without their scripts, and `light://config` says so. It opens no console, so `light --version`
-  prints nothing there.
+  The archive also holds `light.desktop` and `light.png`: copy them to `~/.local/share/applications/` and
+  `~/.local/share/icons/` for light to show among your applications, with `light` on your `PATH`.
+- **Windows**: unzip and run `light.exe`, which must stay beside `wgpu_native.dll`. It opens no console, so
+  `light --version` prints nothing there.
 
+Each archive holds light, `light-model` (the helper of [the model](#a-model-on-this-device), which does nothing
+until you turn the model on), the wgpu-native library light draws with, and their licences.
 `light_<version>-checksums.txt` lists the SHA-256 of every file of the release; it is signed with
 [cosign](https://github.com/sigstore/cosign) (`.sigstore.json` beside it), and each archive has its SBOM
 (`.sbom.json`).
 
-## Get started
+### Build from source
 
-You need Go 1.27, [Task](https://taskfile.dev) (`brew install go-task`) and a
+You need Go 1.27, [Task](https://taskfile.dev) (`brew install go-task`), a C and C++ compiler, and a
 [WebGPU-capable GPU](https://github.com/lantervale/ember/blob/main/docs/01-getting-started/README.md).
 
-light builds on the ember cloned beside it, through a Go workspace:
-
-**1.** Clone ember and light side by side, and tie them:
+light is worked on beside ember, through a Go workspace. `go.mod` pins a commit of ember; inside the workspace
+the ember beside light is used instead.
 
 ```sh
 mkdir lantervale && cd lantervale
 git clone https://github.com/lantervale/ember.git ember
 git clone https://github.com/lantervale/light.git light
 go work init ./ember ./light
-```
-
-**2.** Fetch ember's WebGPU library (one time only):
-
-```sh
-(cd ember && task wgpu)
-```
-
-**3.** Run it, on the start page or at an address:
-
-```sh
+(cd ember && task wgpu)        # ember's WebGPU library, one time only
 cd light
-go run ./cmd/light
-go run ./cmd/light https://csszengarden.com
+task run                       # light with its JavaScript engine (the v8 build tag)
+task run -- https://csszengarden.com
+task run:plain                 # light without a JavaScript engine: go run ./cmd/light
 ```
 
-The start page has a tile for CSS Zen Garden; any address typed in the field works the same way.
+`task run` is `CGO_CXXFLAGS=-nostdinc++ go run -tags v8 ./cmd/light`: V8's headers need their own libc++. Without
+the tag light builds on every system and runs no script; `light://config` then says no engine is built in.
 
-That build runs no script. The JavaScript engine is V8 (through [gost-dom/v8go](https://github.com/gost-dom/v8go)
-and cgo), behind the `v8` build tag, on macOS and Linux, amd64 and arm64:
+## Use
+
+Type in the address field, or in the field of the start page:
+
+| Typed | Opened |
+|-------|--------|
+| An address with its scheme (`https://…`, `light://…`), `about:blank` | As it is |
+| A host name with a dot and no space (`example.com`, `example.com:8080/path`) | `https://` and what was typed |
+| `localhost`, a name ending in `.localhost`, an IP address | `http://` and what was typed |
+| `view-source:` and an address | The source of that page |
+| Anything else | A search, with DuckDuckGo unless the settings name light's own pages |
+
+Around the page: tabs in the title bar (macOS), several windows, back, forward, reload and stop, bookmarks in
+folders (the star of the address field), a history by day, downloads, a menu (new tab, new window, bookmarks,
+history, downloads, zoom, full screen, find in page, save page as, developer tools, settings), a menu of the
+right click, zoom from 80 % to 200 %, text you can select and copy, and developer tools (Inspector, Network with
+HAR export, Console, Warnings, Storage). A click on the logo of the start page switches light's own pages
+between light and dark; pages of the web stay as their sites made them.
+
+### Shortcuts
+
+Cmd is Command on macOS and Control elsewhere.
+
+| Keys | What they do |
+|------|--------------|
+| Cmd+T, Cmd+W | A new tab, close the tab (a window's last tab closes the window) |
+| Cmd+N | A new window, on the start page |
+| Cmd+Q | Quit, whatever the windows open |
+| Cmd+L | The address field |
+| Cmd+R | Reload, or stop a page that is loading |
+| Cmd+[ and Cmd+] (Alt+Left and Alt+Right too, off macOS) | Back, forward |
+| Cmd+D | Bookmark this page |
+| Cmd+F | Find in page |
+| Cmd+Y on macOS, Ctrl+H elsewhere | The history |
+| Cmd+Shift+J on macOS, Ctrl+J elsewhere | The downloads |
+| Cmd+, | The settings |
+| Cmd++, Cmd+-, Cmd+0 | Zoom in, zoom out, the actual size |
+| Cmd+Alt+U on macOS, Ctrl+U elsewhere | The page's source, in a new tab |
+| F12, or Cmd+Alt+I on macOS, Ctrl+Shift+I elsewhere | The developer tools |
+| Alt+Up and Alt+Down, or Ctrl+P and Ctrl+N, in the console's line | What was typed before, and after |
+| Right click | The menu of what is under the pointer; arrows, Enter and Escape work in it |
+| Cmd+click or a middle click on a link | The link in a new tab, behind the shown one |
+| Cmd+Shift+click or Shift with a middle click on a link | The link in a new tab, shown |
+| Shift+click on a link | The link in a new window |
+| Middle click on a tab | Close the tab |
+
+### light's own pages
+
+| Address | What it is |
+|---|---|
+| `light://home` | The start page: a search field and the pages light knows |
+| `light://bookmarks` | The bookmarks, by folder |
+| `light://history` | Every page visited, by day, filtered as you type |
+| `light://downloads` | The files saved, in progress and done |
+| `light://config` | The settings; a change applies at once ([Settings](#settings)) |
+| `light://about` | What light is, where its files are, and what it changes in a page before showing it |
+| `light://scripts` | A page that shows what light runs of JavaScript |
+| `light://guide`, `light://examples` | Pages about ember's ui and its examples |
+
+### Command line
+
+`light [address]` (or `light browse [address]`) is the browser; `light drive` is the one a test runner drives
+([Driving it](#driving-it)). `light --help` lists the options: `--dir` (or `LIGHT_DIR`) names the folder light
+keeps its files in, `--downloads` (or `LIGHT_DOWNLOADS`) the folder files are saved to.
+
+## Privacy
+
+- **Nothing is sent while you type.** No suggestions from a server, no page fetched ahead. The words of a search
+  leave on Enter, to the search engine you chose, as `https://duckduckgo.com/?q=` and the words, with no other
+  parameter and no identifier of light's.
+- **No telemetry.** light has no usage statistics, no crash reports sent anywhere and no update check. The
+  requests it makes are those of the pages you open and what they load, your searches, and the downloads of the
+  model if you turn it on and accept them.
+- **An honest User-Agent**: `Mozilla/5.0 (<platform>) light/<version>`. It names no other browser's engine or
+  brand (no `AppleWebKit`, `Chrome`, `Safari` or `Gecko` token), and light sends no client hints. Some sites
+  answer it with less than they give the large browsers. The settings can replace it.
+  [What light tells a site](#what-light-tells-a-site) lists every header.
+- **Third-party cookies are blocked** unless the settings say otherwise, and a frame of another site keeps its
+  storage apart.
+- **A page of the Internet cannot reach this machine or the local network**, unless the settings say otherwise
+  ([Local network](#what-it-does-not-do)).
+- **What is kept is kept on your disk**, in light's folder, in files you can read and delete
+  ([Where things are kept](#where-things-are-kept)). The settings page clears the history, the cookies and the
+  databases.
+
+## A model on this device
+
+light can run a small language model on your machine. It is **off** by default. Until you turn it on (the menu's
+"Turn on a model on this device…", or its section of `light://config`) and accept the download, nothing of it is
+downloaded, started or written.
+
+- **It runs on the device.** The model runs in a separate program, `light-model`, which is llama.cpp loaded
+  through yzma. light speaks to it over its standard input and output only: it listens on no port and opens no
+  connection. Nothing you ask and nothing of a page leaves the machine.
+- **Downloads are pinned.** The llama.cpp libraries come from the project's own release on `github.com`
+  (13 to 25 MB) and the model from its publisher's repository on `huggingface.co`, over https with no cookie. A
+  file is used only once its size and SHA-256 are the ones this version of light was built with
+  (`pkg/model/manifest.json`).
+- **Which models.** light proposes Qwen3 4B (2.5 GB) on Apple silicon with 16 GB of memory or more, and Qwen2.5
+  1.5B Instruct (1.1 GB) elsewhere. The list also has Granite 3.3 2B Instruct (1.5 GB) and an embedding model,
+  Nomic Embed Text v1.5 (146 MB). All are Apache-2.0. A GGUF file of your own can take their place.
+- **A page's text is data.** It is given to the model between marks, with the instruction to treat it as data and
+  never do what it asks. That lowers the risk of a page steering the model; it does not remove it.
+- **Its output can be wrong.** These are small models. What the model wrote is marked with a robot, which also
+  takes its part away.
+- **It turns off.** Each feature below has its own switch. Turning the model off stops the helper at once, and
+  deleting the model removes its whole folder.
+
+<!-- model-features -->
+With the model on, it helps with these, each of which can be turned off alone:
+
+- **Answers in the address bar**: a line that starts with `?` is a question about the shown page, answered in a
+  card under the address field, with the sentence of the page it comes from selected.
+- **Actions on selected text**: Explain, Summarise and Translate (into your language) in a card under the
+  selection.
+- **Find by meaning**: Find in page (Cmd+F) works without the model; with a model that embeds text, it also finds
+  the passages that mean what you typed when the words are not on the page.
+- **Bookmark suggestions**: a name, a line of what the page says and a folder for a bookmark just made, in its
+  panel; the panel's robot puts back the page's own title and your usual folder. The line is kept with the
+  bookmark and shown on `light://bookmarks`.
+- **Page summaries**: a page you leave or close is summed up in one line, kept with its visit in the history and
+  shown on its card of the start page; the robot by "Continue" hides the lines (`hide_summaries`).
+- **Page categories**: categories you name and describe in your own words; the model judges each page, and a
+  category can mark its pages, warn first, or dim them. You can correct a page or a whole site.
+- **Remember what pages said** (off until you turn it on, apart from the model): the history page then takes a
+  question and lists the pages that said something like it. Sites you exclude, local files and light's own
+  pages are never remembered, and the page forgets what it holds on request.
+
+Find by meaning and the questions asked of the history need a second, small model that embeds text (Nomic Embed
+Text v1.5, 146 MB, Apache-2.0). This version does not download it when you turn the model on, and has no button
+that does: until it is on the device (a development build can name one with `LIGHT_MODEL_DEV`, see below), these
+two do not work: Find in page finds words only, and a question asked of the history gets no answer from what
+pages said.
+<!-- /model-features -->
+
+[The model in detail](#the-model-in-detail) has the settings, the files and the developer options.
+
+## What works and what does not
+
+What works, in short: pages over `http` and `https` with their stylesheets, pictures (PNG, JPEG, GIF, WebP, SVG)
+and web fonts (TrueType, OpenType, WOFF, WOFF2); forms sent by GET and POST; cookies by the rules of RFC 6265bis;
+frames, another site's included, each origin in its own V8 isolate; classic scripts and modules with import
+maps; `fetch` and `XMLHttpRequest` under the CORS and mixed content rules; `localStorage`, `sessionStorage` and
+IndexedDB; `postMessage`, `MessageChannel` and `BroadcastChannel`; XPath 1.0; XHTML; `alert`, `confirm` and
+`prompt`; a prompt for a script that runs too long; downloads; view source.
+
+What does not, in short:
+
+- **No JavaScript on Windows**, and none in a build without the `v8` tag.
+- **No canvas**: `getContext()` answers `null`, for 2D and WebGL alike. No audio or video: media files are
+  downloaded.
+- **No workers, no service workers, no WebSockets, no EventSource.**
+- **No shadow trees and no custom elements** (`attachShadow` throws; `customElements` keeps names and upgrades
+  nothing).
+- **No HTTP cache**: every load asks for everything again.
+- **No sign-in by HTTP authentication** (401, 407), no file upload, no `multipart/form-data` form.
+- **No Content Security Policy**: a page's scripts run whatever its policy says. Only `frame-ancestors` and
+  `X-Frame-Options` are honoured.
+- **No `window.open`**, no `beforeunload`, no `document.write`.
+- **No PDF viewer, no AVIF**: they are downloaded. An animated WebP is not drawn.
+- **No extensions, no sync, no private window, no password manager, no autofill, no printing.**
+- **CSS is a subset.** ember's guide lists what is missing:
+  [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md). `@import` in a
+  page's sheet is not followed.
+- **One process.** Every tab and frame runs in one process, and V8 isolates are the only wall between origins.
+  Downloads are not scanned. Do not keep in light what a hostile page must never reach
+  ([the boundary and its limits](#scripts-in-frames)).
+- **Tabs in the title bar are macOS only.**
+
+light runs a subset of the [web-platform-tests](https://web-platform-tests.org) (`task wpt`): the whole of `dom/`
+but the tests that need what light does not have, `domxpath/`, and a few of `url`, `html`, `css` and `domparsing`. No pass rate
+is published here yet: the repository records no dated result.
+
+The full lists are under [Details](#details): [What it does not do](#what-it-does-not-do) and
+[Limits of its JavaScript](#limits-of-its-javascript).
+
+## Driving it
+
+`light drive` serves [W3C WebDriver](https://www.w3.org/TR/webdriver2/), the protocol the web-platform-tests
+runner speaks. A light started any other way serves nothing.
 
 ```sh
-task run                                                      # or:
-CGO_CXXFLAGS=-nostdinc++ go run -tags v8 ./cmd/light light://scripts
+task run -- drive --address 127.0.0.1:4444
+EMBER_HIDDEN=1 go run -tags v8 ./cmd/light drive --address 127.0.0.1:4444   # without a window on screen
 ```
 
-V8's headers need its own libc++, hence `CGO_CXXFLAGS`. The binary grows from about 34 MB to about 106 MB.
-Without the tag, or on Windows, light builds as before and `light://config` says no engine is built in.
+It listens on this machine only (`127.0.0.1`, `::1` or `localhost`; any other address is refused at launch),
+answers 403 to a request whose `Host` is not this machine or that carries an `Origin`, and keeps its settings,
+history and cookies in memory unless `--dir` names a folder. [WebDriver](#webdriver) lists the commands.
 
-> ⚠️ light does not build against ember's `main` yet: it uses parts of ember's ui that have not landed there
-> so far. Until they do, `go.mod` pins an older commit and the steps above fail at the build.
+## Development
 
-## The address field and search
+The tests need no GPU and no network: pages are served by a local test server, and clicks and keys are simulated.
+They write nothing in your config or Downloads folders, and open no file.
+
+```sh
+task test             # go vet ./... and go test ./..., without and with the v8 tag
+task lint             # golangci-lint, without and with the v8 tag (after task golangci:boilerplate, once)
+task model:build      # light-model, the helper that runs the model, into dist/ (its own Go module)
+task model:test       # its vet and tests
+task wpt              # the web-platform-tests of tools/wpt/subset.txt (see "Web platform tests")
+```
+
+- With the `v8` tag, every `go` command needs `CGO_CXXFLAGS=-nostdinc++`; the Taskfile sets it. By hand:
+  `CGO_CXXFLAGS=-nostdinc++ go test -tags v8 ./...`.
+- `go test -tags "v8 gpu" ./cmd/light` also drives the real program, hidden, over WebDriver and compares its
+  screenshots; it needs ember's WebGPU library.
+- A screenshot without opening a window:
+  `EMBER_HIDDEN=1 EMBER_CAPTURE=shot.png EMBER_CAPTURE_FRAME=30 go run ./cmd/light`.
+- The packages and how a page goes through them are in [Under the hood](#under-the-hood). Dependencies go one
+  way: `cmd` → `internal` → `pkg`.
+
+## Releasing
+
+A tag `v*` pushed to GitHub runs `.github/workflows/release.yml`: each target is built on its own system (light is
+cgo, so nothing cross compiles between systems) by `goreleaser build`, whose post hook (`tools/release/bundle.sh`)
+packs the binary with `light-model` and the wgpu-native library, checked against
+`tools/release/wgpu-native.sha256`; the next job adds each archive's SBOM, the source archive and the checksums
+(`tools/release/assemble.sh`), and the last signs them and publishes the GitHub release, once every target built.
+Run by hand from the Actions tab, the workflow does the same as a snapshot and publishes nothing.
+
+It needs [GoReleaser](https://goreleaser.com) v2 (the open-source one), and syft for the SBOMs:
+`brew install goreleaser syft`.
+
+```sh
+task release:snapshot   # this system's archive in dist/, as the workflow builds it
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+A release builds from `go.mod` and `go.sum` alone, without the workspace: `tools/release/preflight.sh` stops it
+early, saying so, while light needs an ember later than the one pinned.
+
+## Licence
+
+Code under [MIT](LICENSE). The pages in the screenshots belong to their authors. V8, wgpu-native, llama.cpp and
+the models have their own licences; the archives carry those of what they ship.
+
+## Details
+
+What follows is the reference: how each part behaves, and where it differs from other browsers.
+
+### The address field and search
 
 What is typed in the address field, in the start page's field or after `light` on the command line is read the
 same way (`pkg/tabs`):
@@ -170,7 +386,7 @@ light's own pages (`light://search?q=…`, which stays an address whatever the e
   their own.
 - A word alone is a search, so a host of your network without a dot wants its scheme: `http://nas/`.
 
-## Loading a page
+### Loading a page
 
 A tab that shows a page keeps showing it while the next one loads: no empty page comes between the two.
 
@@ -223,42 +439,17 @@ A tab that shows a page keeps showing it while the next one loads: no empty page
   connection (a third party still gets no cookie unless the settings allow it). light has no HTTP cache: every load asks
   for everything again.
 
-## Shortcuts
+### Windows
 
-Cmd is Command on macOS and Control elsewhere.
-
-| Keys | What they do |
-|------|--------------|
-| Cmd+T, Cmd+W | A new tab, close the tab (a window's last tab closes the window) |
-| Cmd+N | A new window, on the start page |
-| Cmd+Q | Quit, whatever the windows open |
-| Cmd+L | The address field |
-| Cmd+R | Reload, or stop a page that is loading |
-| Cmd+[ and Cmd+] (Alt+Left and Alt+Right off macOS) | Back, forward |
-| Cmd+Y on macOS, Ctrl+H elsewhere | The history |
-| Cmd+Shift+J on macOS, Ctrl+J elsewhere | The downloads |
-| Cmd+, | The settings |
-| Cmd++, Cmd+-, Cmd+0 | Zoom in, zoom out, the actual size |
-| Cmd+Alt+U on macOS, Ctrl+U elsewhere | The page's source, in a new tab |
-| F12, or Cmd+Alt+I on macOS, Ctrl+Shift+I elsewhere | The developer tools |
-| Alt+Up and Alt+Down, or Ctrl+P and Ctrl+N, in the console's line | What was typed before, and after |
-| Right click | The menu of what is under the pointer; arrows, Enter and Escape work in it |
-| Cmd+click or a middle click on a link | The link in a new tab, behind the shown one |
-| Cmd+Shift+click or Shift with a middle click on a link | The link in a new tab, shown |
-| Shift+click on a link | The link in a new window |
-| Middle click on a tab | Close the tab |
-
-A tab opened by such a click stands after the shown one and those it opened already, and a page of the web loads in
-it at once. The links of light's own pages (the start page's tiles, the rows of the history) open the same way. A
-page's scripts hear a Cmd+click as a click with its keys (`metaKey`, `ctrlKey`, `shiftKey`), and may prevent it; they
-hear nothing of a middle click.
+A tab opened by a Cmd+click or a middle click stands after the shown one and those it opened already, and a page
+of the web loads in it at once. The links of light's own pages (the start page's tiles, the rows of the history)
+open the same way. A page's scripts hear a Cmd+click as a click with its keys (`metaKey`, `ctrlKey`, `shiftKey`),
+and may prevent it; they hear nothing of a middle click.
 
 A link or a form that asks for a window of its own (`target="_blank"`, or a name no frame of the page has) opens in
 a new tab, shown, beside its own; the keys held at the click win over it. "Open image in new tab" in the menu of a
 right click, and the links of the developer tools, open their tab behind the shown one, as "Open link in new tab"
 does.
-
-## Windows
 
 Shift+click on a link, "Open link in new window" in the menu of a right click and Cmd+N open a window: the size of
 the one it comes from, a little down and right of it, with tabs of its own. The windows share one profile: the
@@ -270,14 +461,14 @@ Closing a window stops what its tabs were loading and running, and leaves the ot
 last one, or at Cmd+Q, and writes its files then, once. Closing a window's last tab (Cmd+W, its close button, a
 middle click on it, "Close tab" in its menu) closes the window.
 
-## The developer tools
+### The developer tools
 
 F12 opens them under the page, each tab its own. The tool bar has a tab for each tool, the count of the console's
 errors in red (a click shows them), Preserve log and the close button. The top edge of the panel is a handle: drag it
 to size the panel, between 120 points and the window less 80; a double click on it gives the panel its own height
 back. The height is kept between runs (`tools_height` in `config.json`).
 
-### Inspector
+#### Inspector
 
 The Inspector tab shows the page as its markup, in three panes, read-only:
 
@@ -300,7 +491,7 @@ The Inspector tab shows the page as its markup, in three panes, read-only:
 What it does not show: comments and the page's own doctype, which the Document does not keep, pseudo-element rules,
 and declarations ember's ui refused (those are in Warnings). A page of light's own is inspected too.
 
-### Network
+#### Network
 
 - A row for each request, each hop of a redirect its own: its status on the colour of its kind, its method, its
   domain (a padlock for `https`), its file, who asked (the navigation, the document, a picture, an `iframe` or its frame, or the script and
@@ -339,7 +530,7 @@ and declarations ember's ui refused (those are in Warnings). A page of light's o
   out: the addresses with their queries and the bodies are as they were sent, so a password typed in a form, a
   token in an address and whatever a page answered are in the file. Read it before you hand it on.
 
-### Console
+#### Console
 
 The Console tab of the developer tools lists what the shown tab's page said, the newest line last, and follows it
 unless you scrolled up:
@@ -370,7 +561,7 @@ unless you scrolled up:
 Not there: the arrows alone for the history and Shift+Enter for a line of several (ember's text field keeps its
 keys to itself), completion, and values you can unfold.
 
-## Settings
+### Settings
 
 `light://config` (Cmd+,) shows them; a change applies at once and is written to `config.json`. A value out of its
 bounds, or a file that does not read, falls back to the default, setting by setting.
@@ -401,7 +592,9 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 Pictures, JavaScript and refreshes apply to pages loaded afterwards; frames are loaded, or emptied, at once. The page also clears the history, clears the cookies and resets every setting.
 `--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line: `light [address]` (or `light browse [address]`) is the browser, `light drive` the one a test runner drives over [WebDriver](#webdriver).
 
-## What light tells a site
+The page also has the model's section, the page categories, and the sites never remembered (`recall_excluded`); `hide_summaries` keeps the start page's summaries hidden.
+
+### What light tells a site
 
 Every value light sends a server or shows a page's scripts is true of light, of the machine or of the request. None
 names another browser's engine or brand (no `AppleWebKit`, `Chrome`, `Safari` or `Gecko` token in the User-Agent),
@@ -436,7 +629,7 @@ as `outerWidth` and `outerHeight`; `screenX` and `screenY` are where the window 
 the page's view, and `devicePixelRatio` the pixels a pixel of the page is drawn with (the display's scale times the
 zoom). `Date` and `Intl` use the system's time zone.
 
-## Frames
+### Frames
 
 A page's `iframe` shows a document of its own, in ember's `iframe` element: light gives each one its own Document,
 loaded as a page is, so its sheets style nothing around it. A frame's documents are part of its tab: their requests
@@ -491,7 +684,7 @@ are in its HAR file.
   element, not the document in it, and "Inspect element" in a frame selects that element. The Warnings tab lists
   the page's, not its frames'. A menu or a dialog of a frame's document is clipped to the frame.
 
-### Scripts in frames
+#### Scripts in frames
 
 The documents of a page that are of one origin and keep their storage in one place (their kin, below) run in
 one V8 engine (an isolate), each with its own globals; every other document has another engine. Two documents
@@ -664,7 +857,7 @@ is not given to pages, `performance.now()` is told in steps of 100 µs and `cros
 `Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Resource-Policy` nor a Permissions
 Policy is read. Do not keep in light what a hostile page must never reach.
 
-## What a page asks
+### What a page asks
 
 Built with the engine, `alert`, `confirm` and `prompt` show a dialog named after who asks ("site.test says", "An
 embedded page at site.test says" for a frame), with the message as plain text (its first 2,000 characters, scrolled
@@ -689,7 +882,7 @@ or null. The time a dialog stays open is not counted as the script's ([a page th
   ignore during them.
 - Without the engine no script runs, so nothing asks.
 
-### A page that is slow
+#### A page that is slow
 
 A script that runs long is not stopped behind your back. After one second the window goes on without it: the
 header, the other tabs and the other windows answer, the page is drawn as the script leaves it, and the Console
@@ -727,8 +920,11 @@ A light nobody sits at asks nobody: hidden, capturing, driven by ember's automat
 a script at its budget, 2 seconds, or what `--script-budget` gives a `light drive`, with the Console's "ran too
 long" line.
 
-## Downloads
+### Downloads
 
+- An answer that is no page is shown by its kind: a picture alone on a dark page (PNG, JPEG, GIF, WebP, SVG, an
+  ICO holding a PNG; a click switches between fitted and its own size), text kinds (CSS, JavaScript, JSON, XML,
+  plain text…) as they were sent. The rest (PDF, archives, audio, video, fonts, AVIF…) is downloaded.
 - What light cannot show is downloaded, and so is a link with a `download` attribute, an answer sent as an
   attachment, and what "Save link as…", "Save image as…" and "Save page as…" name.
 - A file goes to the downloads folder under a free name: light never writes over a file. It is written as
@@ -739,11 +935,12 @@ long" line.
 - A navigation that turns out to be a download is fetched twice: once to learn its kind, once to save it.
 - The list is kept between runs, 500 entries at most. A download that a quit interrupted shows as failed.
 
-## A model on this device
+### The model in detail
 
-light can run a small language model on your machine, for what later versions build on it. It is **off** unless
-you turn it on, and until then nothing of it is downloaded, started or written. No page of light uses it yet, and
-`light://config` does not show its settings: they are in `config.json`.
+[A model on this device](#a-model-on-this-device) says what the model is and what it helps with. It is **off** unless
+you turn it on, and until then nothing of it is downloaded, started or written, and nothing of it shows but the
+menu's "Turn on a model on this device…" and its section of `light://config`. Its settings are also in
+`config.json`; which features it helps with is in `assist.json`.
 
 | Setting (`config.json`) | Default | |
 |---------|---------|---|
@@ -752,6 +949,11 @@ you turn it on, and until then nothing of it is downloaded, started or written. 
 | `model_file` | `""` | A GGUF file of your own in its place, by its whole path (ignored when `model_id` is set) |
 | `model_threads` | `0` | The threads it computes on (up to 64); 0 is half the fast cores, at least 2, at most 8 |
 | `model_cpu` | `false` | Leave the graphics card out of it |
+| `hide_summaries` | `false` | Keep what the model wrote of the pages visited off the start page |
+| `recall_excluded` | `""` | The sites whose pages are never remembered, by their hosts, as `bank.example, mail.example` |
+
+The page categories are not in `config.json`: they are in `categories.json` in light's folder, with the sites and
+pages you corrected, and are edited in `light://config`.
 
 - **What runs where.** The model runs in a program of its own, `light-model`, which light starts beside itself the
   first time something asks, and stops after five minutes without a request, when the model is turned off or changed,
@@ -762,7 +964,8 @@ you turn it on, and until then nothing of it is downloaded, started or written. 
 - **What is downloaded, from where and when.** Only once the model is on and you accept the model light proposes
   (or choose another of its list): the llama.cpp libraries for your system from the project's own release on
   `github.com/ggml-org/llama.cpp` (13 to 25 MB), and the model from its publisher's repository on `huggingface.co`
-  (1.1 GB for the one proposed, Qwen2.5 1.5B Instruct, Apache-2.0). Both are asked over https with no cookie, a
+  (the one proposed: Qwen3 4B, 2.5 GB, on Apple Silicon with 16 GB of memory or more, and Qwen2.5 1.5B Instruct,
+  1.1 GB, elsewhere; both Apache-2.0). Both are asked over https with no cookie, a
   download goes on from where it stopped, and a file is used only once its size and SHA-256 are the ones this
   version of light was built with (`pkg/model/manifest.json`). An archive is unpacked keeping only its libraries
   and licence. light downloads no model from an address of your own.
@@ -784,16 +987,18 @@ you turn it on, and until then nothing of it is downloaded, started or written. 
   released `light-model` refuses them, as it refuses a llama.cpp from a system folder or of another version than
   the one light installs.
 
-## Where things are kept
+### Where things are kept
 
-`history.json`, `downloads.json`, `config.json`, `storage.json` (what pages kept in `localStorage`, 5 MB an
+`history.json`, `bookmarks.json`, `downloads.json`, `config.json`, `assist.json` (the features the model helps
+with), `categories.json` (the page categories), `recall.bin` (what pages said, when that is remembered), `model/`
+(the model's files), `storage.json` (what pages kept in `localStorage`, 5 MB an
 origin), `indexeddb/` (the IndexedDB databases, one file a site, see [What it does not do](#what-it-does-not-do))
 and `cookies.json` (the cookies that outlive a run, readable by you alone: they are what signs you in) are
 in light's folder of your config folder
 (`~/Library/Application Support/light` on macOS). `--dir` or `LIGHT_DIR` names another folder. A hidden run (`EMBER_HIDDEN`)
 not given one keeps them in memory.
 
-## What it does not do
+### What it does not do
 
 - Built without the `v8` tag it runs no script: a page that builds itself in JavaScript shows little, and what a
   `noscript` holds is shown, as with JavaScript off. A font a script loads (Typekit…) is then replaced by the next
@@ -831,7 +1036,7 @@ not given one keeps them in memory.
 - It has no cache: every page shown for the first time in a tab is fetched, and nothing is revalidated (no 304).
 - It follows redirects (301, 302, 303, 307, 308) and a refresh of 0 seconds, as many in a row as the settings say,
   to `http` and `https` only. A refresh that waits is left alone.
-- It reads gzip only: no Brotli, no zstd, and it does not ask for them.
+- It reads gzip, deflate and, over https, Brotli. No zstd, and it does not ask for it.
 - It holds a page's answer in memory, 64 MB at most, and lays out the first 512 kB of a text. A download is
   streamed to its file instead.
 - It decodes PNG, JPEG, GIF, WebP (lossy and lossless, with alpha; an animated one is not drawn) and SVG. AVIF and
@@ -866,7 +1071,7 @@ not given one keeps them in memory.
 - It draws what ember's ui draws. What is missing is listed in ember's guide:
   [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
 
-## Limits of its JavaScript
+### Limits of its JavaScript
 
 What runs: classic scripts, inline and `src`, in document order, with `defer` and `async`; modules (below);
 `on…` attributes; the
@@ -970,8 +1175,7 @@ What does not:
   put in the page since then is styled and laid out at once when its style is read. A rule's `style` is its text read again: no `CSSKeyframeRule`,
   no `CSSStyleSheet` of an `@import`, no `ownerRule`.
 - **Messages**: `window.postMessage` reaches the window itself and the windows of the tab's frames
-  ([Scripts in frames](#scripts-in-frames)), and a `BroadcastChannel` the other channels of the same document, not
-  another frame's or another tab's. A message is
+  ([Scripts in frames](#scripts-in-frames)), and a `BroadcastChannel` the documents that section names. A message is
   copied by light's own structured clone, written in JavaScript (V8's is not within reach): primitives, plain
   objects and arrays, `Date`, `RegExp`, `Map`, `Set`, `ArrayBuffer` and its views, errors, `Blob`, with their cycles;
   an `ArrayBuffer` transferred is copied, then detached. Each message is a task of its own among the timers, so it
@@ -1137,7 +1341,7 @@ What does not:
 - A page with scripts is not kept when the tab leaves it: Back fetches it again. The scripts of a background tab
   wait until it is shown.
 
-## WebDriver
+### WebDriver
 
 light can be driven by a test runner over [W3C WebDriver](https://www.w3.org/TR/webdriver2/), the protocol the
 web-platform-tests runner speaks. That is a command of its own, `light drive`; a light started any other way
@@ -1215,7 +1419,7 @@ Three more options are a test runner's, so they are `light drive`'s alone and un
   seconds. A test is one long task more often than a page is. A driven light always stops a script at this
   budget, without asking; a person's light [asks instead](#a-page-that-is-slow).
 
-## Web platform tests
+### Web platform tests
 
 `task wpt` runs a subset of the [web-platform-tests](https://web-platform-tests.org) against light, with
 their own runner (`wpt run`) driving light over WebDriver. The subset (`tools/wpt/subset.txt`) is a few tests of
@@ -1252,7 +1456,7 @@ refuses a product it does not know until `/etc/hosts` names its servers; the pro
 
 To move to a newer commit, write it in `wpt.lock`; `rm -rf .wpt` removes everything.
 
-## Under the hood
+### Under the hood
 
 A page goes through four steps:
 
@@ -1303,51 +1507,13 @@ the connection it opened; a connection to this machine is never in a pool a page
 | `pkg/webdriver` | Plain Go: the WebDriver server: its commands, sessions, capabilities, errors and JSON, over the `Browser` light implements. |
 | `pkg/model` | Plain Go: the language model that runs on this device, behind one interface: its states, requests in a queue, the list of models and their installation (downloads checked against a pinned manifest), the helper program it starts and watches, and a fake for tests. |
 | `helper/model` | A Go module of its own, not part of light's: `light-model`, the program that runs the model with llama.cpp through yzma. |
+| `pkg/bookmarks` | Plain Go: the bookmarks, each page at most once, the folders they are filed in, and their file. |
+| `pkg/identity` | Plain Go: what light tells a site: the User-Agent, the languages, and the headers of each request. |
+| `pkg/assist` | Plain Go: which features the model helps with, and their file. |
+| `pkg/categories` | Plain Go: the categories a reader sorts pages into, what each does with its pages, and what was chosen for a site or a page. |
+| `pkg/recall` | Plain Go: what the pages visited said, as passages and their vectors, searched by a question's vector, and its file. |
+| `pkg/testnet` | Plain Go: the network of a driven run: names resolved to this machine, and a certificate authority trusted by that run alone. |
+| `internal/capture` | A light with a model that answers what it is told to, for pictures of the model's surfaces; never part of a build. |
 | `pkg/frames` | Plain Go: the rules of frames: how many and how deep, what an `iframe` shows, its sandbox, whether a document lets itself be framed, where a target leads, which site its cookies are kept under, what the window of another frame answers, whom a message reaches and who may send a window elsewhere. |
 
 Dependencies go one way: `cmd` → `internal` → `pkg`.
-
-## Development
-
-The tests need no GPU and no network: pages are served by a local test server, and clicks and keys are simulated.
-They write nothing in your config or Downloads folders, and open no file: the system's opener is replaced by a fake.
-
-```sh
-task test             # go vet ./... and go test ./..., without and with the v8 tag
-task lint             # golangci-lint, without and with the v8 tag (after task golangci:boilerplate, once)
-task model:build      # light-model, the helper that runs the model (its own module: see "A model on this device")
-task model:test       # its vet and tests
-```
-
-`go test -tags "v8 gpu" ./cmd/light` also drives the real program, hidden, over WebDriver and compares its
-screenshots; it needs ember's WebGPU library.
-
-A screenshot without opening a window:
-
-```sh
-EMBER_HIDDEN=1 EMBER_CAPTURE=shot.png EMBER_CAPTURE_FRAME=30 go run ./cmd/light
-```
-
-## Releasing
-
-A tag `v*` pushed to GitHub runs `.github/workflows/release.yml`: each target is built on its own system (light is
-cgo, so nothing cross compiles between systems) by `goreleaser build`, whose post hook (`tools/release/bundle.sh`)
-packs the binary with the wgpu-native library ember's own script fetches, checked against
-`tools/release/wgpu-native.sha256`; the next job adds each archive's SBOM, the source archive and the checksums
-(`tools/release/assemble.sh`), and the last signs them and publishes the GitHub release, once every target built.
-Run by hand from the Actions tab, the workflow does the same as a snapshot and publishes nothing.
-
-It needs [GoReleaser](https://goreleaser.com) v2 (the open-source one), and syft for the SBOMs:
-`brew install goreleaser syft`.
-
-```sh
-task release:snapshot   # this system's archive in dist/, as the workflow builds it
-git tag v0.1.0 && git push origin v0.1.0
-```
-
-A release builds from `go.mod` and `go.sum` alone, without the workspace: `tools/release/preflight.sh` stops it
-early, saying so, while light needs an ember later than the one pinned.
-
-## Licence
-
-Code under [MIT](LICENSE). The pages in the screenshots belong to their authors.

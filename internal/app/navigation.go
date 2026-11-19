@@ -18,7 +18,7 @@ func (s *Screen) navigation() *ui.Node {
 	s.reload = s.button("reload", "Reload", "reload", s.reloadOrStop)
 	s.lock = ui.Img(ui.ID("lock"), ui.Attr("alt", ""))
 	s.address = ui.Input(ui.ID("address"), ui.Attr("aria-label", "Address"),
-		ui.OnSubmit(func() { s.Open(s.Resolve(s.doc.Value(s.address))) }))
+		ui.OnSubmit(func() { s.submitted(s.doc.Value(s.address)) }))
 	s.sought = ui.Img(ui.ID("sought"), ui.Attr("alt", ""))
 	s.field = ui.Div(ui.ID("field"), s.lock, s.sought, s.address, s.starButton())
 	return ui.Header(ui.ID("bar"), s.back, s.forward, s.reload,

@@ -103,6 +103,13 @@ type Config struct {
 	ModelFile    string `json:"model_file"`
 	ModelThreads int    `json:"model_threads"`
 	ModelCPU     bool   `json:"model_cpu"`
+	// HideSummaries is whether the start page keeps to itself what the
+	// model wrote of the pages visited.
+	HideSummaries bool `json:"hide_summaries"`
+	// RecallExcluded are the sites whose pages are never remembered for
+	// the history asked by meaning, by their hosts, as "bank.example,
+	// mail.example".
+	RecallExcluded string `json:"recall_excluded"`
 }
 
 // formerUserAgent is the User-Agent light once had by default and wrote
@@ -136,7 +143,7 @@ func (c Config) Valid() Config {
 	c.Redirects = within(c.Redirects, MinRedirects, MaxRedirects, d.Redirects)
 	c.Requests = within(c.Requests, MinRequests, MaxRequests, d.Requests)
 	c.ToolsHeight = within(c.ToolsHeight, MinToolsHeight, MaxToolsHeight, d.ToolsHeight)
-	return c.validModel()
+	return c.validModel().validRecall()
 }
 
 // text is value trimmed, or fallback when nothing is left or it holds a

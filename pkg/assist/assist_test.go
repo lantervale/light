@@ -49,3 +49,41 @@ func TestTheFeaturesAreKeptInAFile(t *testing.T) {
 		t.Fatalf("a broken file reads as %v, %v", broken, unread)
 	}
 }
+
+func TestAFeatureToBeAskedForIsOffUntilItIsTurnedOn(t *testing.T) {
+	f := assist.New()
+	f.Ask("recall")
+	if f.On("recall") || !f.On("answers") {
+		t.Fatal("a feature to be asked for helps before it was turned on, or took another with it")
+	}
+	if f.Set("recall", false) || !f.Set("recall", true) || !f.On("recall") || f.Set("recall", true) {
+		t.Fatal("turning it on does not change it once")
+	}
+}
+
+func TestAFeatureAskedForIsKeptInTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "assist.json")
+	f := assist.New()
+	f.Ask("recall")
+	f.Set("recall", true)
+	if err := assist.Save(path, f); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "{\n  \"off\": [],\n  \"on\": [\n    \"recall\"\n  ]\n}\n" {
+		t.Fatalf("the file holds %q", data)
+	}
+	again, err := assist.Load(path)
+	again.Ask("recall")
+	if err != nil || !again.On("recall") {
+		t.Fatalf("read again the feature is %v, %v", again.On("recall"), err)
+	}
+	if !again.Set("recall", false) || again.On("recall") {
+		t.Fatal("it does not turn off again")
+	}
+	if err = assist.Save(path, again); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "{\n  \"off\": []\n}\n" {
+		t.Fatalf("turned off again the file holds %q", data)
+	}
+}

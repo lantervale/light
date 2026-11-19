@@ -12,10 +12,13 @@ import (
 )
 
 // Visit is one page visited: where, under what title, and when.
+// Summary is what the page says in a line, as the model on this device
+// wrote it, "" for nothing.
 type Visit struct {
 	Address string    `json:"address"`
 	Title   string    `json:"title,omitempty"`
 	At      time.Time `json:"at"`
+	Summary string    `json:"summary,omitempty"`
 }
 
 // Day is the visits of one day, newest first.

@@ -64,6 +64,9 @@ type drawing struct {
 // drawings are the glyphs of the address field's star, of the menu and
 // of the bookmarks: the menu's rows in the grey of its labels, the star
 // filled in the blue that marks what is chosen.
+// tick is the mark of a robot whose part shows.
+const tick = `<circle cx="12" cy="12" r="11"/><path d="M7 12.5l3.5 3.5 6.5-7.5" stroke="#0f1b2b"/>`
+
 func drawings() map[string]drawing {
 	const (
 		star   = `<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>`
@@ -74,6 +77,8 @@ func drawings() map[string]drawing {
 		warn   = "#f0a23c"
 		robot  = `<rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V5M2 13v3M22 13v3M9 13v1M15 13v1"/>` +
 			`<circle cx="12" cy="4" r="1"/>`
+		lens = `<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/>`
+		navy = "#0f1b2b"
 	)
 	glyphs := map[string]drawing{
 		"star":    {path: star, stroke: dim},
@@ -83,9 +88,11 @@ func drawings() map[string]drawing {
 		"folder":  {path: `<path d="M3 7h6l2 2h10v10H3z"/>`, stroke: "#8f8c9c"},
 
 		"fetch":             {path: `<path d="M12 4v12M6 11l6 6 6-6M5 21h14"/>`, stroke: dim},
+		"tick":              {path: tick, stroke: ready, fill: ready},
 		"check-dark":        {path: `<path d="M5 12l5 5 9-10"/>`, stroke: "#0f1b2b"},
 		"robot":             {path: robot, stroke: "#efecf4"},
 		"robot-tile":        {path: robot, stroke: "#0f1b2b"},
+		"find":              {path: lens, stroke: navy},
 		"robot-ready":       {path: `<circle cx="12" cy="12" r="9"/>`, stroke: ready, fill: ready},
 		"robot-working":     {path: `<rect x="4" y="4" width="16" height="16" rx="3"/>`, stroke: accent, fill: accent},
 		"robot-preparing":   {path: `<circle cx="12" cy="12" r="8"/>`, stroke: accent},
@@ -107,8 +114,11 @@ func drawings() map[string]drawing {
 		"code":      `<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/>`,
 		"settings":  `<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>`,
 		"quit":      `<path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/>`,
+		"ask":       `<path d="M4 5h16v11H10l-4 4v-4H4z"/>`,
+		"find":      lens,
 		"model":     robot,
 		"model-on":  robot,
+		"sorted":    `<path d="M3 3h8.5l9.5 9.5-8.5 8.5L3 11.5z"/><circle cx="8" cy="8" r="1"/>`,
 	} {
 		glyphs["row-"+name] = drawing{path: path, stroke: row}
 	}

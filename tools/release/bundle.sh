@@ -3,11 +3,18 @@
 #
 #	macOS    light_<version>_darwin_<arch>.zip holding light.app: light in
 #	         Contents/MacOS, the wgpu-native library in Contents/Frameworks,
-#	         the licences and the README in Contents/Resources, signed ad hoc
+#	         light-model in Contents/Helpers, the icon, the licences and the
+#	         README in Contents/Resources, signed ad hoc
 #	Linux    light_<version>_linux_<arch>.tar.gz holding one folder: light,
-#	         libwgpu_native.so, the licences and the README side by side
-#	Windows  light_<version>_windows_<arch>.zip, the same with light.exe and
-#	         wgpu_native.dll
+#	         light-model, libwgpu_native.so, light.desktop, light.png, the
+#	         licences and the README side by side
+#	Windows  light_<version>_windows_<arch>.zip, one folder too: light.exe,
+#	         light-model.exe, wgpu_native.dll, the licences and the README
+#
+# light-model, the helper that runs a language model for light, is built
+# here from helper/model, a module of its own and pure Go, at the same
+# version: a released light refuses a helper of another one. It goes where
+# pkg/model.FindHelper looks: beside light, or in the app's Helpers.
 #
 # It is GoReleaser's post-build hook (.goreleaser.yaml), which says what
 # was built through the environment:
@@ -69,9 +76,30 @@ if [ "$got" != "$want" ]; then
 	exit 1
 fi
 
+# helper builds light-model for the target as the file $1.
+helper() {
+	flags="-s -w -X main.version=$version"
+	# As light there: started by a windowed program, it opens no console.
+	[ "$goos" != windows ] || flags="$flags -H=windowsgui"
+	to=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+	(cd helper/model && GOWORK=off GOFLAGS='' CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+		go build -trimpath -ldflags "$flags" -o "$to" .)
+}
+
 # licences copies what the archive owes its parts into the folder $1.
 licences() {
 	cp LICENSE README.md "$wgpu"/LICENSE-wgpu-native.* "$1/"
+	# What light-model is built on, each module's licence under its last name.
+	(cd helper/model && GOWORK=off GOFLAGS='' GOOS="$goos" GOARCH="$goarch" go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Dir}}{{end}}{{end}}' .) |
+		sort -u | while read -r path dir; do
+		dir=$(slashes "$dir")
+		for f in "$dir"/LICENSE "$dir"/LICENSE.txt "$dir"/LICENSE.md; do
+			[ -f "$f" ] || continue
+			cp "$f" "$1/LICENSE-$(basename "$path")"
+			chmod u+w "$1/LICENSE-$(basename "$path")"
+			break
+		done
+	done
 	# V8 is linked in where light runs scripts: macOS and Linux.
 	if [ "$goos" != windows ]; then
 		v8=$(go list -m -f '{{.Dir}}' "github.com/tommie/v8go/deps/${goos}_${goarch}")
@@ -95,15 +123,24 @@ later() {
 	}'
 }
 
-# icon makes light.icns from logo.svg in the folder $1, with what macOS
-# ships; an app without it still runs, so a failure only warns.
+# icon makes light.icns in the folder $1 with what macOS ships (sips,
+# iconutil): from logo.svg where this macOS's sips draws an SVG, else from
+# icon.png beside this script, which is logo.svg drawn at 1024 pixels
+# (sips -s format png -z 1024 1024 logo.svg --out tools/release/icon.png).
 icon() {
 	set_=$wgpu/light.iconset
+	master=$wgpu/icon-1024.png
+	rm -rf "$set_" "$master"
 	mkdir -p "$set_"
+	if ! sips -s format png -z 1024 1024 logo.svg --out "$master" > /dev/null 2>&1 ||
+		[ "$(sips -g pixelWidth "$master" 2> /dev/null | awk '/pixelWidth/ { print $2 }')" != 1024 ]; then
+		echo "bundle: sips does not draw logo.svg here; the icon is made from tools/release/icon.png" >&2
+		cp "$(dirname "$0")/icon.png" "$master"
+	fi
 	for s in 16 32 128 256 512; do
-		sips -s format png -z "$s" "$s" logo.svg --out "$set_/icon_${s}x${s}.png" > /dev/null 2>&1 || return 1
+		sips -z "$s" "$s" "$master" --out "$set_/icon_${s}x${s}.png" > /dev/null
 		d=$((s * 2))
-		sips -s format png -z "$d" "$d" logo.svg --out "$set_/icon_${s}x${s}@2x.png" > /dev/null 2>&1 || return 1
+		sips -z "$d" "$d" "$master" --out "$set_/icon_${s}x${s}@2x.png" > /dev/null
 	done
 	iconutil -c icns -o "$1/light.icns" "$set_"
 }
@@ -113,23 +150,19 @@ rm -rf "$stage"
 
 if [ "$goos" = darwin ]; then
 	app=$stage/light.app
-	mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Resources"
+	mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Helpers" "$app/Contents/Resources"
 	cp "$bin" "$app/Contents/MacOS/light"
 	cp "$src" "$app/Contents/Frameworks/$lib"
+	helper "$app/Contents/Helpers/light-model"
 	licences "$app/Contents/Resources"
-	for f in "$app/Contents/MacOS/light" "$app/Contents/Frameworks/$lib"; do
+	for f in "$app/Contents/MacOS/light" "$app/Contents/Frameworks/$lib" "$app/Contents/Helpers/light-model"; do
 		v=$(minos "$f")
 		if [ -z "$v" ] || later "$v" "$macos_min"; then
 			echo "bundle: $f needs macOS ${v:-unknown}, later than $macos_min" >&2
 			exit 1
 		fi
 	done
-	iconkey=
-	if icon "$app/Contents/Resources"; then
-		iconkey='<key>CFBundleIconFile</key><string>light</string>'
-	else
-		echo "bundle: no icon made from logo.svg; the app keeps the system's" >&2
-	fi
+	icon "$app/Contents/Resources"
 	cat > "$app/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -141,16 +174,19 @@ if [ "$goos" = darwin ]; then
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${version%%-*}</string>
 	<key>CFBundleVersion</key><string>$version</string>
-	$iconkey
+	<key>CFBundleIconFile</key><string>light</string>
+	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 	<key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key><string>$macos_min</string>
 	<key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 EOF
-	codesign --force --sign - "$app/Contents/Frameworks/$lib"
-	codesign --force --sign - "$app"
-	codesign --verify --strict "$app"
+	plutil -lint "$app/Contents/Info.plist" > /dev/null
+	# Ad hoc: there is no Apple Developer identity, so nothing is notarized.
+	# --deep signs the library and the helper inside before the app over them.
+	codesign --force --deep --sign - "$app"
+	codesign --verify --deep --strict "$app"
 	out=$dist/$name.zip
 	rm -f "$out"
 	ditto -c -k --norsrc --keepParent "$app" "$out"
@@ -163,6 +199,7 @@ licences "$stage"
 cp "$src" "$stage/$lib"
 if [ "$goos" = windows ]; then
 	cp "$bin" "$stage/light.exe"
+	helper "$stage/light-model.exe"
 	out=$name.zip
 	rm -f "$dist/$out"
 	if command -v zip > /dev/null 2>&1; then
@@ -175,6 +212,9 @@ if [ "$goos" = windows ]; then
 	fi
 else
 	cp "$bin" "$stage/light"
+	helper "$stage/light-model"
+	cp "$(dirname "$0")/light.desktop" "$(dirname "$0")/icon.png" "$stage/"
+	mv "$stage/icon.png" "$stage/light.png"
 	out=$name.tar.gz
 	tar -czf "$dist/$out" -C "$dist/stage" "$name"
 fi

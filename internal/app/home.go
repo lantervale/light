@@ -38,6 +38,7 @@ func homePage(s *Screen) []*ui.Node {
 		empty(held)
 		held.Append(s.homeBookmarks()...)
 		held.Append(s.homeVisits()...)
+		held.Append(s.homeSorted()...)
 	}
 	s.relist, s.relistMarks = fill, fill
 	fill()
@@ -120,11 +121,12 @@ func (s *Screen) homeVisits() []*ui.Node {
 		if title == "" {
 			title = shownAs(v.Address)
 		}
-		cards.Append(s.pressed(v.Address, ui.Class("card"), s.siteTile(v.Address, "big"),
+		cards.Append(s.summed(v, s.pressed(v.Address, ui.Class("card"), s.siteTile(v.Address, "big"),
 			ui.Span(ui.Class("text"), ui.Strong(ui.Text(title)),
-				ui.Span(ui.Class("where"), ui.Text(siteOf(v.Address)+" · "+ago(v.At, now))))))
+				ui.Span(ui.Class("where"), ui.Text(siteOf(v.Address)+" · "+ago(v.At, now)))))))
 	}
-	return []*ui.Node{ui.Section(ui.ID("continue"), ui.Div(ui.Class("head"), ui.H2(ui.Text("Continue"))), cards)}
+	head := s.summing(ui.Div(ui.Class("head"), ui.H2(ui.Text("Continue"))))
+	return []*ui.Node{ui.Section(ui.ID("continue"), head, cards)}
 }
 
 // lastVisits is the last n pages of the history, each address once.

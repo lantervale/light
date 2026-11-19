@@ -232,7 +232,7 @@ func configBody(s *Screen) []*ui.Node {
 			config.MinRequests, config.MaxRequests, func(c *config.Config) *int { return &c.Requests }),
 	)
 	if s.modelGiven() {
-		body = append(body, ui.H2(ui.Text(modelName)), s.modelSettings())
+		body = append(body, ui.H2(ui.Text(modelName)), s.modelSettings(), s.sortingSettings(), s.recallSettings())
 	}
 	return body
 }

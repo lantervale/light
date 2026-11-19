@@ -12,12 +12,14 @@ import (
 )
 
 // Bookmark is one page kept: under what name, where, in which folder
-// ("" for none), and since when.
+// ("" for none), and since when. Summary is what its page says in a
+// line, as the model on this device wrote it, "" for nothing.
 type Bookmark struct {
 	Name    string    `json:"name"`
 	Address string    `json:"address"`
 	Folder  string    `json:"folder,omitempty"`
 	Added   time.Time `json:"added"`
+	Summary string    `json:"summary,omitempty"`
 }
 
 // Group is the bookmarks of one folder, in the order they were added.
@@ -216,6 +218,7 @@ func Decode(data []byte) (*List, error) {
 	for _, b := range f.Bookmarks {
 		if b.Address != "" {
 			l.Add(b.Address, b.Name, b.Folder, b.Added)
+			l.Summarise(b.Address, b.Summary)
 		}
 	}
 	l.usual = ""

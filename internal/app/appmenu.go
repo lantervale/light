@@ -31,6 +31,7 @@ func (s *Screen) menuButton() *ui.Node {
 				glyph("row-full"), ui.OnClick(func() { s.win.SetFullscreen(!s.win.Fullscreen()) }))),
 		ui.Div(ui.Attr("role", "separator")),
 		s.card.rows,
+		s.findRow(),
 		s.keeps,
 		ui.Div(ui.Attr("role", "separator")),
 		s.choice("code", "Developer tools", keys.tools, s.toggleTools),
@@ -94,8 +95,18 @@ func (s *Screen) followChoices() {
 	s.list.RemoveClass("shown")
 	s.recent.RemoveClass("shown")
 	s.closeCard(false)
+	s.closeAnswer(false)
+	s.closePicked()
+	s.closeSorting(false)
 	if zoom := percent(s.zoomOf(s.session()), ""); s.zoomed.Text() != zoom {
 		s.zoomed.SetText(zoom)
+	}
+	if ask := s.card.ask; ask != nil {
+		if s.readable() == nil {
+			ask.SetAttr("aria-disabled", "true")
+		} else {
+			ask.RemoveAttr("aria-disabled")
+		}
 	}
 	if _, off := s.keeps.Attr("aria-disabled"); off != (s.sourceShown() == nil) {
 		if off {

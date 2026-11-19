@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=light
+GenericName=Web Browser
+Comment=A small web browser, made as a demo of ember
+Exec=light %u
+Icon=light
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=light

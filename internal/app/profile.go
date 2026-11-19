@@ -72,6 +72,12 @@ type Profile struct {
 	// file.
 	assists  *assist.Features
 	assisted *store
+	// memory is what the pages visited said (recall.go).
+	memory *memory
+	// sorted is the page categories.
+	sorted sortedPages
+	// digests are the pages left that the model sums up, by address.
+	digests map[string]*consulted
 
 	// sites is what sites store through their scripts, and stored its
 	// file.
@@ -121,6 +127,8 @@ func NewProfile(opts Options) *Profile {
 	p.restore()
 	p.restoreDownloads()
 	p.assistFeatures()
+	p.recollect()
+	p.restoreSorted()
 	p.hold()
 	return p
 }
@@ -228,6 +236,9 @@ func (p *Profile) keep() {
 			p.unreadable = err
 		}
 	}
+	if err := p.sorted.file.keep(p.opts.Dir); err != nil {
+		p.sorted.unread = err
+	}
 }
 
 // Screen is the screen of win, a window of light's, on the start page.
@@ -289,7 +300,8 @@ func (p *Profile) Close() error {
 	if p.modelGiven() {
 		stopped = p.opts.Library.Close()
 	}
-	return errors.Join(stopped, p.assisted.flush(p.opts.Dir), p.settings.flush(p.opts.Dir),
+	return errors.Join(stopped, p.endRecall(), p.sorted.file.flush(p.opts.Dir), p.assisted.flush(p.opts.Dir),
+		p.settings.flush(p.opts.Dir),
 		p.history.flush(p.opts.Dir), p.markFile.flush(p.opts.Dir),
 		p.saved.flush(p.opts.Dir), p.stored.flush(p.opts.Dir), p.jarFile.flush(p.opts.Dir), p.bases.Close())
 }

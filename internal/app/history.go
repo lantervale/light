@@ -30,6 +30,7 @@ func (p *Profile) record(address, title string) {
 
 func (p *Profile) clearHistory() {
 	p.visits.Clear()
+	p.forgetSorted()
 	p.rewrite()
 }
 
@@ -66,7 +67,7 @@ func historyBody(s *Screen) []*ui.Node {
 	}
 	s.relist = func() { s.listVisits(list, s.doc.Value(filter)) }
 	s.listVisits(list, "")
-	return append(body, list)
+	return s.askable(append(body, list), filter, list)
 }
 
 // listVisits fills list with the visits filter keeps: a heading a day,

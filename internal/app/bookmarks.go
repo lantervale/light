@@ -90,6 +90,7 @@ func (s *Screen) bookmark() {
 	}
 	if _, kept := s.marks.Lookup(address); !kept {
 		s.marks.Add(address, s.title(address), s.marks.Usual(), s.opts.Now())
+		s.suggest(address)
 		s.remark()
 		s.showStar()
 	}
@@ -122,7 +123,7 @@ func (s *Screen) buildPanel() *ui.Node {
 	p.site = ui.Span(ui.ID("bookmark-site"))
 	p.folders = ui.Div(ui.ID("bookmark-folders"))
 	p.root = ui.Div(ui.ID("bookmark"), ui.Attr("role", "dialog"), ui.Attr("aria-label", "Bookmark"), p.notch,
-		ui.Div(ui.Class("head"), p.tile, ui.Div(ui.Class("named"), p.name, p.site)),
+		ui.Div(ui.Class("head"), p.tile, ui.Div(ui.Class("named"), p.name, p.site), s.hintMark()), s.hintBlock(),
 		ui.Div(ui.Class("filed"), ui.Span(ui.Text("Folder")), p.folders),
 		ui.Div(ui.Class("foot"),
 			ui.Button(ui.ID("bookmark-remove"), ui.Text("Remove bookmark"), ui.OnClick(func() {
@@ -151,6 +152,7 @@ func (s *Screen) openPanel(address string) {
 	}
 	s.menu.Close()
 	s.closeCard(false)
+	s.closeSheets(nil)
 	p.address, p.naming = address, false
 	empty(p.tile)
 	p.tile.Append(s.siteTile(address, "big"))
@@ -162,6 +164,7 @@ func (s *Screen) openPanel(address string) {
 	s.list.RemoveClass("shown")
 	s.recent.RemoveClass("shown")
 	s.doc.Focus(p.name)
+	s.showHint()
 }
 
 // closePanel closes the panel; refocus gives the star the focus it had.
@@ -171,6 +174,7 @@ func (s *Screen) closePanel(refocus bool) {
 	}
 	s.panel.root.RemoveClass("shown")
 	s.panel.address, s.panel.typing = "", false
+	s.dropHint()
 	if refocus {
 		s.doc.Focus(s.star)
 	}
@@ -384,6 +388,7 @@ func (s *Screen) listMarks(list *ui.Node) {
 						s.marks.Remove(mark.Address)
 						s.remark()
 					}))))
+			list.Append(s.markSummary(mark)...)
 		}
 	}
 }

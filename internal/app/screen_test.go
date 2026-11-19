@@ -34,8 +34,22 @@ func show(t *testing.T) *shown {
 	return showWith(t, Options{Downloads: t.TempDir()})
 }
 
+// walled refuses every request that would leave this machine: no test
+// reaches the Internet.
+type walled struct{}
+
+func (walled) RoundTrip(r *http.Request) (*http.Response, error) {
+	if host := r.URL.Hostname(); host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return nil, errors.New(host + " is not reached from a test")
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
 func showWith(t *testing.T, opts Options) *shown {
 	t.Helper()
+	if opts.Transport == nil {
+		opts.Transport = walled{}
+	}
 	win := Window(nil)
 	screen := New(win, opts)
 	win.Add(screen.Document())
