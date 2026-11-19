@@ -576,7 +576,11 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 			if replace {
 				how = inPlace
 			}
-			later(func() { s.navigate(f, wanted{from: live.page, ref: address, user: user, how: how}) })
+			later(func() {
+				if replace || !s.placeFrame(f, address) {
+					s.navigate(f, wanted{from: live.page, ref: address, user: user, how: how})
+				}
+			})
 		},
 		Reload: func() {
 			later(func() {

@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/frames"
 	"github.com/lantervale/light/pkg/tabs"
@@ -109,18 +110,25 @@ func (s *Screen) follow1(f *frame, key string) {
 }
 
 // bring has f where the tab's history has it, to: its document told
-// it is back at an address it gave itself, or another loaded, the one
-// its element asks for when to is none.
+// it is back at an address it gave itself and scrolled to the place
+// that address names when it is another, or another loaded, the one its
+// element asks for when to is none.
 func (s *Screen) bring(f *frame, to string) {
 	switch {
 	case to == f.at:
-	case f.run != nil && f.page != nil && f.load == nil && (to == f.home || f.pushed[to]):
+	case f.page != nil && f.load == nil && (to == f.home || f.pushed[to]):
+		was := f.address()
 		f.at = to
 		if to == "" || to == f.home {
 			to = f.first
 		}
-		f.run.at = to
-		f.run.rt.Arrived(to)
+		if f.run != nil {
+			f.run.at = to
+			f.run.rt.Arrived(to)
+		}
+		if f.page.Doc != nil && web.Fragment(was) != web.Fragment(to) {
+			web.Reveal(f.page.Doc, to)
+		}
 	case to == "":
 		f.at = ""
 		s.navigate(f, f.began)
@@ -162,8 +170,11 @@ func (s *Screen) cross(change tabs.Change) {
 	ahead := *tab
 	ahead.Take(change)
 	s.depart(ahead.Current(), false, func() {
+		from := tab.Current()
+		s.keep(tab)
 		tab.Take(change)
 		session.note, session.returned = "", true
+		s.restore(tab, from)
 	})
 }
 

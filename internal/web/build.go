@@ -154,6 +154,16 @@ func newBuilder(l *Loader, base *url.URL, links Links) *builder {
 	return b
 }
 
+// destination is the address a link's href leads to, "" for none. A
+// href that ends with a bare "#" keeps it: it is the top of its page.
+func (b *builder) destination(href string) string {
+	address := b.resolve(href)
+	if address != "" && strings.HasSuffix(strings.TrimSpace(href), "#") {
+		address += "#"
+	}
+	return address
+}
+
 func (b *builder) resolve(ref string) string {
 	u, err := b.base.Parse(strings.TrimSpace(ref))
 	if err != nil || (u.Scheme != schemeHTTP && u.Scheme != schemeHTTPS) {

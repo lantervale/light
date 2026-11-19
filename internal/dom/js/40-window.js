@@ -284,7 +284,7 @@ const moved = (to, state, how, hashed) => {
   const old = here.href;
   here = to;
   historyState = state;
-  if (how) host("history", how, to.href);
+  if (how) host("history", how, to.href, Boolean(hashed));
   if (hashed) dispatch(window, new HashChangeEvent("hashchange", { oldURL: old, newURL: to.href }));
 };
 const location = {

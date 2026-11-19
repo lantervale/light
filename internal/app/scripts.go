@@ -331,6 +331,7 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 			if how == "replace" {
 				tab.Redirect(tab.Current(), address)
 			} else {
+				s.keep(tab)
 				tab.Push(address)
 			}
 			session.pages[address], live.at = live.page, address

@@ -169,6 +169,26 @@ A tab that shows a page keeps showing it while the next one loads: no empty page
   page* asked for (a link, a form, a script) is not named until its page shows: a page cannot have its own
   content read under an address it sent the tab to. Once a page shows, the address and the lock are its own,
   always.
+- **A place in the page.** An address that differs from the shown page's only by what follows its `#` (a link
+  to `#notes`, the address typed, `location.hash`) is not fetched: the tab takes a step of its history, the
+  address field shows it, and the page scrolls so the element it names is at the top of the view, or as near it
+  as the page scrolls. That element is the first whose `id` is the fragment, else the first `<a name>`, by the
+  fragment as written, then with its `%` escapes read; `#` and `#top` are the top of the page, and a fragment
+  that names nothing scrolls nowhere. A page opened at such an address (a link of another page, a tab opened
+  behind) scrolls there once it is laid out. The page's scripts hear `popstate` and `hashchange`; their own
+  `history.pushState` scrolls nothing. In a frame the step is the tab's, and that frame's document alone
+  scrolls. What follows the `#` is never sent to a server, in a request or in a `Referer`.
+- **Where a page was left.** Each step of a tab's history keeps how far its page was scrolled when the tab left
+  it. Back and Forward put the page back there, between two places of one page (nothing is fetched) as between
+  two pages, one light fetches again included; Reload keeps where the page is. A step that kept nothing goes to
+  the place its address names, else the top. What is kept is the page's own scroll: not that of a box that
+  scrolls inside it, nor of a frame's document, which Back takes to the place its address names; and it is kept
+  for the run, not across a restart.
+- **What a browser does with places that light does not.** `:target` styles nothing (ember's ui does not read
+  it), and for scripts (`querySelector`) matches an element by its `id` only; `location.hash` set by a script
+  tells `hashchange` without `popstate`; a script's `scrollIntoView()` scrolls by the least that shows the
+  element whatever its arguments, where a browser brings it to the top; and a place of the shown page is no
+  visit of `light://history`.
 - **Where there is no page to hold** (a new tab opened on an address, a tab's first load): the page area is
   light's own surface, light or dark as the settings say, with the same line and spinner; Stop then leaves the
   page that says the load was stopped.

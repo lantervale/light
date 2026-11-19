@@ -81,6 +81,7 @@ func (s *Screen) openFresh(address string) {
 	tab := s.browser.Tab()
 	s.session().note = ""
 	s.depart(address, true, func() {
+		s.keep(tab)
 		tab.Visit(address)
 		s.visit(address)
 	})
