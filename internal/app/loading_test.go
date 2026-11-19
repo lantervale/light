@@ -523,3 +523,31 @@ func TestWhatAPageAsksForComesThroughTheConnectionThePageCameThrough(t *testing.
 		}
 	}
 }
+
+func TestAPageNotSentWithinTheTimeoutEndsInAPageSayingSo(t *testing.T) {
+	site := heldServer(t)
+	s := show(t)
+	s.config.Timeout = 1
+	slow := site.URL + "/slow"
+	s.enter(slow)
+	began := time.Now()
+	for s.loading() && time.Since(began) < 5*time.Second {
+		s.frame()
+		time.Sleep(5 * time.Millisecond)
+	}
+	if s.loading() || time.Since(began) > 3*time.Second {
+		t.Fatalf("the tab still waits for %s %v after the timeout of 1 s", slow, time.Since(began))
+	}
+	s.frame()
+	if site.gaveUp() != 1 {
+		t.Errorf("%d requests given up at the timeout, want 1", site.gaveUp())
+	}
+	page := s.view.Children()[0]
+	want := slow + ": 127.0.0.1 did not send it within the 1 second a page is given (Request timeout, in the settings)."
+	if s.host != nil || !page.HasClass("unreachable") || !strings.Contains(page.Text(), want) {
+		t.Errorf("the page shown at the timeout says %q, want %q", page.Text(), want)
+	}
+	if s.status.Text() != "" || s.browser.Tab().Current() != slow {
+		t.Errorf("the bubble says %q and the tab stands on %s at the timeout", s.status.Text(), s.browser.Tab().Current())
+	}
+}
