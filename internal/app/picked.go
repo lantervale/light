@@ -1,6 +1,7 @@
 package app
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -11,8 +12,11 @@ import (
 	"github.com/lantervale/light/pkg/config"
 )
 
+//go:embed picked.css
+var pickedSheet string
+
 const (
-	pickedTokens = 320
+	pickedTokens = 640
 	// pickedWidth and pickedHeight are the room the selection's card is
 	// given under the pointer, and pickedGap how far under.
 	pickedWidth, pickedHeight, pickedGap = 440, 300, 18
@@ -38,7 +42,8 @@ func actions() []action {
 			return passage + "Say what it says in one or two sentences."
 		}},
 		{translating, "Translate", "Translated", "Translated", func(into string) string {
-			return passage + "Translate it into " + into + ". Give the translation only."
+			return passage + "Translate it into " + into + ". Give the translation only, and keep its Markdown: " +
+				"its headings, its lists and what is bold."
 		}},
 	}
 }
@@ -80,8 +85,11 @@ func (s *Screen) translatesInto() translation {
 type pickedCard struct {
 	root *ui.Node
 	// seen is the selection the card was last opened or left closed
-	// for, text the one it is open for, of the page at address.
-	seen, text, address string
+	// for, text the one it is open for and written what the model is
+	// given of it, of the page at address.
+	seen, text, written, address string
+	// at is where the pointer stood on the stage when the card opened.
+	at geom.Vec2
 	// did is the action asked of the model, asked its answer, and off
 	// whether the robot was turned off.
 	did   *action
@@ -90,6 +98,7 @@ type pickedCard struct {
 }
 
 func (s *Screen) buildPicked() *ui.Node {
+	s.doc.AddSheet(pickedSheet)
 	s.excerpt.root = ui.Div(ui.ID("picked"), ui.Class("sheet"), ui.Attr("role", "dialog"),
 		ui.Attr("aria-label", "Selected text"))
 	return s.excerpt.root
@@ -122,12 +131,15 @@ func (s *Screen) followPicked() {
 	if s.pickedOpen() && s.leftBy(p.root) {
 		s.closePicked()
 	}
+	if s.pickedOpen() {
+		s.placePicked()
+	}
 	in := s.win.Input()
 	if selected := page.Doc.Selection().Text; selected != p.seen && !in.Down(input.MouseLeft) {
 		p.seen = selected
 		s.closePicked()
 		if strings.TrimSpace(selected) != "" {
-			s.openPicked(selected)
+			s.openPicked(selected, markdownOf(page.Doc, page.Doc.Selection()))
 		}
 	}
 	if p.asked != nil && p.asked.take() {
@@ -135,20 +147,41 @@ func (s *Screen) followPicked() {
 	}
 }
 
-func (s *Screen) openPicked(text string) {
+func (s *Screen) openPicked(text, written string) {
 	p := &s.excerpt
 	s.closeSorting(false)
-	p.text, p.address, p.off = text, s.browser.Tab().Current(), false
-	stage, _ := s.doc.BoxOf(s.status.Parent())
-	at := s.win.Input().Mouse().Sub(geom.V2(stage.X, stage.Y))
-	left := min(max(at.X-pickedGap, 8), max(stage.W-pickedWidth-8, 8))
-	top := at.Y + pickedGap
-	if top+pickedHeight > stage.H {
-		top = max(at.Y-pickedGap-pickedHeight, 8)
+	if written == "" {
+		written = strings.Join(strings.Fields(text), " ")
 	}
-	p.root.SetStyle(fmt.Sprintf("left: %gpx; top: %gpx", left, top))
+	p.text, p.written, p.address, p.off = text, written, s.browser.Tab().Current(), false
+	stage, _ := s.doc.BoxOf(s.status.Parent())
+	p.at = s.win.Input().Mouse().Sub(geom.V2(stage.X, stage.Y))
 	p.root.AddClass("shown")
 	s.fillPicked()
+	s.placePicked()
+}
+
+// placePicked puts the card under where the pointer stood, above it
+// when it has no room under, and against the stage's foot when it has
+// room at neither: the card grows with what the model writes.
+func (s *Screen) placePicked() {
+	p := &s.excerpt
+	stage, _ := s.doc.BoxOf(s.status.Parent())
+	height := float32(pickedHeight)
+	if card, ok := s.doc.BoxOf(p.root); ok && card.H > 0 {
+		height = card.H
+	}
+	left := min(max(p.at.X-pickedGap, 8), max(stage.W-pickedWidth-8, 8))
+	top := p.at.Y + pickedGap
+	if top+height > stage.H-8 {
+		top = p.at.Y - pickedGap - height
+	}
+	if top < 8 {
+		top = max(stage.H-height-8, 8)
+	}
+	if style := fmt.Sprintf("left: %gpx; top: %gpx", left, top); p.root.Style() != style {
+		p.root.SetStyle(style)
+	}
 }
 
 // do asks the model to do an action with the selection.
@@ -156,8 +189,7 @@ func (s *Screen) do(a action) {
 	p := &s.excerpt
 	p.asked.stop()
 	p.did, p.off = &a, false
-	p.asked = s.inquire(a.system(s.translatesInto().name), "The passage:\n", strings.Join(strings.Fields(p.text), " "),
-		pickedTokens)
+	p.asked = s.inquire(a.system(s.translatesInto().name), "The passage, in Markdown:\n", p.written, pickedTokens)
 	s.fillPicked()
 }
 
@@ -178,7 +210,13 @@ func (s *Screen) fillPicked() {
 		}
 		p.root.Append(sheetHead(s.siteTile(p.address, "big"), "picked", title, sub, robot))
 		if text := s.pickedText(); shows && text != "" {
-			p.root.Append(ui.P(ui.ID("picked-text"), ui.Class("inset"), ui.Text(text)))
+			said := ui.Div(ui.ID("picked-text"), ui.Class("inset"))
+			if p.asked.err != nil {
+				said.Append(ui.P(ui.Text(text)))
+			} else {
+				said.Append(markdown(text)...)
+			}
+			p.root.Append(said)
 		}
 		if !p.off {
 			chips := ui.Div(ui.ID("picked-chips"))

@@ -215,3 +215,49 @@ func TestATranslationIsIntoTheLanguageChosenAndTheChoiceIsKept(t *testing.T) {
 		}
 	}
 }
+
+func TestASelectionIsGivenInMarkdownAndItsAnswerShownInItsShapeWithinTheStage(t *testing.T) {
+	srv, _ := answers(t, map[string]answer{"/": typed("text/html", `<title>Not supported</title>
+		<body style="user-select: text"><div id="all"><h2>Browser not supported</h2>
+		<p>Your browser is <em>too old</em>.</p>
+		<ol><li><strong>Switch your browser</strong>. Try another.</li><li>Update it.</li></ol>
+		<ul><li>See the <a href="/list">list</a>.</li></ul></div></body>`)})
+	s, fake := fencedOn(t)
+	fake.Manual = true
+	long := "## Navigateur non pris en charge\n\n" + strings.Repeat("Votre navigateur est **trop ancien**. ", 60) +
+		"\n\n1. **Changez** de navigateur.\n2. Mettez-le à jour."
+	fake.Reply = func(model.Request) (string, error) { return long, nil }
+	page := s.visit(srv.URL + "/")
+	s.selects(page, "all")
+	s.click("picked-translate")
+	s.until("the model is asked", func() bool { return len(fake.Asked()) == 1 })
+	want := "## Browser not supported\n\nYour browser is *too old*.\n\n1. **Switch your browser**. Try another.\n" +
+		"2. Update it.\n\n- See the list."
+	if asked := fake.Asked()[0]; !strings.Contains(asked.Messages[0].Text, want) ||
+		!strings.Contains(asked.System, "keep its Markdown") {
+		t.Fatalf("the model is told %q and given %q", asked.System, asked.Messages[0].Text)
+	}
+	fake.Finish()
+	s.frame()
+	s.frame()
+	s.frame()
+	said := s.node("picked-text")
+	got := shape(said.Children())
+	if !strings.HasPrefix(got, "h4[Navigateur non pris en charge]\np[Votre navigateur est trop ancien.") ||
+		!strings.HasSuffix(got, "item[1.Changez de navigateur.] strong=Changez\nitem[2.Mettez-le à jour.]") {
+		t.Fatalf("the translation shows as %q", got)
+	}
+	card, stage, text := s.box("picked"), s.box("stage"), s.box("picked-text")
+	if card.Y < stage.Y || card.Y+card.H > stage.Y+stage.H || card.X < stage.X || card.X+card.W > stage.X+stage.W {
+		t.Fatalf("the card %v of a long translation leaves the stage %v", card, stage)
+	}
+	for _, id := range []string{"picked-title", "picked-chips", "picked-into", "picked-copy"} {
+		if b := s.box(id); b.H <= 0 || b.Y < card.Y || b.Y+b.H > card.Y+card.H {
+			t.Errorf("#%s at %v is not within the card %v", id, b, card)
+		}
+	}
+	if text.H < 40 || text.Y+text.H > s.box("picked-chips").Y {
+		t.Fatalf("the translation at %v does not end above what is offered at %v", text, s.box("picked-chips"))
+	}
+	s.clean()
+}
