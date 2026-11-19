@@ -16,7 +16,7 @@ func TestTheDefaultsAreWhatLightDidBeforeItHadSettings(t *testing.T) {
 	want := config.Config{
 		StartPage: tabs.Home, SearchEngine: search.DuckDuckGo, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
 		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
-		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24,
+		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24, ScrollSpeed: 100,
 	}
 	if c != want {
 		t.Fatalf("the defaults are %+v, want %+v", c, want)
@@ -116,34 +116,6 @@ func TestTheFileIsTheDefaultsUntilWrittenAndACorruptOneSaysSo(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(path); string(data) != "{not json" {
 		t.Fatalf("reading rewrote the corrupt file: %q", data)
-	}
-}
-
-func TestTheDarkModeIsOffUntilSetAndKept(t *testing.T) {
-	if config.Default().DarkMode {
-		t.Fatal("light starts dark")
-	}
-	got, err := config.Decode([]byte(`{"version": 1, "dark_mode": true}`))
-	if err != nil || !got.DarkMode {
-		t.Fatalf("read %+v, %v, want the dark mode on", got, err)
-	}
-	for _, bad := range []string{`"dark"`, `1`, `null`, `{}`} {
-		got, err = config.Decode([]byte(`{"dark_mode": ` + bad + `}`))
-		if err != nil || got != config.Default() {
-			t.Errorf("a dark mode of %s read as %+v, %v, want the default", bad, got, err)
-		}
-	}
-	path := filepath.Join(t.TempDir(), "config.json")
-	dark := config.Default()
-	dark.DarkMode = true
-	if err = config.Save(path, dark); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(path); !strings.Contains(string(data), `"dark_mode": true`) {
-		t.Fatalf("the file holds %s", data)
-	}
-	if got, err = config.Load(path); err != nil || got != dark {
-		t.Fatalf("read back %+v, %v, want %+v", got, err, dark)
 	}
 }
 

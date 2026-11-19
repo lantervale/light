@@ -232,7 +232,7 @@ func (s *Screen) ask(a *modal) {
 	}
 	buttons.Append(ok)
 	node := ui.Dialog(append(parts, buttons)...)
-	toggle(node, "dark", s.config.DarkMode)
+	toggle(node, "dark", s.dark())
 	q.node = node
 	s.doc.Body().Append(node)
 	s.doc.ShowModal(node)

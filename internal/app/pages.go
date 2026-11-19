@@ -118,12 +118,19 @@ func (s *Screen) searches() string {
 	return "Search light's own pages or type an address"
 }
 
-// switcher is the start page's logo: a click switches the dark mode,
-// and it is shown in the colours of the one that is on.
+// switcher is the start page's logo: a click sets the appearance that
+// is not the one shown, whatever the system's, and it is shown in the
+// colours of the one that is on.
 func (s *Screen) switcher() *ui.Node {
 	picture := ui.Img(ui.ID("logo"), ui.Attr("src", s.logo()), ui.TabIndex(0), ui.Attr("alt",
 		"light's logo: a disc with eight orange rays. It switches the dark mode"),
-		ui.OnClick(func() { s.configure(func(c *config.Config) { c.DarkMode = !c.DarkMode }) }))
+		ui.OnClick(func() {
+			other := config.AppearanceDark
+			if s.dark() {
+				other = config.AppearanceLight
+			}
+			s.configure(func(c *config.Config) { c.Appearance = other })
+		}))
 	s.fields = append(s.fields, func() { picture.SetAttr("src", s.logo()) })
 	return picture
 }

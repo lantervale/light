@@ -104,7 +104,7 @@ func (s *Screen) slow(a *modal) {
 	t.node = ui.Div(ui.ID("slow"), ui.Attr("role", "alert"), ui.Attr("aria-label", t.who+" is slow"),
 		ui.Span(ui.ID("slow-says"), ui.Text(t.who+" is slow: a script of it has been running for a while.")),
 		wait, ui.Button(ui.ID("slow-stop"), ui.Text("Stop it"), chosen(t.live.rt.Stop)))
-	toggle(t.node, "dark", s.config.DarkMode)
+	toggle(t.node, "dark", s.dark())
 	s.status.Parent().Append(t.node)
 	if !typing(s.doc) {
 		s.doc.Focus(wait)

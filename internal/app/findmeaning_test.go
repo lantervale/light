@@ -297,7 +297,7 @@ func TestTheFindByMeaningInTheDark(t *testing.T) {
 	srv := crossings(t)
 	s, fake := keptOn(t)
 	refunds(fake)
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.visit(srv.URL + "/")
 	s.finds("money back")
 	s.meaning()

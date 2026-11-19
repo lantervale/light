@@ -331,7 +331,7 @@ func TestATabWithNoPageWaitsOnLightsOwnSurface(t *testing.T) {
 	site := heldServer(t)
 	for _, dark := range []bool{false, true} {
 		s := show(t)
-		s.configure(func(c *config.Config) { c.DarkMode = dark })
+		s.configure(func(c *config.Config) { c.Appearance = appearance(dark) })
 		s.OpenInNewTab(site.URL + "/slow")
 		s.frame()
 		if s.doc.ByID("loading") == nil || s.dark() != dark {

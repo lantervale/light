@@ -350,7 +350,7 @@ func TestTheAddressFieldsListFitsANarrowWindowAndADarkPageAndGivesWayToTheOtherC
 	s.known()
 	s.Profile.visits.Add("https://long.test/"+strings.Repeat("deep/", 40), strings.Repeat("A long ferry title ", 12),
 		time.Date(2026, time.March, 2, 9, 0, 0, 0, time.UTC))
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.win.SetSize(geom.V2(760, 480))
 	s.frame()
 	s.frame()

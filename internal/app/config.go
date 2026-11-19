@@ -49,12 +49,23 @@ func (p *Profile) configure(change func(c *config.Config)) {
 	if c = c.Valid(); c != p.config {
 		p.config = c
 		p.settings.touch()
-		p.hold()
-		for _, s := range p.screens {
-			s.apply()
-			s.shade()
-		}
+		p.settle()
 	}
+	p.reshow()
+}
+
+// settle has the settings, and what of the system they follow, hold
+// from now on, in every window.
+func (p *Profile) settle() {
+	p.hold()
+	for _, s := range p.screens {
+		s.apply()
+		s.shade()
+	}
+}
+
+// reshow shows again what the shown pages show of the settings.
+func (p *Profile) reshow() {
 	for _, s := range p.screens {
 		for _, refresh := range s.fields {
 			refresh()
@@ -82,7 +93,8 @@ func (s *Screen) measure() {
 
 // apply has the settings hold in the screen's window: the pages loaded
 // from now on, those already loaded where they can, the page a new tab
-// starts on and the requests' cap.
+// starts on, the requests' cap, and what the wheel scrolls, which the
+// screen's Document says for the pages it shows too.
 func (s *Screen) apply() {
 	c := s.config
 	s.loader.Store(&web.Loader{
@@ -91,23 +103,30 @@ func (s *Screen) apply() {
 		Viewport: s.viewport, Exact: s.opts.ExactText,
 	})
 	s.browser.Start = c.StartPage
+	if s.doc != nil {
+		s.doc.SetWheelScroll(c.ScrollFactor())
+	}
 	for _, session := range s.sessions {
 		session.log.SetLimit(c.Requests)
 		s.zoomPages(session)
 	}
 }
 
-// shade draws the shown page dark when the settings say so. A page of
-// the web is left as its site made it.
+// shade draws the shown page dark when the settings say so, or the
+// system they follow. A page of the web is left as its site made it.
 func (s *Screen) shade() {
 	_, _, lights := tabs.Own(s.browser.Tab().Current())
-	toggle(s.view, "dark", s.config.DarkMode && (s.host == nil || lights))
-	s.tools.SetDark(s.config.DarkMode)
+	dark := s.dark()
+	toggle(s.view, "dark", dark && (s.host == nil || lights))
+	if page := s.session().pages[scriptsPage]; page != nil && page.Doc != nil {
+		toggle(page.Doc.Body(), "dark", dark)
+	}
+	s.tools.SetDark(dark)
 }
 
-// logo is the logo the start page shows, by the settings.
+// logo is the logo the start page shows, by the appearance.
 func (s *Screen) logo() string {
-	if s.config.DarkMode {
+	if s.dark() {
 		return darkLogo
 	}
 	return logo
@@ -180,8 +199,7 @@ func configBody(s *Screen) []*ui.Node {
 		ui.H2(ui.Text("Search")),
 		s.engineSetting(),
 		ui.H2(ui.Text("Appearance")),
-		s.checkSetting("set-dark-mode", "Dark mode (light's own pages; the start page's logo switches it too)",
-			func(c *config.Config) *bool { return &c.DarkMode }),
+		s.appearanceSetting(),
 		ui.H2(ui.Text(saves)),
 		s.textSetting("set-downloads", "Folder", "Where files are saved. Empty is the system's: "+
 			s.opts.DefaultDownloads+".", func(c *config.Config) *string { return &c.Downloads }, same),
@@ -195,6 +213,11 @@ func configBody(s *Screen) []*ui.Node {
 			ui.OnClick(s.clearHistory))),
 		ui.H2(ui.Text("Pages")),
 		s.zoomSetting(),
+		s.checkSetting("set-scroll-reversed", "Reverse the way the wheel and the trackpad scroll (light's own "+
+			"pages too)", func(c *config.Config) *bool { return &c.ScrollReversed }),
+		s.numberSetting("set-scroll-speed", "Scroll speed", "How far the wheel and the trackpad scroll, in "+
+			"percent of what the system says; light's own pages too.", config.MinScrollSpeed, config.MaxScrollSpeed,
+			func(c *config.Config) *int { return &c.ScrollSpeed }),
 		s.checkSetting("set-pictures", "Load pictures (pages loaded from now on)",
 			func(c *config.Config) *bool { return &c.Pictures }),
 		s.checkSetting("set-frames", "Load frames (the pages other pages show inside them)",
@@ -221,10 +244,7 @@ func configBody(s *Screen) []*ui.Node {
 		placeholder(s.textSetting("set-user-agent", "User-Agent", "What light says it is to a server and to a "+
 			"page's scripts. Empty is light's own.", func(c *config.Config) *string { return &c.UserAgent }, same),
 			identity.Default(s.opts.Version)),
-		placeholder(s.textSetting("set-accept-language", "Languages", "The languages a site is asked for, most "+
-			"wanted first, as fr-FR, en. Empty is the system's.",
-			func(c *config.Config) *string { return &c.Languages }, same),
-			strings.Join(identity.Languages(s.opts.Languages), ", ")),
+		s.languagesSetting(),
 		ui.H2(ui.Text("Developer tools")),
 		s.checkSetting("set-preserve-log", "Preserve the log in new tabs",
 			func(c *config.Config) *bool { return &c.PreserveLog }),
@@ -245,6 +265,49 @@ func same(text string) string { return text }
 // address is what was typed as an address, words as a search of
 // light's own pages.
 func address(typed string) string { return tabs.Resolve(typed, nil) }
+
+// asSystem is the value of the appearance's choice that follows the
+// system.
+const asSystem = "system"
+
+// appearanceSetting is the choice of the appearance: the system's, or
+// one whatever the system's.
+func (s *Screen) appearanceSetting() *ui.Node {
+	const id = "set-appearance"
+	field := ui.Select(ui.ID(id), ui.Option(ui.Value(asSystem), ui.Text("As the system")),
+		ui.Option(ui.Value(config.AppearanceLight), ui.Text("Light")),
+		ui.Option(ui.Value(config.AppearanceDark), ui.Text("Dark")))
+	ui.On(field, ui.EventChange, func() {
+		chosen := s.doc.Value(field)
+		if chosen == asSystem {
+			chosen = config.AppearanceSystem
+		}
+		s.configure(func(c *config.Config) { c.Appearance = chosen })
+	})
+	show := func() {
+		chosen := s.config.Appearance
+		if chosen == config.AppearanceSystem {
+			chosen = asSystem
+		}
+		s.doc.SetValue(field, chosen)
+	}
+	s.fields = append(s.fields, show)
+	show()
+	return setting(id, "Appearance", "Of light's own pages: as the system is, and as it changes, or always "+
+		"light or dark. A click on the start page's logo sets the other one than shown.", field)
+}
+
+// languagesSetting is the languages a site is asked for, over the
+// system's as they stand.
+func (s *Screen) languagesSetting() *ui.Node {
+	const id = "set-accept-language"
+	row := s.textSetting(id, "Languages", "The languages a site is asked for, most wanted first, as fr-FR, en. "+
+		"Empty is the system's.", func(c *config.Config) *string { return &c.Languages }, same)
+	show := func() { placeholder(row, strings.Join(identity.Languages(s.preferred()), ", ")) }
+	s.fields = append(s.fields, show)
+	show()
+	return row
+}
 
 // engineSetting is the choice of the search engine.
 func (s *Screen) engineSetting() *ui.Node {

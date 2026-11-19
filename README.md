@@ -138,8 +138,9 @@ Around the page: tabs in the title bar (macOS), several windows, back, forward, 
 folders (the star of the address field), a history by day, downloads, a menu (new tab, new window, bookmarks,
 history, downloads, zoom, full screen, find in page, save page as, developer tools, settings), a menu of the
 right click, zoom from 80 % to 200 %, text you can select and copy, and developer tools (Inspector, Network with
-HAR export, Console, Warnings, Storage). A click on the logo of the start page switches light's own pages
-between light and dark; pages of the web stay as their sites made them.
+HAR export, Console, Warnings, Storage). light's own pages are light or dark as the system is, and change with it;
+a click on the logo of the start page sets the other one than shown, whatever the system's, and the settings
+bring the system's back. Pages of the web stay as their sites made them.
 
 ### Shortcuts
 
@@ -595,11 +596,13 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 |---------|---------|---------------|
 | Start page (a new tab, the home button) | `light://home` | The address argument, at launch only |
 | Search engine (where words typed in the address field go: DuckDuckGo, or light's own pages) | DuckDuckGo | |
-| Dark mode (light's own pages; a click on the start page's logo switches it too) | Off | |
+| Appearance of light's own pages (`appearance`): as the system, light or dark. A click on the start page's logo sets the other one than shown | As the system, and as it changes; light where the system says none | |
 | Downloads folder | The system's (`~/Downloads`) | `--downloads`, `LIGHT_DOWNLOADS` |
 | Keep the pages visited | On | |
 | Visits kept (100 to 100,000) | 2,000 | |
 | Zoom of web pages (80 to 200 %) | 100 % | |
+| Reverse the way the wheel and the trackpad scroll (`scroll_reversed`; light's own pages too) | Off: as the system scrolls | |
+| Scroll speed (`scroll_speed`, 25 to 400 % of what the system says; light's own pages too) | 100 % | |
 | Load pictures | On | |
 | Load frames (the pages other pages show inside them) | On | |
 | Run JavaScript (in a build with the `v8` tag; none runs otherwise) | On | |
@@ -610,11 +613,12 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 | Request timeout (1 to 300 s) | 30 s | |
 | Redirects followed (0 to 20) | 10 | |
 | User-Agent | light's own (see [What light tells a site](#what-light-tells-a-site)) | |
-| Languages (as `fr-FR, en`) | The system's | |
+| Languages (as `fr-FR, en`) | The system's, and as they change | |
 | Preserve the Network log in new tabs | Off | |
 | Requests kept in each tab's Network panel (100 to 10,000) | 1,000 | |
 
 Pictures, JavaScript and refreshes apply to pages loaded afterwards; frames are loaded, or emptied, at once. The page also clears the history, clears the cookies and resets every setting.
+The appearance and the languages follow the system while light runs: a Mac that turns dark at night turns light's own pages dark, unless the appearance is set (a `config.json` of an earlier light with `"dark_mode": true` is read as `"appearance": "dark"`, and the old key goes the next time the file is written). A light nobody sits at (a hidden run, a capture, ember's automation, `light drive`) does not look at the system: its own pages are light unless set dark, and its languages are those read at launch. The scroll settings are laid over the system's own: the direction and the distance the system gives the wheel and the trackpad stay what they are at 100 %, not reversed, and a page's scripts are told nothing of them. Pages of the web are not told the appearance either: `prefers-color-scheme` answers `light` to every page.
 `--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line: `light [address]` (or `light browse [address]`) is the browser, `light drive` the one a test runner drives over [WebDriver](#webdriver).
 
 The page also has the model's section, how long a page keeps its category (`category_hours`, with the way to `light://categories`), and the sites never remembered (`recall_excluded`); `hide_summaries` keeps the start page's summaries hidden.
@@ -630,7 +634,7 @@ and nothing is said to exist that does not work. light sends no client hints (`S
 |--------|--------------|
 | `User-Agent` | `Mozilla/5.0 (<platform>) light/<version>`: the platform as browsers froze it (`Macintosh; Intel Mac OS X 10_15_7`, `Windows NT 10.0; Win64; x64`, `X11; Linux x86_64`), the version of the build, `0.1.0-alpha` for one made by hand. The settings can replace it. |
 | `Accept` | By what is asked for: a page `text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8`, a picture `image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5` (no AVIF, which light does not read), a sheet `text/css,*/*;q=0.1`, the rest `*/*`. A script's `fetch` says its own. |
-| `Accept-Language` | The system's languages (macOS: the user's preferred languages; elsewhere `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`), as browsers list them: `fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7`. `en-US,en;q=0.9` when the system names none. The settings can replace them; a script's `fetch` says its own. |
+| `Accept-Language` | The system's languages (macOS: the user's preferred languages; elsewhere `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`), as browsers list them: `fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7`. `en-US,en;q=0.9` when the system names none. Where the system tells light of a change (macOS and Windows, with a person at the window), the requests made from then on say the new ones. The settings can replace them; a script's `fetch` says its own. |
 | `Accept-Encoding` | `gzip, deflate`, and `br` over https: the encodings light undoes. No `zstd`. |
 | `Sec-Fetch-Dest`, `-Mode`, `-Site`, `-User` | What the request is for (`document`, `style`, `script`, `image`, `font`, `empty`), how it is made (`navigate`, `no-cors`, `cors`, `same-origin`), and from where: `none` for an address typed, a bookmark, a reload or a link of light's own pages, else `same-origin`, `same-site` or `cross-site` to the page that asks, worked out again at each redirect. `Sec-Fetch-User: ?1` only on a navigation an act of the user began: an address typed, a link clicked, a form submitted, a script's move while it hears a click. Sent to https addresses and to this machine only. |
 | `Upgrade-Insecure-Requests` | `1` on navigations. |

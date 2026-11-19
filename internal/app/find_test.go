@@ -273,7 +273,7 @@ func TestEscapeClosesTheFindAndClearsIt(t *testing.T) {
 func TestTheFindFollowsThePageAsItScrollsZoomsAndInTheDark(t *testing.T) {
 	srv := crossings(t)
 	s := kept(t)
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	page := s.visit(srv.URL + "/")
 	s.finds("fare")
 	_, before := s.findMarks()

@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"github.com/lantervale/ember/platform"
+
 	"github.com/lantervale/light/cmd/light/globals"
 	"github.com/lantervale/light/internal/app"
 	"github.com/lantervale/light/pkg/model"
@@ -15,12 +17,16 @@ type Browse struct {
 }
 
 // Options are what the command line gives a person's browser: a slow
-// script of a page goes on and its user is asked, unless nobody sits
-// at the window (a hidden run, a capture, ember's automation), where it
-// is stopped at its budget.
+// script of a page goes on and its user is asked, and light follows
+// the appearance and the languages of their system, unless nobody sits
+// at the window (a hidden run, a capture, ember's automation), where
+// the script is stopped at its budget and the system is not looked at.
 func (b *Browse) Options(build *globals.Build, profile *globals.Profile) app.Options {
 	opts := profile.Options(build, false)
 	opts.Patient = b.Patient || !opts.Driven
+	if !opts.Driven {
+		opts.Preferences = platform.NewPreferences()
+	}
 	return opts
 }
 

@@ -75,7 +75,7 @@ func (s *Screen) scriptsBody() shownPage {
 	if page.Err != nil {
 		return s.unreachable(scriptsPage, page.Err.Error())
 	}
-	toggle(page.Doc.Body(), "dark", s.config.DarkMode)
+	toggle(page.Doc.Body(), "dark", s.dark())
 	return s.hosted(page)
 }
 

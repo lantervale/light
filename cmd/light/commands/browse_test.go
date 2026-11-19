@@ -23,7 +23,7 @@ func TestABrowserIsItsPersonsAndWaitsForASlowScript(t *testing.T) {
 	browse := &commands.Browse{}
 	got := browse.Options(build, profile)
 	if got.Driven || got.ExactText || !got.Patient || got.Dir != "/kept" || got.Version != "1.2.3" ||
-		got.Transport != nil || got.ScriptBudget != 0 {
+		got.Transport != nil || got.ScriptBudget != 0 || got.Preferences == nil {
 		t.Fatalf("a browser's options are %+v", got)
 	}
 	nobody := map[string]string{"EMBER_HIDDEN": "1", "EMBER_AUTOMATION": "127.0.0.1:1", "EMBER_CAPTURE": "x.png"}
@@ -32,6 +32,9 @@ func TestABrowserIsItsPersonsAndWaitsForASlowScript(t *testing.T) {
 		if got = browse.Options(build, profile); got.Patient || !got.Driven || got.ExactText {
 			t.Fatalf("a light run with %s waits for a slow script: %v, driven: %v, its pages' text exact: %v", name,
 				got.Patient, got.Driven, got.ExactText)
+		}
+		if got.Preferences != nil {
+			t.Fatalf("a light run with %s follows the system it runs on", name)
 		}
 		if !(&commands.Browse{Patient: true}).Options(build, profile).Patient {
 			t.Fatalf("--patient does not have a light run with %s wait", name)

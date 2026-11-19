@@ -755,7 +755,7 @@ func TestAModelThatCannotAnswerLeavesThePageUnjudgedUntilItCan(t *testing.T) {
 func TestTheCategoriesPageReordersEditsAndRemovesThem(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		s, _ := sortingOn(t, Options{})
-		s.configure(func(c *config.Config) { c.DarkMode = dark })
+		s.configure(func(c *config.Config) { c.Appearance = appearance(dark) })
 		list := s.Profile.sorted.list
 		list.ChooseSite("https://shop.test/offers", "Selling to me")
 		s.edits()
@@ -852,7 +852,7 @@ func TestTheStartPageCountsThePagesReadThisWeekByCategory(t *testing.T) {
 		t.Fatalf("the bars are %v", shares)
 	}
 	s.clean()
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	s.clean()
 	s.OpenInNewTab(srv.URL + "/offers")
@@ -1135,7 +1135,7 @@ func TestTheBannerOfACategoryThatWarnsIsChosenOnTheCategoriesPage(t *testing.T) 
 	srv := port(t)
 	for _, dark := range []bool{false, true} {
 		s, _ := sortingOn(t, Options{})
-		s.configure(func(c *config.Config) { c.DarkMode = dark })
+		s.configure(func(c *config.Config) { c.Appearance = appearance(dark) })
 		list := s.Profile.sorted.list
 		s.edits()
 		if s.doc.Value(s.node("category-set-0-banner")) != string(categories.Warning) ||

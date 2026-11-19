@@ -81,6 +81,11 @@ type Options struct {
 	// (identity.go).
 	Languages []string
 	Driven    bool
+	// Preferences is what the user chose on the system, kept up to date
+	// by the World it is in: light follows its appearance and its
+	// languages as they change. With none, or while it knows neither,
+	// the system's appearance is light and its languages are Languages.
+	Preferences *platform.Preferences
 	// ExactText draws the pages' text at its exact coverage, without
 	// stem darkening, unless a page says how its own is smoothed: for a
 	// light a test runner compares the pictures of.
@@ -238,7 +243,7 @@ func (p *Profile) screen(win *platform.Window, address string) *Screen {
 	s.apply()
 	s.features = features()
 	s.doc = ui.NewDocument(ui.CSS(sheet), ui.CSS(menu.Sheet), ui.CSS(devtools.Sheet), ui.Images(icons()),
-		ui.FetchImages(s.picture), ui.RightDragSelects())
+		ui.FetchImages(s.picture), ui.RightDragSelects(), ui.WheelScroll(p.config.ScrollFactor()))
 	s.build()
 	s.header()
 	s.visit(address)
@@ -425,7 +430,7 @@ func (s *Screen) show() {
 	s.leave(tab, session)
 	s.quitFrames(tab, session)
 	s.showNavigation()
-	s.tools.SetDark(s.config.DarkMode)
+	s.tools.SetDark(s.dark())
 	s.keepBodies(session)
 	s.tools.Show(&session.tools, session.log, session.said, s.warnings)
 	s.over = ""

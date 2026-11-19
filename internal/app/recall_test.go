@@ -423,7 +423,7 @@ func TestTheSettingsSayTheFeatureIsOffUntilSwitchedOnAndForget(t *testing.T) {
 		s.node("recall-kept").Text() != "Nothing is remembered." {
 		t.Fatalf("forgotten, %d pages are remembered", s.memory.pages.Len())
 	}
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	s.clean()
 	s.configure(func(c *config.Config) { c.Model = false })

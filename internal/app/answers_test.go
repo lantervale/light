@@ -358,7 +358,7 @@ func TestTheMenuAsksAboutThePageOnceTheModelAnswers(t *testing.T) {
 	s.assists.Set(answersFeature, false)
 	s.redrawModel()
 	s.frame()
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	if s.doc.ByID("menu-ask") != nil {
 		t.Fatal("with the answers off the menu still asks about the page")

@@ -313,7 +313,7 @@ func TestOnlyADocumentOfThePagesOriginAsks(t *testing.T) {
 
 func TestTheDialogFollowsTheDarkMode(t *testing.T) {
 	s, _ := askingPage(t)
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	dialog := s.has(`say(prompt("dark?", "yes"))`)
 	if !dialog.HasClass("dark") {
 		t.Fatal("in dark mode the dialog is light")

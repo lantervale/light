@@ -423,7 +423,7 @@ func TestTheBookmarksPageSaysWhatABookmarkedPageSaysWhileTheModelHelps(t *testin
 	s.suggested(fake)
 	s.click("bookmark-done")
 	for _, dark := range []bool{false, true} {
-		s.configure(func(c *config.Config) { c.DarkMode = dark })
+		s.configure(func(c *config.Config) { c.Appearance = appearance(dark) })
 		s.Open(bookmarksPage)
 		s.frame()
 		s.frame()

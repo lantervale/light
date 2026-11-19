@@ -66,7 +66,7 @@ func (s *Screen) preview(of string) {
 			s.doc.Body().Remove(node)
 			s.configure(func(c *config.Config) { c.PreviewSeen = of })
 		}))
-	toggle(node, "dark", s.config.DarkMode)
+	toggle(node, "dark", s.dark())
 	s.doc.Body().Append(node)
 	s.doc.ShowModal(node)
 }

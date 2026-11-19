@@ -253,7 +253,7 @@ func TestTheStartPageStacksInANarrowWindowAndIsShadedByTheDarkMode(t *testing.T)
 		t.Fatalf("%d chips, the first at %v, the last at %v, in a page %v", len(chips), chips[0].Box(), last, page)
 	}
 	s.clean()
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	if !s.dark() || src(s.node("logo")) != darkLogo || s.doc.ByID("continue") == nil {
 		t.Fatalf("the dark start page is dark %v, its logo %q", s.dark(), src(s.node("logo")))
@@ -326,7 +326,7 @@ func TestTheStartPageHasTheSizesOfItsMockup(t *testing.T) {
 		dark             bool
 		ink, card, field string
 	}{{false, "#1b1b1f", "#ffffff", "#ffffff"}, {true, "#e8e6ef", "#1c1b22", "#1c1b22"}} {
-		s.configure(func(cfg *config.Config) { cfg.DarkMode = c.dark })
+		s.configure(func(cfg *config.Config) { cfg.Appearance = appearance(c.dark) })
 		s.frame()
 		card := s.node("continue").Children()[1].Children()[0]
 		ink, _ := s.doc.ComputedValue(card.Children()[1].Children()[0], "color")

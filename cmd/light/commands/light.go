@@ -12,7 +12,8 @@ import (
 )
 
 // open makes a light of those options, its first window at address
-// when one is given, and the World they are in.
+// when one is given, and the World they are in, with the system's
+// preferences the options hold.
 func open(opts app.Options, address string) (*app.Profile, *world.World) {
 	profile := app.NewProfile(opts)
 	win := app.Window(nil)
@@ -21,7 +22,11 @@ func open(opts app.Options, address string) (*app.Profile, *world.World) {
 		screen.Open(screen.Resolve(address))
 	}
 	win.Add(screen.Document())
-	return profile, ember.New().AddEntities(win).AddSystems(profile)
+	w := ember.New().AddEntities(win).AddSystems(profile)
+	if opts.Preferences != nil {
+		w.AddEntity(opts.Preferences)
+	}
+	return profile, w
 }
 
 // run runs the World until its last window closes, then has the

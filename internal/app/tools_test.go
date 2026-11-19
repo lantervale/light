@@ -62,7 +62,7 @@ func TestTheToolsFollowTheDarkMode(t *testing.T) {
 		t.Fatal("with the dark mode off the tools are dark")
 	}
 	s.clean()
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	if s.node("devtools").HasClass("light") {
 		t.Fatal("with the dark mode on the tools are light")

@@ -100,6 +100,10 @@ type Profile struct {
 	// clock the seconds its frames have taken.
 	system string
 	clock  float32
+	// shaded is whether light's own pages were dark and spoken the
+	// system's languages when the settings last held (followSystem).
+	shaded bool
+	spoken []string
 	// warning is whether this run showed that light is an early preview.
 	warning bool
 	// shuts are the tabs closed since light started, the newest first,
@@ -217,7 +221,7 @@ func (p *Profile) open(ctx context.Context, address, accept string) (*fetch.Stre
 
 // hold has the settings hold for what the windows share: the requests
 // made from now on, the cookies, the network around, the downloads'
-// folder and the history's cap.
+// folder and the history's cap. It notes what it held of the system.
 func (p *Profile) hold() {
 	c := p.config
 	p.client.Store(fetch.New(&cookies.Transport{Jar: p.jar, Base: &netlog.Transport{Base: p.guard}},
@@ -231,6 +235,7 @@ func (p *Profile) hold() {
 	if p.modelGiven() {
 		p.opts.Library.Configure(c.ModelSettings())
 	}
+	p.shaded, p.spoken = p.dark(), p.preferred()
 }
 
 // keep writes the files that changed and were not written lately.
@@ -266,6 +271,7 @@ func (p *Profile) Update(f world.Frame) {
 		}
 	}
 	p.clock = f.Time.RealElapsed
+	p.followSystem()
 	p.warn()
 	for _, s := range slices.Clone(p.screens) {
 		s.tick()

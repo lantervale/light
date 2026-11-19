@@ -202,11 +202,11 @@ func TestTheSettingsAreTheSameInEveryWindow(t *testing.T) {
 	s.frame()
 	second := s.window(1)
 	s.click("logo")
-	if !s.dark() || !second.dark() || !second.doc.Checked(second.node("set-dark-mode")) {
-		t.Fatalf("after the first window went dark: the first %v, the second %v, its setting %v", s.dark(),
-			second.dark(), second.doc.Checked(second.node("set-dark-mode")))
+	if !s.dark() || !second.dark() || second.appearing() != config.AppearanceDark {
+		t.Fatalf("after the first window went dark: the first %v, the second %v, its setting %q", s.dark(),
+			second.dark(), second.appearing())
 	}
-	second.click("set-dark-mode")
+	second.appears(config.AppearanceLight)
 	if s.dark() || second.dark() || src(s.node("logo")) != logo {
 		t.Fatalf("after the second window's setting: the first dark %v with logo %q, the second %v", s.dark(),
 			src(s.node("logo")), second.dark())

@@ -681,7 +681,7 @@ func TestTheSettingsOfAModelThatIsOnChangeHowItRunsAndTurnItOff(t *testing.T) {
 	}
 	s.nothingOfTheModel()
 	s.clean()
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	s.clean()
 }

@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/url"
 	"runtime"
+	"slices"
+
+	"github.com/lantervale/ember/platform"
 
 	"github.com/lantervale/light/internal/dom"
 	"github.com/lantervale/light/pkg/fetch"
@@ -26,7 +29,34 @@ func (p *Profile) languages() []string {
 	if set := identity.Tags(p.config.Languages); len(set) > 0 {
 		return identity.Languages(set)
 	}
-	return identity.Languages(p.opts.Languages)
+	return identity.Languages(p.preferred())
+}
+
+// preferred are the languages the system's user prefers, most wanted
+// first: those the system says now, else those light was started with.
+func (p *Profile) preferred() []string {
+	if p.opts.Preferences != nil {
+		if tags := p.opts.Preferences.Languages(); len(tags) > 0 {
+			return tags
+		}
+	}
+	return p.opts.Languages
+}
+
+// dark reports whether light's own pages are drawn dark: as the
+// settings say, else as the system is, light while it says nothing.
+func (p *Profile) dark() bool {
+	return p.config.Dark(p.opts.Preferences != nil && p.opts.Preferences.Appearance() == platform.AppearanceDark)
+}
+
+// followSystem has light hold to the system's appearance and languages
+// once they changed.
+func (p *Profile) followSystem() {
+	if dark, tags := p.dark(), p.preferred(); dark == p.shaded && slices.Equal(tags, p.spoken) {
+		return
+	}
+	p.settle()
+	p.reshow()
 }
 
 // navigator is what a page's scripts read of light and of its machine,

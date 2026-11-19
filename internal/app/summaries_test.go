@@ -278,7 +278,7 @@ func TestTheSummariesShowInTheDarkAndInANarrowWindow(t *testing.T) {
 	s.frame()
 	for _, dark := range []bool{false, true} {
 		for _, width := range []float32{1024, 760} {
-			s.configure(func(c *config.Config) { c.DarkMode = dark })
+			s.configure(func(c *config.Config) { c.Appearance = appearance(dark) })
 			s.win.SetSize(geom.V2(width, 680))
 			s.frame()
 			s.frame()

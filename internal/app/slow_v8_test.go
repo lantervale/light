@@ -245,7 +245,7 @@ func TestTheBarOfASlowPageIsItsTabsAndItsWindows(t *testing.T) {
 
 func TestTheBarOfASlowPageFollowsTheDarkMode(t *testing.T) {
 	s, _ := spinningPage(t)
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.spins(`spin(300)`)
 	if !s.doc.ByID("slow").HasClass("dark") {
 		t.Fatal("in dark mode the bar is light")

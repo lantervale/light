@@ -23,6 +23,9 @@ func driven(t *testing.T, d *commands.Drive, profile *globals.Profile) (http.Rou
 		t.Fatalf("a light a test runner drives is driven: %v, and draws its pages' text exact: %v", opts.Driven,
 			opts.ExactText)
 	}
+	if opts.Preferences != nil {
+		t.Fatal("a light a test runner drives follows the system it runs on")
+	}
 	return opts.Transport, opts.ScriptBudget, opts.Patient, opts.Dir
 }
 

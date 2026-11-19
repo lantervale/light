@@ -127,7 +127,7 @@ func TestTheTranslationPageFitsItsWindowDarkAndLight(t *testing.T) {
 	for _, size := range []geom.Vec2{geom.V2(1200, 760), geom.V2(760, 480)} {
 		for _, dark := range []bool{false, true} {
 			s.win.SetSize(size)
-			s.configure(func(c *config.Config) { c.DarkMode = dark })
+			s.configure(func(c *config.Config) { c.Appearance = appearance(dark) })
 			s.frame()
 			s.frame()
 			if panes, view := s.box("translate-panes"), s.box("view"); panes.X < view.X || panes.X+panes.W >

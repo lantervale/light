@@ -38,7 +38,22 @@ const (
 	// Hours a page keeps the category the model gave it; none at 0.
 	MinCategoryHours = 0
 	MaxCategoryHours = 720
+	MinScrollSpeed   = 25
+	MaxScrollSpeed   = 400
 )
+
+// The appearances light's own pages are drawn in.
+const (
+	// AppearanceSystem follows the system's, light where it says none.
+	AppearanceSystem = ""
+	AppearanceLight  = "light"
+	AppearanceDark   = "dark"
+)
+
+// formerDarkMode is the key an earlier light kept its dark mode under,
+// on or off: on, it is read as AppearanceDark in a file that names no
+// appearance, and it is not written again.
+const formerDarkMode = "dark_mode"
 
 // Config is every setting. The file names each by its json name.
 type Config struct {
@@ -47,8 +62,14 @@ type Config struct {
 	// SearchEngine is the engine what is typed in the address bar and
 	// is not an address is sent to, by its id (search.Engines).
 	SearchEngine string `json:"search_engine"`
-	// DarkMode is whether light's own pages are drawn dark.
-	DarkMode bool `json:"dark_mode"`
+	// Appearance is how light's own pages are drawn: AppearanceLight,
+	// AppearanceDark, or AppearanceSystem for as the system is.
+	Appearance string `json:"appearance"`
+	// ScrollReversed is whether the wheel scrolls a page the other way
+	// than it comes from the system, and ScrollSpeed how far, in percent
+	// of what the system says.
+	ScrollReversed bool `json:"scroll_reversed"`
+	ScrollSpeed    int  `json:"scroll_speed"`
 	// Downloads is the folder files are saved to, "" for the user's
 	// Downloads folder.
 	Downloads string `json:"downloads"`
@@ -139,7 +160,7 @@ func Default() Config {
 	return Config{
 		StartPage: tabs.Home, SearchEngine: search.Default, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
 		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
-		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24,
+		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24, ScrollSpeed: 100,
 	}
 }
 
@@ -150,6 +171,10 @@ func (c Config) Valid() Config {
 	if !search.Known(c.SearchEngine) {
 		c.SearchEngine = d.SearchEngine
 	}
+	if c.Appearance != AppearanceLight && c.Appearance != AppearanceDark {
+		c.Appearance = AppearanceSystem
+	}
+	c.ScrollSpeed = within(c.ScrollSpeed, MinScrollSpeed, MaxScrollSpeed, d.ScrollSpeed)
 	c.Downloads = strings.TrimSpace(c.Downloads)
 	if c.UserAgent = text(c.UserAgent, d.UserAgent); c.UserAgent == formerUserAgent {
 		c.UserAgent = d.UserAgent
@@ -175,6 +200,22 @@ func text(value, fallback string) string {
 	return value
 }
 
+// Dark reports whether light's own pages are drawn dark on a system
+// that is dark or not: as set, else as the system.
+func (c Config) Dark(system bool) bool {
+	return c.Appearance == AppearanceDark || c.Appearance == AppearanceSystem && system
+}
+
+// ScrollFactor is how many times what the wheel says a page scrolls
+// by, negative the other way.
+func (c Config) ScrollFactor() float32 {
+	factor := float32(c.ScrollSpeed) / 100
+	if c.ScrollReversed {
+		return -factor
+	}
+	return factor
+}
+
 func within(value, low, high, fallback int) int {
 	if value < low || value > high {
 		return fallback
@@ -198,8 +239,9 @@ func (c Config) Encode() ([]byte, error) {
 
 // Decode reads what Encode wrote, each setting alone: a key it does not
 // know is ignored, and a value that is not of its kind or out of its
-// bounds is the default. Data that is no such file is the defaults and
-// an error.
+// bounds is the default. The dark mode an earlier light kept is read as
+// its appearance. Data that is no such file is the defaults and an
+// error.
 func Decode(data []byte) (Config, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
@@ -216,6 +258,9 @@ func Decode(data []byte) (Config, error) {
 		if json.Unmarshal(raw, read.Interface()) == nil {
 			value.Field(i).Set(read.Elem())
 		}
+	}
+	if _, named := fields["appearance"]; !named && string(fields[formerDarkMode]) == "true" {
+		c.Appearance = AppearanceDark
 	}
 	return c.Valid(), nil
 }

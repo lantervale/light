@@ -175,7 +175,7 @@ func TestAQuestionIsAnsweredByWhatThePagesSaid(t *testing.T) {
 		t.Fatal("asking took the focus off the field")
 	}
 	s.clean()
-	s.configure(func(c *config.Config) { c.DarkMode = true })
+	s.configure(func(c *config.Config) { c.Appearance = config.AppearanceDark })
 	s.frame()
 	if !s.dark() || len(s.recalledRows()) != 1 {
 		t.Fatalf("dark, the matches are %v", s.recalledRows())
