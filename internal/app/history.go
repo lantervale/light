@@ -11,11 +11,12 @@ import (
 const historyPage = own + historyName
 
 // visit notes a move to a page of light's own, but those that list what
-// light keeps; one of the web is noted
-// when it lands, under the address that answered and its title.
+// light keeps and the one the model's categories are edited on; one of
+// the web is noted when it lands, under the address that answered and
+// its title.
 func (s *Screen) visit(address string) {
 	if _, _, lights := tabs.Own(address); lights && address != tabs.Home && address != historyPage &&
-		address != bookmarksPage {
+		address != bookmarksPage && address != categoriesPage {
 		s.record(address, s.title(address))
 	}
 }
@@ -30,6 +31,7 @@ func (p *Profile) record(address, title string) {
 
 func (p *Profile) clearHistory() {
 	p.visits.Clear()
+	p.unshut("")
 	p.forgetSorted()
 	p.rewrite()
 }

@@ -21,7 +21,7 @@ func (s *Screen) title(address string) string {
 	if name == tabs.SearchName {
 		return query + " - Search"
 	}
-	if page, ok := pageNamed(name); ok {
+	if page, ok := s.pageNamed(name); ok {
 		return page.title
 	}
 	if _, source := tabs.Source(address); source {
@@ -57,7 +57,7 @@ func (s *Screen) page(address string) *ui.Node {
 func (s *Screen) pageOf(address string) shownPage {
 	name, query, lights := tabs.Own(address)
 	of, source := tabs.Source(address)
-	built, known := pageNamed(name)
+	built, known := s.pageNamed(name)
 	switch {
 	case source:
 		return s.sourcePage(of)

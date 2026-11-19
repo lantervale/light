@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/lantervale/ember/ui"
 
@@ -46,14 +47,16 @@ const (
 )
 
 // sortedPages is the categories light's windows share: the list, why
-// its file could not be read, that file, and the pages counted as read
-// on the day on, each under the category it was counted in.
+// its file could not be read, that file, the pages counted as read on
+// the day on, each under the category it was counted in, and the
+// category the model last answered for a page of each site this run.
 type sortedPages struct {
 	list    *categories.List
 	unread  error
 	file    *store
 	counted map[string]string
 	on      string
+	last    map[string]string
 }
 
 // sorter is what a window shows of the categories: the label of the
@@ -76,9 +79,10 @@ type sorter struct {
 	// cards were open when it opened.
 	address string
 	others  int
-	// relist lists the categories again on the settings' page, in held.
-	relist func()
-	held   *ui.Node
+	// relist lists the categories again on their page, in held, and
+	// reline shows the settings' part of them again, in lined.
+	relist, reline func()
+	held, lined    *ui.Node
 }
 
 // judgment is what the model made of a page: the category it answered
@@ -109,7 +113,7 @@ type tabMark struct {
 // restoreSorted reads the categories from the folder light was given.
 func (p *Profile) restoreSorted() {
 	k := &p.sorted
-	k.list, k.counted = categories.New(), map[string]string{}
+	k.list, k.counted, k.last = categories.New(), map[string]string{}, map[string]string{}
 	k.file = &store{name: sortedName, write: func(path string) error { return categories.Save(path, k.list) }}
 	if p.opts.Dir != "" {
 		k.list, k.unread = categories.Load(k.file.path(p.opts.Dir))
@@ -119,12 +123,61 @@ func (p *Profile) restoreSorted() {
 // resorted has the categories that changed written.
 func (p *Profile) resorted() { p.sorted.file.touch() }
 
-// forgetSorted forgets which pages were read in which category, as the
-// history is cleared.
+// forgetSorted forgets which pages were read in which category and
+// what the model made of each, as the history is cleared.
 func (p *Profile) forgetSorted() {
 	p.sorted.list.ForgetRead()
-	p.sorted.counted = map[string]string{}
+	p.sorted.list.ForgetKept()
+	p.sorted.counted, p.sorted.last = map[string]string{}, map[string]string{}
 	p.resorted()
+}
+
+// keeps reports whether what the model made of a page is kept for the
+// next time the page is opened: for the time the settings say, and
+// only while the history is kept.
+func (p *Profile) keeps() bool { return p.config.CategoryHours > 0 && p.config.KeepHistory }
+
+// keptSince is the time a judgment was made after to be kept still.
+func (p *Profile) keptSince() time.Time {
+	return p.opts.Now().Add(-time.Duration(p.config.CategoryHours) * time.Hour)
+}
+
+// keepJudged notes what the model answered of the page at address as
+// the last of its site, and keeps it for the page.
+func (p *Profile) keepJudged(address, answer, reason string) {
+	k := &p.sorted
+	k.last[categories.SiteOf(address)] = answer
+	if !p.keeps() {
+		return
+	}
+	k.list.Expire(p.keptSince())
+	k.list.Keep(address, answer, reason, p.opts.Now())
+	p.resorted()
+}
+
+// judgedBefore is what the model made of the page at address the last
+// time, while that is kept.
+func (p *Profile) judgedBefore(address string) (categories.Judgment, bool) {
+	if !p.keeps() {
+		return categories.Judgment{}, false
+	}
+	return p.sorted.list.Kept(address, p.keptSince())
+}
+
+// hintOf is the category of the page of the site of address the model
+// last judged, this run or while its judgment is kept: what stands for
+// the category of another page of the site while that one is judged.
+func (p *Profile) hintOf(address string) (categories.Category, bool) {
+	k := &p.sorted
+	if name, ok := k.last[categories.SiteOf(address)]; ok {
+		if c, known := k.list.Named(name); known {
+			return c, true
+		}
+	}
+	if !p.keeps() {
+		return categories.Category{}, false
+	}
+	return k.list.KeptOfSite(address, p.keptSince())
 }
 
 // count notes the page at address read in the category name, once a
@@ -175,6 +228,22 @@ func (s *Screen) buildSorting() {
 			e.StopPropagation()
 		}))
 	s.view.Parent().Append(g.bar, g.cover, g.card)
+}
+
+// signOf draws the sign of a banner, each of a shape of its own: a
+// banner is never told by its colour alone.
+func signOf(b categories.Banner) *ui.Node {
+	const lined = ` fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`
+	shape := `<path d="M6 1.5 11.2 10.5H.8z" stroke-linejoin="round"` + lined + `<path d="M6 5v2.6M6 9.1v.1"` + lined
+	switch b {
+	case categories.Warning:
+	case categories.Info:
+		shape = `<circle cx="6" cy="6" r="4.8"` + lined + `<path d="M6 5.6v3M6 3.4v.1"` + lined
+	case categories.Danger:
+		shape = `<path d="M4 .9H8L11.1 4V8L8 11.1H4L.9 8V4z" fill="currentColor"/>` +
+			`<path d="M6 3.4v3.2M6 8.6v.1" fill="none" stroke="#1c1b22" stroke-width="1.5" stroke-linecap="round"/>`
+	}
+	return ui.Svg(shape, ui.Class("mark", "sign"), ui.Attr("viewBox", "0 0 12 12"), ui.Attr("aria-hidden", "true"))
 }
 
 // markOf draws a mark: its shape in its colour.
@@ -244,12 +313,18 @@ func (s *Screen) watchSorting() {
 		if s.relist != nil {
 			s.relist()
 		}
+		if g.reline != nil && s.shows(g.lined) {
+			g.reline()
+		}
 		if !helps {
 			s.closeSorting(false)
 			for page, j := range g.judged {
 				j.stop()
 				delete(g.judged, page)
 			}
+		}
+		if s.browser.Tab().Current() == categoriesPage {
+			s.show()
 		}
 	}
 	if helps {
@@ -296,8 +371,9 @@ func (j *judgment) stop() {
 
 // judge asks the model for the category of a page it has none of for
 // the list as it stands. A page its reader chose a category for is not
-// asked about, and one the model could not judge is asked about again
-// once the model changed.
+// asked about, one the model judged within the time its judgments are
+// kept is of the category it answered then, and one the model could not
+// judge is asked about again once the model changed.
 func (s *Screen) judge(page *web.Page) {
 	g := &s.sorting
 	list := s.sorted.list
@@ -318,6 +394,13 @@ func (s *Screen) judge(page *web.Page) {
 	case j.have && j.at == list.Asked():
 		return
 	case j.failed != 0 && (j.failed == status.Seq || status.State != model.Ready || j.tries >= sortTries):
+		return
+	}
+	if kept, ok := s.judgedBefore(j.address); ok {
+		j.have, j.at, j.failed, j.answer, j.reason = true, list.Asked(), 0, kept.Category, kept.Reason
+		g.changes++
+		s.sorted.last[categories.SiteOf(j.address)] = kept.Category
+		s.count(j.address, kept.Category)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -353,6 +436,9 @@ func (s *Screen) judgedAs(page *web.Page, j *judgment, answer, reason string, er
 	if v, ok := s.sorted.list.Verdict(j.address, answer, reason); ok {
 		s.count(j.address, v.Name)
 	}
+	if j.at == s.sorted.list.Asked() {
+		s.keepJudged(j.address, answer, reason)
+	}
 }
 
 // sorting is one page to sort: the question, the names it is answered
@@ -364,8 +450,9 @@ type sorting struct {
 	text     string
 }
 
-// ask asks the model which category the page is of, then why in a
-// sentence. The page's text is given as data, cut to sortRoom, and the
+// ask asks the model which category the page is of, the categories
+// after the page, then why in a sentence. The page's text is given as
+// data, cut to sortRoom, and the
 // answer is kept to one of the names; a page of Default is given no
 // reason.
 func (a sorting) ask(ctx context.Context, m model.Model) (string, string, error) {
@@ -373,14 +460,15 @@ func (a sorting) ask(ctx context.Context, m model.Model) (string, string, error)
 	if room <= 0 {
 		room = fallbackContext
 	}
-	system := a.question + " The page" + untrusted + obeyNothing
-	data, _, err := fitted(ctx, m, min(room-reasonTokens-spare, sortRoom), system+categories.Why(categories.Default()),
-		a.text)
+	system := categories.Sorter + " The page" + untrusted + obeyNothing
+	data, _, err := fitted(ctx, m, min(room-reasonTokens-spare, sortRoom),
+		system+a.question+categories.Why(categories.Default()), a.text)
 	if err != nil {
 		return "", "", err
 	}
 	page := []model.Message{{Role: model.User, Text: "The page:\n" + asData(data)}}
-	stream, err := m.Generate(ctx, model.Request{System: system, Messages: page, MaxTokens: sortTokens,
+	asked := []model.Message{{Role: model.User, Text: page[0].Text + "\n\n" + a.question}}
+	stream, err := m.Generate(ctx, model.Request{System: system, Messages: asked, MaxTokens: sortTokens,
 		Grammar: model.Choice(a.names...), Priority: model.Background})
 	if err != nil {
 		return "", "", err
@@ -406,7 +494,9 @@ func (a sorting) ask(ctx context.Context, m model.Model) (string, string, error)
 
 // showSorting shows the category of the shown tab's page: its label in
 // the address field, its bar or its cover over the page, and the mark
-// of each tab's.
+// of each tab's. While the page is judged its label is three dots,
+// after the category of the last page of its site that was: a hint
+// only, which neither warns nor covers.
 func (s *Screen) showSorting() {
 	g := &s.sorting
 	s.markTabs()
@@ -415,7 +505,11 @@ func (s *Screen) showSorting() {
 	passed := judged && g.judged[page].passed
 	j := g.judged[page]
 	waited := !judged && j != nil && j.pending && s.helps(sortingFeature)
-	key := fmt.Sprint(judged, v, passed, waited)
+	hint, hinted := categories.Category{}, false
+	if waited {
+		hint, hinted = s.hintOf(j.address)
+	}
+	key := fmt.Sprint(judged, v, passed, waited, hinted, hint)
 	if key == g.drawn {
 		return
 	}
@@ -424,13 +518,15 @@ func (s *Screen) showSorting() {
 	empty(g.label)
 	toggle(g.label, "shown", judged || waited)
 	switch {
+	case hinted:
+		s.labelHint(hint, siteOf(j.address))
 	case waited:
 		g.label.Append(ui.Span(ui.Class("pill"), ui.Span(ui.Text("…"))))
 		g.label.SetAttr("aria-label", "This page is being sorted. "+sortedTitle)
 	case marked:
-		g.label.Append(ui.Span(ui.Class("pill"), markOf(v.Mark), ui.Span(ui.Text(v.Name))))
+		g.label.Append(ui.Span(ui.Class("pill"), markOf(v.Mark), ui.Span(ui.Text(v.Label()))))
 	case judged:
-		g.label.Append(ui.Span(ui.Class("pill"), ui.Span(ui.Text(v.Name))))
+		g.label.Append(ui.Span(ui.Class("pill"), ui.Span(ui.Text(v.Label()))))
 	}
 	if judged {
 		g.label.SetAttr("aria-label", "This page: "+v.Name+". "+sortedTitle)
@@ -446,12 +542,11 @@ func (s *Screen) showSorting() {
 		g.judged[page].passed = true
 		g.changes++
 	}
+	for _, b := range categories.Banners() {
+		toggle(g.bar, string(b), warned && v.Banner == b)
+	}
 	if warned {
-		g.bar.SetStyle("border-color: " + v.Colour)
-		g.bar.Append(markOf(v.Mark), ui.Strong(ui.Text(v.Name)), ui.Span(ui.Class("why"), ui.Text(whyOf(v))),
-			ui.Button(ui.ID("category-bar-why"), ui.Text("Why"), ui.OnClick(s.openSorting)),
-			ui.Button(ui.ID("category-bar-close"), ui.Attr("aria-label", "Hide this warning"), glyph("close"),
-				ui.OnClick(pass)))
+		s.fillBanner(v, pass)
 	}
 	if covered {
 		g.cover.Append(markOf(v.Mark, "big"), ui.Strong(ui.Text(v.Name)),
@@ -461,6 +556,34 @@ func (s *Screen) showSorting() {
 				ui.Button(ui.ID("category-cover-why-more"), ui.Text("Why"), ui.OnClick(s.openSorting)),
 				ui.Button(ui.ID("category-show"), ui.Text("Show this page"), ui.OnClick(pass))))
 	}
+}
+
+// labelHint has the label say the category the last page judged of
+// site was of, and three dots: the shown page of it is being judged.
+func (s *Screen) labelHint(hint categories.Category, site string) {
+	label := s.sorting.label
+	pill := ui.Span(ui.Class("pill", "refreshing"))
+	if hint.Action != categories.NoMark {
+		pill.Append(markOf(hint.Mark))
+	}
+	pill.Append(ui.Span(ui.Text(hint.Label() + "…")))
+	label.Append(pill)
+	label.SetAttr("aria-label", "This page is being sorted. The last page of "+site+" was: "+hint.Name+". "+
+		sortedTitle)
+}
+
+// fillBanner writes the bar of a page that warns: the sign of its
+// category's banner, its label, the message of its reader's, else why
+// the page is of it, what opens the card and what closes the bar.
+func (s *Screen) fillBanner(v categories.Verdict, pass func()) {
+	said := whyOf(v)
+	if v.Message != "" {
+		said = v.Message
+	}
+	s.sorting.bar.Append(signOf(v.Banner), ui.Strong(ui.Text(v.Label())), ui.Span(ui.Class("why"), ui.Text(said)),
+		ui.Button(ui.ID("category-bar-why"), ui.Text("Why"), ui.OnClick(s.openSorting)),
+		ui.Button(ui.ID("category-bar-close"), ui.Attr("aria-label", "Hide this banner"), glyph("close"),
+			ui.OnClick(pass)))
 }
 
 // whyOf is why a page is of its category, and that a judgment of the
@@ -500,7 +623,7 @@ func (s *Screen) markTabs() {
 		}
 		v, judged := s.verdictOf(s.sortedPage(tab))
 		marked := judged && v.Action != categories.NoMark
-		key := fmt.Sprint(marked, v.Mark, v.Action, v.Name)
+		key := fmt.Sprint(marked, v.Mark, v.Action, v.Label())
 		if key == m.key {
 			continue
 		}
@@ -512,7 +635,7 @@ func (s *Screen) markTabs() {
 		node.RemoveAttr("data-category")
 		if marked {
 			m.line.SetStyle("background: " + v.Colour)
-			node.SetAttr("data-category", v.Name)
+			node.SetAttr("data-category", v.Label())
 		}
 		if marked && v.Action == categories.Warn {
 			m.sign.Append(markOf(v.Mark))

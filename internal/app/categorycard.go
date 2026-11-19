@@ -31,7 +31,7 @@ func (s *Screen) sheets() int {
 }
 
 // openSorting shows the card of the shown page's category, or the
-// settings' categories when the shown page is not one that is sorted.
+// categories' page when the shown page is not one that is sorted.
 func (s *Screen) openSorting() {
 	if !s.helps(sortingFeature) {
 		return
@@ -39,10 +39,7 @@ func (s *Screen) openSorting() {
 	page := s.sortedPage(s.browser.Tab())
 	if page == nil {
 		s.closeChoices()
-		s.Open(configPage)
-		if s.sorting.held != nil {
-			s.doc.ScrollIntoView(s.sorting.held)
-		}
+		s.Open(categoriesPage)
 		return
 	}
 	s.menu.Close()

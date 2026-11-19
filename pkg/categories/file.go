@@ -13,6 +13,8 @@ type file struct {
 	Categories *[]Category               `json:"categories"`
 	Sites      []Choice                  `json:"sites"`
 	Pages      []Choice                  `json:"pages"`
+	Judged     []Judgment                `json:"judged,omitempty"`
+	JudgedFor  string                    `json:"judged_for,omitempty"`
 	Read       map[string]map[string]int `json:"read"`
 }
 
@@ -22,7 +24,10 @@ func (l *List) Encode() ([]byte, error) {
 	if own == nil {
 		own = []Category{}
 	}
-	kept := file{Categories: &own, Sites: l.sites, Pages: l.pages, Read: l.read}
+	kept := file{Categories: &own, Sites: l.sites, Pages: l.pages, Read: l.read, Judged: l.judged}
+	if len(l.judged) > 0 {
+		kept.JudgedFor = l.question()
+	}
 	if kept.Sites == nil {
 		kept.Sites = []Choice{}
 	}
@@ -35,8 +40,10 @@ func (l *List) Encode() ([]byte, error) {
 
 // Decode reads a list from JSON: the shipped one where it names no
 // categories. What does not hold is dropped: a category without a name
-// or named twice or as Default, a mark or an action light does not
-// know, a choice for a category that is not there.
+// or named twice or as Default, a mark, an action or a banner light does
+// not know, a choice for a category that is not there, the judgments
+// made for other categories than the file's. A category that names no
+// banner warns as one did before it had any.
 func Decode(data []byte) (*List, error) {
 	var kept file
 	l := New()
@@ -47,6 +54,7 @@ func Decode(data []byte) (*List, error) {
 		l.own = nil
 		for _, c := range *kept.Categories {
 			c.Name, c.Description = line(c.Name, maxName), line(c.Description, maxDescription)
+			c.Tag, c.Message = line(c.Tag, maxTag), line(c.Message, maxMessage)
 			if _, taken := l.Named(c.Name); c.Name == "" || taken {
 				continue
 			}
@@ -55,6 +63,9 @@ func Decode(data []byte) (*List, error) {
 			}
 			if !c.Action.valid() {
 				c.Action = Marked
+			}
+			if !c.Banner.valid() {
+				c.Banner = Warning
 			}
 			l.own = append(l.own, c)
 		}
@@ -67,6 +78,11 @@ func Decode(data []byte) (*List, error) {
 	for _, c := range kept.Pages {
 		if named, ok := l.Named(c.Category); ok && c.Address != "" {
 			l.pages = append(l.pages, Choice{Address: c.Address, Category: named.Name})
+		}
+	}
+	if kept.JudgedFor == l.question() {
+		for _, j := range kept.Judged {
+			l.keep(j)
 		}
 	}
 	for on, pages := range kept.Read {

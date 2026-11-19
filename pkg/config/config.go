@@ -35,6 +35,9 @@ const (
 	// A height of the developer tools out of these is their own.
 	MinToolsHeight = 120
 	MaxToolsHeight = 4000
+	// Hours a page keeps the category the model gave it; none at 0.
+	MinCategoryHours = 0
+	MaxCategoryHours = 720
 )
 
 // Config is every setting. The file names each by its json name.
@@ -113,6 +116,9 @@ type Config struct {
 	// the history asked by meaning, by their hosts, as "bank.example,
 	// mail.example".
 	RecallExcluded string `json:"recall_excluded"`
+	// CategoryHours is how many hours a page keeps the category the
+	// model gave it before the model is asked again, 0 for not at all.
+	CategoryHours int `json:"category_hours"`
 }
 
 // formerUserAgent is the User-Agent light once had by default and wrote
@@ -124,7 +130,7 @@ func Default() Config {
 	return Config{
 		StartPage: tabs.Home, SearchEngine: search.Default, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
 		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
-		JavaScript: true, Frames: true, Cookies: true,
+		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24,
 	}
 }
 
@@ -146,6 +152,7 @@ func (c Config) Valid() Config {
 	c.Redirects = within(c.Redirects, MinRedirects, MaxRedirects, d.Redirects)
 	c.Requests = within(c.Requests, MinRequests, MaxRequests, d.Requests)
 	c.ToolsHeight = within(c.ToolsHeight, MinToolsHeight, MaxToolsHeight, d.ToolsHeight)
+	c.CategoryHours = within(c.CategoryHours, MinCategoryHours, MaxCategoryHours, d.CategoryHours)
 	return c.validModel().validRecall()
 }
 

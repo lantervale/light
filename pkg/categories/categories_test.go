@@ -218,6 +218,9 @@ func TestTheQuestionListsTheCategoriesInOrderAndAsksForOneName(t *testing.T) {
 		!strings.HasSuffix(q, "nothing else: Work, Danger, Politics, Selling to me, Default.") {
 		t.Fatalf("the question is\n%s", q)
 	}
+	if strings.Contains(categories.Sorter, "Politics") || !strings.Contains(categories.Sorter, "any language") {
+		t.Fatalf("the model is told %q before the page", categories.Sorter)
+	}
 	why := categories.Why(l.All()[2])
 	if !strings.Contains(why, `"Politics"`) || !strings.Contains(why, "one short sentence") {
 		t.Fatalf("the reason is asked by %q", why)

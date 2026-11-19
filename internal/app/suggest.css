@@ -6,7 +6,8 @@
 #bookmarks-list .summary img { flex: none; width: 14px; height: 14px; margin-top: 2px; }
 .card.summed { flex-direction: column; align-items: stretch; gap: 10px; }
 .card .top { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.card .summary { padding: 8px 10px; border-radius: 8px; background: var(--rule); }
+#page .card .summary { padding: 10px 12px; border-radius: 8px; background: var(--inset); color: var(--ink);
+	line-height: 19px; }
 #continue .head { align-items: center; }
 #continue .head.summed + .cards { grid-template-columns: minmax(0, 1fr); }
 #continue .robot-toggle { background: var(--rule); }

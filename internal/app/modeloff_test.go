@@ -29,6 +29,7 @@ func (s *shown) nothingHelped(where string) {
 		case n.HasClass("robot-toggle"), strings.Contains(src, "robot") && n.Parent().ID() != "menu-model-on",
 			strings.HasPrefix(id, "category"), strings.HasPrefix(id, "answer"), strings.HasPrefix(id, "picked"),
 			strings.HasPrefix(id, "history-ask"), strings.HasPrefix(id, "find-pass"), strings.HasPrefix(id, "set-recall"),
+			strings.HasPrefix(id, "complete-ask"),
 			id == "robot", id == "menu-ask", id == "menu-sorted", id == "menu-model", id == "find-robot",
 			id == "continue-robot", id == "bookmark-robot":
 			s.t.Errorf("%s: without a model the screen shows <%s id=%q src=%q>", where, n.Tag(), id, src)
@@ -41,7 +42,8 @@ func (s *shown) nothingHelped(where string) {
 			s.t.Errorf("%s: without a model the screen says %q", where, f.label)
 		}
 	}
-	for _, said := range []string{"by your categories", "by meaning", "what pages said", "on this device, nothing sent"} {
+	for _, said := range []string{"by your categories", "by meaning", "what pages said", "on this device, nothing sent",
+		"Ask this page"} {
 		if strings.Contains(text, said) {
 			s.t.Errorf("%s: without a model the screen says %q", where, said)
 		}
@@ -69,6 +71,12 @@ func TestWithoutAModelNothingOfWhatItHelpsWithShowsAnywhere(t *testing.T) {
 		s.frame()
 		s.types("ferry")
 		s.nothingHelped(name + ", find in page")
+		s.press(input.KeyEscape)
+		s.retypes(ferryQuestion)
+		if !s.completeOpen() {
+			t.Fatalf("%s: the address field typed in lists nothing", name)
+		}
+		s.nothingHelped(name + ", the address field typed in")
 		s.press(input.KeyEscape)
 		s.click("menu")
 		s.nothingHelped(name + ", the menu")

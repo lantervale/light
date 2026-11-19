@@ -1,8 +1,10 @@
 // Package categories is the categories a reader sorts pages into, in
 // plain Go: an ordered list of their own, each a name, what belongs in
-// it in their words, a mark and what light does with a page of it; what
-// they chose for a site or a page, which wins over any judgment; the
-// verdict for a page; and how many pages of each were read, by day.
+// it in their words, a mark, what light does with a page of it and the
+// banner it warns with; what they chose for a site or a page, which wins
+// over any judgment; the verdict for a page, and the model's kept for a
+// time by the page's address; and how many pages of each were read, by
+// day.
 //
 // The first category that fits wins, and Default, everything else, is
 // always the last. A verdict is a hint: nothing here says a page is
@@ -104,23 +106,41 @@ func (m Mark) valid() bool {
 }
 
 // Category is one category: its name, what belongs in it as its reader
-// says it, its mark and what light does with a page of it.
+// says it, the short tag its label shows in place of its name, its mark,
+// what light does with a page of it, and the banner of one that warns
+// with the message of its reader's it shows in place of the reason.
 type Category struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Tag         string `json:"tag,omitempty"`
 	Mark
-	Action Action `json:"action"`
+	Action  Action `json:"action"`
+	Banner  Banner `json:"banner"`
+	Message string `json:"message,omitempty"`
+}
+
+// Label is what a page of the category is labelled: its tag, else its
+// name.
+func (c Category) Label() string {
+	if c.Tag != "" {
+		return c.Tag
+	}
+	return c.Name
 }
 
 const (
 	// DefaultName names the category of everything else.
 	DefaultName = "Default"
-	// maxName and maxDescription are the longest a name and a
-	// description are kept, in bytes; maxPages how many pages are kept
-	// a choice for, and keptDays how many days of reading.
+	// maxName, maxDescription, maxTag and maxMessage are the longest a
+	// name, a description, a tag and a banner's message are kept, in
+	// bytes; maxPages how many pages are kept a choice for, maxKept how
+	// many a judgment, and keptDays how many days of reading.
 	maxName        = 40
 	maxDescription = 240
+	maxTag         = 16
+	maxMessage     = 160
 	maxPages       = 500
+	maxKept        = 2000
 	keptDays       = 60
 	day            = "2006-01-02"
 )
@@ -128,17 +148,21 @@ const (
 // Default is the category of everything else: it is always the last,
 // and shows nothing.
 func Default() Category {
-	return Category{Name: DefaultName, Description: "everything else", Mark: Mark{grey, Ring}, Action: NoMark}
+	return Category{Name: DefaultName, Description: "everything else", Mark: Mark{grey, Ring}, Action: NoMark,
+		Banner: Warning}
 }
 
 // shipped are the categories of a new list.
 func shipped() []Category {
+	made := func(name, description string, mark Mark, action Action) Category {
+		return Category{Name: name, Description: description, Mark: mark, Action: action, Banner: Warning}
+	}
 	return []Category{
-		{"Danger", "asks for a password or card where it should not, or imitates another site",
-			Mark{red, Triangle}, Warn},
-		{"Politics", "elections, parties, governments and what they decide", Mark{purple, Dot}, Marked},
-		{"Selling to me", "the page mainly wants me to buy or subscribe", Mark{amber, Square}, Marked},
-		{"Work", "what I work on and with", Mark{green, Frame}, Marked},
+		made("Danger", "asks for a password or card where it should not, or imitates another site",
+			Mark{red, Triangle}, Warn),
+		made("Politics", "elections, parties, governments and what they decide", Mark{purple, Dot}, Marked),
+		made("Selling to me", "the page mainly wants me to buy or subscribe", Mark{amber, Square}, Marked),
+		made("Work", "what I work on and with", Mark{green, Frame}, Marked),
 	}
 }
 
@@ -175,12 +199,14 @@ type Count struct {
 }
 
 // List is a reader's categories in their order, what they chose for
-// sites and pages, and what they read.
+// sites and pages, what a model made of the pages it judged, the oldest
+// first, and what they read.
 type List struct {
-	own   []Category
-	sites []Choice
-	pages []Choice
-	read  map[string]map[string]int
+	own    []Category
+	sites  []Choice
+	pages  []Choice
+	judged []Judgment
+	read   map[string]map[string]int
 	// asked counts the changes of what a model is asked, and version
 	// every change.
 	asked, version uint64
@@ -214,6 +240,7 @@ func (l *List) changed(asked bool) {
 	l.version++
 	if asked {
 		l.asked++
+		l.judged = nil
 	}
 }
 
@@ -305,7 +332,7 @@ func (l *List) Add(description string) (Category, bool) {
 	if name = line(name, maxName); name == "" || description == "" {
 		return Category{}, false
 	}
-	c := Category{Name: l.free(name, -1), Description: description, Mark: l.spare(), Action: Marked}
+	c := Category{Name: l.free(name, -1), Description: description, Mark: l.spare(), Action: Marked, Banner: Warning}
 	l.own = append(l.own, c)
 	l.changed(true)
 	return c, true
@@ -313,8 +340,9 @@ func (l *List) Add(description string) (Category, bool) {
 
 // Edit changes the category name to what to says: a name that is empty
 // or Default's keeps the one it had, one another category has is
-// numbered, and a mark or an action light does not know keeps the one
-// it had. What was chosen and read under the old name follows the new.
+// numbered, and a mark, an action or a banner light does not know keeps
+// the one it had; an empty tag is the name, and an empty message the
+// reason. What was chosen and read under the old name follows the new.
 func (l *List) Edit(name string, to Category) bool {
 	i := l.find(name)
 	if i < 0 {
@@ -322,6 +350,7 @@ func (l *List) Edit(name string, to Category) bool {
 	}
 	was := l.own[i]
 	to.Name, to.Description = line(to.Name, maxName), line(to.Description, maxDescription)
+	to.Tag, to.Message = line(to.Tag, maxTag), line(to.Message, maxMessage)
 	if to.Name == "" || strings.EqualFold(to.Name, DefaultName) {
 		to.Name = was.Name
 	}
@@ -334,6 +363,9 @@ func (l *List) Edit(name string, to Category) bool {
 	}
 	if !to.Action.valid() {
 		to.Action = was.Action
+	}
+	if !to.Banner.valid() {
+		to.Banner = was.Banner
 	}
 	if to == was {
 		return false
@@ -516,12 +548,18 @@ func Sentence(reason string) string {
 	return first
 }
 
-// Question is what a model is asked of a page: the categories in
-// order, each with what belongs in it, and to name the first that fits.
+// Sorter is what a model is told before a page it sorts.
+const Sorter = "You sort a web page into one of its reader's own categories. The page may be in any language: " +
+	"the categories are about its subject, whatever its language."
+
+// Question is what a model is asked of a page, after it: the categories
+// in order, each with what belongs in it, and to name the first that
+// fits. A small model reads a list that comes after a long page far
+// better than one before it.
 func (l *List) Question() string {
 	var b strings.Builder
-	b.WriteString("You sort a web page into one of its reader's own categories. The categories, in the reader's " +
-		"order, each with what the reader says belongs in it:\n")
+	b.WriteString("What is this page mainly about, and who publishes it? Then pick its category. The reader's " +
+		"categories, in the reader's order, each with what the reader says belongs in it:\n")
 	for _, c := range l.All() {
 		b.WriteString("- " + c.Name + ": " + c.Description + "\n")
 	}

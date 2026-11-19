@@ -77,7 +77,7 @@ func seeded(t *testing.T) (*shown, *atomic.Int32) {
 
 func TestTheStartPageOfANewLightHasItsLogoItsFieldAndItsOwnPages(t *testing.T) {
 	s := show(t)
-	for _, id := range []string{"home-bookmarks", "continue", "tiles", "recently-closed"} {
+	for _, id := range []string{"home-bookmarks", "continue", "home-side", "tiles", "recently-closed"} {
 		if s.doc.ByID(id) != nil {
 			t.Errorf("with nothing kept the start page has #%s", id)
 		}
@@ -150,9 +150,13 @@ func TestTheStartPageOffersTheLastPagesVisitedEachOnce(t *testing.T) {
 		t.Fatal("the card of a page of light's own does not show its logo")
 	}
 	first, second, third := cards[0].Box(), cards[1].Box(), cards[2].Box()
-	if first.Y != second.Y || first.W != second.W || second.X <= first.X+first.W || third.X != first.X ||
-		third.Y <= first.Y+first.H {
+	if first.W < 560 || second.X != first.X || second.W != first.W || second.Y != first.Y+first.H+10 ||
+		third.X != first.X || third.Y != second.Y+second.H+10 {
 		t.Fatalf("in a window 1024 wide the cards are at %v, %v and %v", first, second, third)
+	}
+	if side := s.node("home-side"); len(side.Children()) != 0 || side.Box().X != first.X+first.W+24 {
+		t.Fatalf("with nothing beside the cards %v the side holds %d sections at %v", first, len(side.Children()),
+			side.Box())
 	}
 	s.clean()
 	s.clickAt(third.Center())
@@ -236,6 +240,15 @@ func TestTheStartPageStacksInANarrowWindowAndIsShadedByTheDarkMode(t *testing.T)
 	if second.X != first.X || second.Y < first.Y+first.H || first.W != second.W {
 		t.Fatalf("in a window 760 wide the cards are at %v and %v", first, second)
 	}
+	s.newTab()
+	s.Open(tabs.Page(guideName))
+	s.closeTab(1)
+	s.frame()
+	s.frame()
+	if side, pages := s.box("home-side"), s.box("continue"); side.X != pages.X || side.W != pages.W ||
+		side.Y != pages.Y+pages.H+24 {
+		t.Fatalf("in a window 760 wide the side %v is not under the pages %v", side, pages)
+	}
 	chips := s.node("home-bookmarks").Children()[1].Children()
 	page, last := s.box("page"), chips[len(chips)-1].Box()
 	if len(chips) != homeChips || last.Y <= chips[0].Box().Y || last.X+last.W > page.X+page.W {
@@ -281,12 +294,114 @@ func TestTheStartPageIsAColumnInTheMiddleOfAWideWindow(t *testing.T) {
 	s.frame()
 	view, page, held := s.box("view"), s.box("page"), s.box("held")
 	left, right := page.X-view.X, view.X+view.W-page.X-page.W
-	if page.W != 960 || held.W > 960 || left < 300 || left-right > 16 || right-left > 16 {
+	if page.W != 1024 || held.W != 960 || left < 280 || left-right > 16 || right-left > 16 {
 		t.Fatalf("in a window 1600 wide the page is at %v, what it holds at %v, in a view %v", page, held, view)
 	}
 	logo := s.box("logo")
 	if centre := logo.X + logo.W/2; centre < page.X+page.W/2-1 || centre > page.X+page.W/2+1 {
 		t.Fatalf("the logo %v is not in the middle of the page %v", logo, page)
+	}
+	s.clean()
+}
+
+func TestTheStartPageHasTheSizesOfItsMockup(t *testing.T) {
+	s, _ := seeded(t)
+	s.win.SetSize(geom.V2(1200, 920))
+	s.frame()
+	s.frame()
+	s.frame()
+	view, logo, word, field := s.box("view"), s.box("logo"), s.box("wordmark"), s.box("search")
+	if logo.Y != view.Y+28 || logo.W != 72 || word.Y != logo.Y+logo.H+3 || word.H != 54 || field.Y != word.Y+word.H+18 ||
+		field.W != 560 || field.H != 44 {
+		t.Fatalf("in a view %v the logo is at %v, the wordmark %v, the field %v", view, logo, word, field)
+	}
+	held, marks, pages, note := s.box("held"), s.box("home-bookmarks"), s.box("continue"), s.box("home-note")
+	if held.W != 960 || held.Y != field.Y+field.H+28 || pages.Y != marks.Y+marks.H+28 || pages.X != held.X ||
+		pages.W != 580 || note.Y != held.Y+held.H+28 {
+		t.Fatalf("what the page holds is at %v: the bookmarks %v, the pages %v, the note %v", held, marks, pages, note)
+	}
+	head, cards := s.node("continue").Children()[0].Box(), s.node("continue").Children()[1].Children()
+	if card := cards[0].Box(); head.H != 30 || card.Y != head.Y+head.H+10 || card.H != 66 {
+		t.Fatalf("the head of the pages is at %v, their first card %v", head, card)
+	}
+	for _, c := range []struct {
+		dark             bool
+		ink, card, field string
+	}{{false, "#1b1b1f", "#ffffff", "#ffffff"}, {true, "#e8e6ef", "#1c1b22", "#1c1b22"}} {
+		s.configure(func(cfg *config.Config) { cfg.DarkMode = c.dark })
+		s.frame()
+		card := s.node("continue").Children()[1].Children()[0]
+		ink, _ := s.doc.ComputedValue(card.Children()[1].Children()[0], "color")
+		ground, _ := s.doc.ComputedValue(card, "background-color")
+		under, _ := s.doc.ComputedValue(s.node("search"), "background-color")
+		if ink != c.ink || ground != c.card || under != c.field {
+			t.Errorf("dark %v: a card's title is %s on %s, the field %s", c.dark, ink, ground, under)
+		}
+	}
+	s.clean()
+}
+
+func TestATabClosedIsOfferedAgainBesideTheLastPages(t *testing.T) {
+	s, _ := seeded(t)
+	s.win.SetSize(geom.V2(1200, 920))
+	s.newTab()
+	s.closeTab(1)
+	s.frame()
+	s.frame()
+	if s.doc.ByID("recently-closed") != nil {
+		t.Fatal("a tab closed on the start page is offered again")
+	}
+	for _, name := range []string{guideName, aboutName, examplesName, guideName, historyName} {
+		s.newTab()
+		s.Open(tabs.Page(name))
+		s.closeTab(1)
+	}
+	s.frame()
+	s.frame()
+	want := "History | just now, The ui guide | just now, Examples | just now"
+	if got := strings.Join(s.texts("recently-closed", "shut"), ", "); got != want {
+		t.Fatalf("the tabs closed are %q, want %q", got, want)
+	}
+	if head := s.node("recently-closed").Children()[0].Text(); head != "Recently closed" {
+		t.Fatalf("the tabs closed are headed %q", head)
+	}
+	pages, side, rows := s.box("continue"), s.box("home-side"), s.node("recently-closed").Children()[1].Children()
+	if side.X != pages.X+pages.W+24 || side.Y != pages.Y || side.W != 356 || rows[0].Box().H != 36 ||
+		rows[1].Box().Y != rows[0].Box().Y+36 {
+		t.Fatalf("the side is at %v beside the pages %v, its rows at %v and %v", side, pages, rows[0].Box(),
+			rows[1].Box())
+	}
+	s.clean()
+	s.clickAt(rows[1].Box().Center())
+	s.at(tabs.Page(guideName))
+	s.click("home")
+	if got := strings.Join(s.texts("recently-closed", "shut"), ", "); got != "History | just now, Examples | just now" {
+		t.Fatalf("after one was opened again the tabs closed are %q", got)
+	}
+	s.newWindow(tabs.Home)
+	s.frame()
+	s.frame()
+	other := s.screens[1]
+	s.newTab()
+	s.Open(tabs.Page(aboutName))
+	s.closeTab(1)
+	s.frame()
+	s.frame()
+	if got := other.doc.ByID("recently-closed"); got == nil || !strings.Contains(got.Text(), "About") {
+		t.Fatal("another window's start page does not follow the tabs closed")
+	}
+	s.clearHistory()
+	s.frame()
+	if s.doc.ByID("recently-closed") != nil {
+		t.Fatal("the history cleared, the tabs closed are still offered")
+	}
+	s.configure(func(c *config.Config) { c.KeepHistory = false })
+	s.newTab()
+	s.Open(tabs.Page(guideName))
+	s.closeTab(1)
+	s.frame()
+	if s.doc.ByID("recently-closed") != nil {
+		t.Fatal("a tab closed while no history is kept is offered again")
 	}
 	s.clean()
 }

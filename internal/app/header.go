@@ -125,6 +125,7 @@ func (s *Screen) closeTab(i int) {
 		s.win.RequestClose()
 		return
 	}
+	s.closing(i)
 	s.browser.Close(i)
 	s.show()
 }

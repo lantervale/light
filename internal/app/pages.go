@@ -21,6 +21,9 @@ const (
 	downloadsName = "downloads"
 	configName    = "config"
 	scriptsName   = "scripts"
+	// categoriesName is the page the categories are edited on: there
+	// only while the model helps with them, so it is none of pages.
+	categoriesName = "categories"
 )
 
 // own is what the address of a page of light's begins with.
@@ -53,9 +56,19 @@ func pages() []site {
 	}
 }
 
+// ownSites are the pages of light's own as they stand: pages, and the one
+// the categories are edited on while the model helps with them.
+func (s *Screen) ownSites() []site {
+	if !s.helps(sortingFeature) {
+		return pages()
+	}
+	return append(pages(), site{categoriesName, sortedTitle, "The categories pages are sorted into, in your words, " +
+		"and what light does with the pages of each.", categoriesBody})
+}
+
 // pageNamed is light's page of that name.
-func pageNamed(name string) (site, bool) {
-	for _, page := range pages() {
+func (s *Screen) pageNamed(name string) (site, bool) {
+	for _, page := range s.ownSites() {
 		if page.name == name {
 			return page, true
 		}
@@ -66,7 +79,7 @@ func pageNamed(name string) (site, bool) {
 // ownPages lists light's pages by their addresses.
 func (s *Screen) ownPages() *ui.Node {
 	list := ui.Div(ui.ID("own-pages"), ui.Class("list"))
-	for _, page := range pages() {
+	for _, page := range s.ownSites() {
 		list.Append(ui.Div(s.link(tabs.Page(page.name), tabs.Page(page.name)), ui.Text(": "+page.summary)))
 	}
 	return list
@@ -179,7 +192,7 @@ func adapted() *ui.Node {
 func (s *Screen) results(query string) []*ui.Node {
 	body := []*ui.Node{ui.H1(ui.Text("Results for “" + query + "”"))}
 	words := strings.Fields(strings.ToLower(query))
-	for _, found := range pages() {
+	for _, found := range s.ownSites() {
 		text := strings.ToLower(found.title + " " + found.summary)
 		if len(words) == 0 || !containsAll(text, words) {
 			continue

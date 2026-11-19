@@ -97,6 +97,10 @@ type Profile struct {
 
 	// system is the system light runs on, as runtime.GOOS names it.
 	system string
+	// shuts are the tabs closed since light started, the newest first,
+	// for the start page, and shutCount how many times they changed.
+	shuts     []shutTab
+	shutCount uint64
 	// asks are the questions scripts ask the user (asking.go).
 	modals modals
 

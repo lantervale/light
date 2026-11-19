@@ -224,6 +224,11 @@ func (s *Screen) tabEntries(i int) []menu.Entry {
 		menu.Separator(),
 		{Label: "Close tab", Do: func() { s.closeTab(i) }},
 		{Label: "Close other tabs", Do: func() {
+			for other := range s.browser.Tabs {
+				if other != i {
+					s.closing(other)
+				}
+			}
 			s.browser.CloseOthers(i)
 			s.show()
 		}, Disabled: len(s.browser.Tabs) == 1},

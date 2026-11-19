@@ -106,6 +106,9 @@ type Screen struct {
 	fields     []func()
 	relist     func()
 	visitsSeen uint64
+	// shutSeen is how many times the tabs closed had changed when the
+	// start page last listed them.
+	shutSeen uint64
 	// relistMarks lists the bookmarks again on the page that shows them,
 	// and marksSeen is how many times they had changed when the star and
 	// that page were last shown.
@@ -136,6 +139,9 @@ type Screen struct {
 	// the page's selection.
 	replying answerCard
 	excerpt  pickedCard
+	// completing is the list under the address field while it is typed
+	// in (complete.go).
+	completing completion
 	// find is the card that finds words in the page, and its marks.
 	find findCard
 
@@ -339,6 +345,7 @@ func (s *Screen) tick() {
 	s.tools.Update()
 	s.watchDownloads()
 	s.watchHistory()
+	s.watchShut()
 	s.watchBookmarks()
 	s.watchModel()
 	s.watchRecall()
@@ -353,6 +360,7 @@ func (s *Screen) tick() {
 	s.followHint()
 	s.followSummaries()
 	s.followAnswer()
+	s.followComplete()
 	s.followPicked()
 	s.followFind()
 	s.runScripts()
@@ -382,7 +390,7 @@ func (s *Screen) tick() {
 func (s *Screen) overlaid() bool {
 	return s.sortingOpen() || s.covered() ||
 		s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
-		s.panelOpen() || s.choosing() || s.cardOpen() || s.answerOpen() || s.pickedOpen()
+		s.panelOpen() || s.choosing() || s.cardOpen() || s.answerOpen() || s.pickedOpen() || s.completeOpen()
 }
 
 // show redraws the screen from the browser: the tabs, the shown tab's

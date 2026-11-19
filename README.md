@@ -173,6 +173,7 @@ Cmd is Command on macOS and Control elsewhere.
 | `light://config` | The settings; a change applies at once ([Settings](#settings)) |
 | `light://about` | What light is, where its files are, and what it changes in a page before showing it |
 | `light://scripts` | A page that shows what light runs of JavaScript |
+| `light://categories` | The page categories, edited; there only while the model helps with them ([A model on this device](#a-model-on-this-device)) |
 | `light://guide`, `light://examples` | Pages about ember's ui and its examples |
 
 ### Command line
@@ -228,7 +229,8 @@ downloaded, started or written.
 With the model on, it helps with these, each of which can be turned off alone:
 
 - **Answers in the address bar**: a line that starts with `?` is a question about the shown page, answered in a
-  card under the address field, with the sentence of the page it comes from selected.
+  card under the address field, with the sentence of the page it comes from selected. Words typed there without
+  the `?` get a first row in the list under the field, "Ask this page: …", which asks the same.
 - **Actions on selected text**: Explain, Summarise and Translate in a card under the selection. A translation is
   into British English, American English or French, and the language chosen is kept (`translate_into`).
 - **Find by meaning**: Find in page (Cmd+F) works without the model; with a model that embeds text, it also finds
@@ -238,9 +240,12 @@ With the model on, it helps with these, each of which can be turned off alone:
   bookmark and shown on `light://bookmarks`.
 - **Page summaries**: a page you leave or close is summed up in one line, kept with its visit in the history and
   shown on its card of the start page; the robot by "Continue" hides the lines (`hide_summaries`).
-- **Page categories**: categories you name and describe in your own words; the model judges each page, and a
-  category can mark its pages, warn first, or dim them. The page's category stands at the end of the address
-  field, three dots while it is judged. You can correct a page or a whole site.
+- **Page categories**: categories you name and describe in your own words, edited on `light://categories`; the
+  model judges each page, and a category can mark its pages, warn first with a banner (information, warning or
+  danger, with a message of your own if you write one), or dim them. The page's category, or the short tag you
+  give it, stands at the end of the address field. A judgment is kept for the page, by its address, for a day
+  (`category_hours`); a page not judged yet shows three dots, after the last category of its site if one is known.
+  You can correct a page or a whole site.
 - **Remember what pages said** (off until you turn it on, apart from the model): the history page then takes a
   question and lists the pages that said something like it. Sites you exclude, local files and light's own
   pages are never remembered, and the page forgets what it holds on request.
@@ -376,7 +381,13 @@ A search goes to the engine the [settings](#settings) name. **DuckDuckGo** is th
 light's own pages (`light://search?q=…`, which stays an address whatever the engine). The table of engines is
 `pkg/search`, a row each.
 
-- Nothing leaves light while you type: no suggestions, no page fetched ahead. The words are sent on Enter.
+- Nothing leaves light while you type: no suggestions asked of anybody, no page fetched ahead. The words are sent
+  on Enter.
+- While you type in the address field, a list under it offers what Enter will do ("Search DuckDuckGo: …" or
+  "Go to …"), then the pages of your history and your bookmarks whose title or address holds every word typed, the
+  most visited first. It is made of what this device holds alone (`pkg/complete`).
+- Alt with Down or Up moves through the list (the arrows alone are the field's own), Enter takes the highlighted
+  row (what was typed when none is), a click takes a row, Escape closes the list and keeps the text.
 - The request is a navigation like any address typed, with the headers of [any other](#what-light-tells-a-site):
   `https://duckduckgo.com/?q=` and the words, with no other parameter and no identifier of light's.
 - Where no script runs (a build without the `v8` tag, or JavaScript off in the settings), DuckDuckGo is asked for
@@ -594,7 +605,7 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 Pictures, JavaScript and refreshes apply to pages loaded afterwards; frames are loaded, or emptied, at once. The page also clears the history, clears the cookies and resets every setting.
 `--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line: `light [address]` (or `light browse [address]`) is the browser, `light drive` the one a test runner drives over [WebDriver](#webdriver).
 
-The page also has the model's section, the page categories, and the sites never remembered (`recall_excluded`); `hide_summaries` keeps the start page's summaries hidden.
+The page also has the model's section, how long a page keeps its category (`category_hours`, with the way to `light://categories`), and the sites never remembered (`recall_excluded`); `hide_summaries` keeps the start page's summaries hidden.
 
 ### What light tells a site
 
@@ -953,9 +964,12 @@ menu's "Turn on a model on this device…" and its section of `light://config`. 
 | `model_cpu` | `false` | Leave the graphics card out of it |
 | `hide_summaries` | `false` | Keep what the model wrote of the pages visited off the start page |
 | `recall_excluded` | `""` | The sites whose pages are never remembered, by their hosts, as `bank.example, mail.example` |
+| `category_hours` | `24` | The hours a page keeps the category the model gave it before the model reads it again (0 to 720); 0 keeps none |
 
 The page categories are not in `config.json`: they are in `categories.json` in light's folder, with the sites and
-pages you corrected, and are edited in `light://config`.
+pages you corrected and what the model made of the pages it judged (dropped when the categories change, when the
+history is cleared, and never kept while the history is not), and are edited in `light://categories`, a page
+that is there only while the model helps with them.
 
 - **What runs where.** The model runs in a program of its own, `light-model`, which light starts beside itself the
   first time something asks, and stops after five minutes without a request, when the model is turned off or changed,

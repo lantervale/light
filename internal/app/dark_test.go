@@ -112,7 +112,7 @@ func TestTheDarkLogoIsTheLogoWithItsNavyAndItsWhiteSwapped(t *testing.T) {
 }
 
 func TestTheSheetStrikesTheDarkWordmarkWithAThickOrangeBar(t *testing.T) {
-	rule := ".dark #wordmark { color: #ffffff; text-decoration: line-through #f15a2b 10px; }"
+	rule := ".dark #wordmark { color: #ffffff; text-decoration: line-through #f15a2b 9px; }"
 	if !strings.Contains(sheet, rule) {
 		t.Fatalf("the sheet has no %q", rule)
 	}

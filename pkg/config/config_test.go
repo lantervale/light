@@ -16,7 +16,7 @@ func TestTheDefaultsAreWhatLightDidBeforeItHadSettings(t *testing.T) {
 	want := config.Config{
 		StartPage: tabs.Home, SearchEngine: search.DuckDuckGo, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
 		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
-		JavaScript: true, Frames: true, Cookies: true,
+		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24,
 	}
 	if c != want {
 		t.Fatalf("the defaults are %+v, want %+v", c, want)
@@ -215,5 +215,24 @@ func TestTheSearchEngineIsDuckDuckGoUntilSetAndOneLightDoesNotKnowIsTheDefault(t
 	}
 	if got, err = config.Load(path); err != nil || got != own {
 		t.Fatalf("read back %+v, %v, want %+v", got, err, own)
+	}
+}
+
+func TestAPagesCategoryIsKeptADayUntilSetOtherwiseAndNotAtAllAtZero(t *testing.T) {
+	if got := config.Default().CategoryHours; got != 24 {
+		t.Fatalf("a page's category is kept %d hours", got)
+	}
+	for raw, want := range map[string]int{`0`: 0, `1`: 1, `720`: 720, `721`: 24, `-1`: 24, `"a day"`: 24, `null`: 24} {
+		got, err := config.Decode([]byte(`{"version": 1, "category_hours": ` + raw + `}`))
+		if err != nil || got.CategoryHours != want {
+			t.Errorf("category_hours %s is read as %d, %v, want %d", raw, got.CategoryHours, err, want)
+		}
+	}
+	c := config.Default()
+	c.CategoryHours = config.MaxCategoryHours
+	data, _ := c.Encode()
+	if got, err := config.Decode(data); err != nil || got.CategoryHours != 720 ||
+		!strings.Contains(string(data), `"category_hours": 720`) {
+		t.Fatalf("written and read back, it is %d, %v", got.CategoryHours, err)
 	}
 }
