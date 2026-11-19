@@ -106,9 +106,15 @@ type Config struct {
 	// HideSummaries is whether the start page keeps to itself what the
 	// model wrote of the pages visited.
 	HideSummaries bool `json:"hide_summaries"`
-	// TranslateInto is the language a selection is translated into, by
-	// its tag, "" for the reader's.
+	// TranslateInto is the language a selection, a page and a text typed
+	// on light://translate are translated into, by its tag, "" for the
+	// reader's.
 	TranslateInto string `json:"translate_into"`
+	// TranslateAlways and TranslateNever are the languages whose pages
+	// are translated as they show and those whose pages are never
+	// offered a translation, as "fr, de" (PageRule).
+	TranslateAlways string `json:"translate_always"`
+	TranslateNever  string `json:"translate_never"`
 	// RecallExcluded are the sites whose pages are never remembered for
 	// the history asked by meaning, by their hosts, as "bank.example,
 	// mail.example".
@@ -146,7 +152,7 @@ func (c Config) Valid() Config {
 	c.Redirects = within(c.Redirects, MinRedirects, MaxRedirects, d.Redirects)
 	c.Requests = within(c.Requests, MinRequests, MaxRequests, d.Requests)
 	c.ToolsHeight = within(c.ToolsHeight, MinToolsHeight, MaxToolsHeight, d.ToolsHeight)
-	return c.validModel().validRecall()
+	return c.validModel().validRecall().validTranslate()
 }
 
 // text is value trimmed, or fallback when nothing is left or it holds a
