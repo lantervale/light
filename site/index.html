@@ -36,6 +36,10 @@ header { display: flex; align-items: center; justify-content: space-between; pad
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -.5px;
 	text-decoration: none; }
 .brand svg { width: 30px; height: 30px; }
+button.brand { border: 0; padding: 0; background: none; color: inherit; font: inherit; font-weight: 700; font-size: 20px;
+	letter-spacing: -.5px; cursor: pointer; }
+button.brand:hover .rays { transform: rotate(22.5deg); }
+button.brand:focus-visible { outline: 2px solid var(--orange); outline-offset: 4px; border-radius: 8px; }
 nav { display: flex; gap: 22px; font-size: 15px; }
 nav a { text-decoration: none; color: var(--dim); }
 nav a:hover { color: var(--ink); }
@@ -65,7 +69,19 @@ kbd { padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
 }
 h1 { margin: 26px auto 14px; max-width: 14em; font-size: clamp(40px, 7vw, 76px); line-height: 1.02;
 	letter-spacing: -2.5px; font-weight: 800; }
-h1 s { text-decoration: line-through var(--orange) .12em; color: var(--dim); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.engines { display: inline-grid; vertical-align: bottom; transition: width .45s cubic-bezier(.4, 0, .2, 1); }
+.engines s { grid-area: 1 / 1; justify-self: start; position: relative; white-space: nowrap; color: var(--dim); text-decoration: none;
+	opacity: 0; transform: translateY(.35em); transition: opacity .45s ease, transform .45s ease; }
+.engines s.on { opacity: 1; transform: none; }
+.engines s.gone { transform: translateY(-.35em); }
+.engines s::after { content: ""; position: absolute; left: -.04em; right: -.04em; top: 54%; height: .12em;
+	border-radius: .06em; background: var(--orange); transform: scaleX(0); transform-origin: left;
+	transition: transform .45s cubic-bezier(.6, 0, .3, 1) .3s; }
+.engines s.on::after { transform: scaleX(1); }
+@media (prefers-reduced-motion: reduce) {
+	.engines, .engines s, .engines s::after { transition: none; }
+}
 .lead { margin: 0 auto; max-width: 34em; font-size: 20px; color: var(--dim); }
 .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 30px 0 14px; }
 .button { display: inline-block; padding: 13px 24px; border-radius: 999px; font-weight: 600; text-decoration: none;
@@ -148,8 +164,9 @@ footer a:first-child { margin-left: 0; }
 <div class="wrap">
 
 <header>
-	<a class="brand mark" href="."><svg viewBox="0 0 64 64" aria-hidden="true"><rect class="tile" width="64" height="64" rx="14"/><circle class="bulb"
-		cx="32" cy="32" r="23"/><path class="rays" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>light</a>
+	<button class="brand mark" id="brand-switch" type="button" aria-pressed="false"
+		aria-label="Turn the light off"><svg viewBox="0 0 64 64" aria-hidden="true"><rect class="tile" width="64" height="64" rx="14"/><circle class="bulb"
+		cx="32" cy="32" r="23"/><path class="rays" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>light</button>
 	<nav>
 		<a class="wide" href="#why">Why</a>
 		<a class="wide" href="#pages">Pages</a>
@@ -171,7 +188,9 @@ footer a:first-child { margin-left: 0; }
 		</button>
 		<span class="hint" id="hint" aria-hidden="true">Turn the light off, or press <kbd>L</kbd></span>
 	</span>
-	<h1>Built from <s>Chromium</s> scratch.</h1>
+	<h1><span class="sr">Built from scratch, not from Chromium, WebKit, Gecko, Blink or Electron.</span><span
+		aria-hidden="true">Built from <span class="engines" id="engines"><s class="on">Chromium</s><s>WebKit</s><s>Gecko</s
+		><s>Blink</s><s>Electron</s></span> scratch.</span></h1>
 	<p class="lead">light is a small web browser in Go. No WebKit, no Chromium, no Gecko, no system web view: it
 		parses, lays out and paints every page with its own code.</p>
 	<div class="cta">
@@ -330,21 +349,41 @@ footer a:first-child { margin-left: 0; }
 		link.textContent = say;
 	}
 })();
+(function () {
+	var box = document.getElementById("engines"), names = box.children, at = 0;
+	function fit() { box.style.width = names[at].getBoundingClientRect().width + "px"; }
+	if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+	fit();
+	if (document.fonts) document.fonts.ready.then(fit);
+	addEventListener("resize", fit);
+	setInterval(function () {
+		if (document.hidden) return;
+		var was = names[at];
+		at = (at + 1) % names.length;
+		was.classList.replace("on", "gone");
+		setTimeout(function () { was.classList.remove("gone"); }, 500);
+		names[at].classList.add("on");
+		fit();
+	}, 2600);
+})();
 document.getElementById("tour").addEventListener("click", function () {
 	if (this.paused) this.play(); else this.pause();
 });
 (function () {
 	var root = document.documentElement, button = document.getElementById("switch"), hint = document.getElementById("hint");
+	var switches = [button, document.getElementById("brand-switch")];
 	var system = matchMedia("(prefers-color-scheme: dark)"), still = matchMedia("(prefers-reduced-motion: reduce)");
 	function shade(dark) {
 		root.classList.toggle("dark", dark);
 		var say = dark ? "Turn the light on" : "Turn the light off";
-		button.setAttribute("aria-label", say);
-		button.setAttribute("aria-pressed", String(dark));
+		switches.forEach(function (each) {
+			each.setAttribute("aria-label", say);
+			each.setAttribute("aria-pressed", String(dark));
+		});
 		hint.firstChild.nodeValue = say + ", or press ";
 	}
 	var dark = root.classList.contains("dark"), turning = null;
-	function flip() {
+	function flip(from) {
 		dark = !dark;
 		try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}
 		if (turning) turning.skipTransition();
@@ -352,7 +391,7 @@ document.getElementById("tour").addEventListener("click", function () {
 			shade(dark);
 			return;
 		}
-		var box = button.getBoundingClientRect(), x = box.left + box.width / 2, y = box.top + box.height / 2;
+		var box = (from || button).getBoundingClientRect(), x = box.left + box.width / 2, y = box.top + box.height / 2;
 		var reach = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
 		turning = document.startViewTransition(function () { shade(dark); });
 		turning.finished.finally(function () { turning = null; });
@@ -362,7 +401,7 @@ document.getElementById("tour").addEventListener("click", function () {
 		});
 	}
 	shade(dark);
-	button.addEventListener("click", flip);
+	switches.forEach(function (each) { each.addEventListener("click", function () { flip(each); }); });
 	addEventListener("keydown", function (e) {
 		var at = e.target.tagName;
 		if ((e.key === "l" || e.key === "L") && !e.metaKey && !e.ctrlKey && !e.altKey && at !== "INPUT" &&
