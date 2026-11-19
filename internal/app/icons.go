@@ -119,7 +119,6 @@ func drawings() map[string]drawing {
 		"ask":       `<path d="M4 5h16v11H10l-4 4v-4H4z"/>`,
 		"find":      lens,
 		"model":     robot,
-		"model-on":  robot,
 		"sorted":    `<path d="M3 3h8.5l9.5 9.5-8.5 8.5L3 11.5z"/><circle cx="8" cy="8" r="1"/>`,
 		"translate": `<path d="M4 5h9M8.5 3v2M11 5c-.6 3.6-3 6.6-6.5 8M6 9c1 2 3 4 5.5 5M13 20l4-9 4 9M14.5 17h5"/>`,
 	} {

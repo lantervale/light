@@ -47,7 +47,7 @@ func TestTheProposalOffersTheEmbeddingModelAndDownloadsItOnlyWhenTicked(t *testi
 		embeds := embedding(t, fake)
 		proposed, _ := fake.Recommended()
 		library := entryOf(t, fake, model.RuntimeID)
-		s.pick("menu-model-on")
+		s.turnsOn()
 		also := s.node("model-embed")
 		for _, part := range []string{"Also download " + embeds.Name, sized(embeds.Size), embeds.Licence, "huggingface.co",
 			"needed to find by meaning and to ask your history"} {

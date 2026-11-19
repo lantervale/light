@@ -204,9 +204,9 @@ keeps its files in, `--downloads` (or `LIGHT_DOWNLOADS`) the folder files are sa
 
 ## A model on this device
 
-light can run a small language model on your machine. It is **off** by default. Until you turn it on (the menu's
-"Turn on a model on this device…", or its section of `light://config`) and accept the download, nothing of it is
-downloaded, started or written.
+light can run a small language model on your machine. It is experimental and **off** by default. Until you turn it
+on ("Turn on a model on this device…", under Experimental in `light://config`) and accept the download, nothing of
+it is downloaded, started or written.
 
 - **It runs on the device.** The model runs in a separate program, `light-model`, which is llama.cpp loaded
   through yzma. light speaks to it over its standard input and output only: it listens on no port and opens no
@@ -954,8 +954,8 @@ long" line.
 ### The model in detail
 
 [A model on this device](#a-model-on-this-device) says what the model is and what it helps with. It is **off** unless
-you turn it on, and until then nothing of it is downloaded, started or written, and nothing of it shows but the
-menu's "Turn on a model on this device…" and its section of `light://config`. Its settings are also in
+you turn it on, and until then nothing of it is downloaded, started or written, and nothing of it shows but its
+section under Experimental in `light://config`. Its settings are also in
 `config.json`; which features it helps with is in `assist.json`.
 
 | Setting (`config.json`) | Default | |

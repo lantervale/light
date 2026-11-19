@@ -23,7 +23,7 @@ const (
 	assistFile = "assist.json"
 	// modelName is what the model is called.
 	modelName = "Model on this device"
-	// turnOn is what turns it on, in the menu and in the settings.
+	// turnOn is what turns it on, in the settings.
 	turnOn    = "Turn on a model on this device…"
 	cardNotch = 15
 )
@@ -350,11 +350,8 @@ func (s *Screen) showModel(status model.Status) {
 		empty(c.slot)
 		empty(c.rows)
 		toggle(c.slot, "shown", on)
-		row := s.choice("model-on", turnOn, "", s.openCard)
 		if on {
 			c.slot.Append(c.robot)
-			row = s.choice("model", modelName, "", s.openCard)
-			row.Append(c.state)
 		}
 		if s.helps(answersFeature) {
 			c.ask = s.choice("ask", "Ask about this page", "", s.askAbout)
@@ -366,11 +363,22 @@ func (s *Screen) showModel(status model.Status) {
 		if s.helps(translateFeature) {
 			c.rows.Append(s.choice("translate", translateTitle, "", func() { s.Open(translatePage) }))
 		}
-		c.rows.Append(row, ui.Div(ui.Attr("role", "separator")))
+		c.rows.Append(s.modelRow(on)...)
 	}
 	if s.cardOpen() {
 		s.fillCard()
 	}
+}
+
+// modelRow is the menu's row of a model that is on, which opens its
+// card: one that is off has none, it is turned on in the settings.
+func (s *Screen) modelRow(on bool) []*ui.Node {
+	if !on {
+		return nil
+	}
+	row := s.choice("model", modelName, "", s.openCard)
+	row.Append(s.card.state)
+	return []*ui.Node{row, ui.Div(ui.Attr("role", "separator"))}
 }
 
 // redrawModel has every window show the model again at its next frame.

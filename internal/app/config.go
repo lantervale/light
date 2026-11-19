@@ -232,7 +232,9 @@ func configBody(s *Screen) []*ui.Node {
 			config.MinRequests, config.MaxRequests, func(c *config.Config) *int { return &c.Requests }),
 	)
 	if s.modelGiven() {
-		body = append(body, ui.H2(ui.Text(modelName)), s.modelSettings(), s.sortingSettings(), s.recallSettings(),
+		body = append(body, ui.H2(ui.ID("experimental"), ui.Text("Experimental")),
+			ui.P(ui.Class("hint"), ui.Text("New, and it can be wrong. Off unless you turn it on.")),
+			ui.H3(ui.Text(modelName)), s.modelSettings(), s.sortingSettings(), s.recallSettings(),
 			s.translationSettings())
 	}
 	return body

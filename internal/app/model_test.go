@@ -93,8 +93,7 @@ func (s *shown) nothingOfTheModel() {
 		}
 	}
 	s.doc.Body().Walk(func(n *ui.Node) bool {
-		if src, _ := n.Attr("src"); strings.Contains(src, "robot") && s.doc.ByID("model-title") == nil &&
-			n.Parent().ID() != "menu-model-on" {
+		if src, _ := n.Attr("src"); strings.Contains(src, "robot") && s.doc.ByID("model-title") == nil {
 			s.t.Errorf("with the model off the screen shows %s in %s", src, n.Parent().ID())
 		}
 		return true
@@ -124,7 +123,7 @@ func TestALightGivenNoModelShowsNothingOfOne(t *testing.T) {
 	}
 }
 
-func TestAModelThatIsOffShowsOnlyTheMenuRowAndTheSettingThatTurnItOn(t *testing.T) {
+func TestAModelThatIsOffShowsOnlyTheExperimentalSettingThatTurnsItOn(t *testing.T) {
 	s, fake := modelled(t, Options{})
 	s.nothingOfTheModel()
 	if fake.Settings().On || fake.Status().State != model.Off || fake.Warmed() != 0 || len(fake.Asked()) != 0 {
@@ -132,8 +131,7 @@ func TestAModelThatIsOffShowsOnlyTheMenuRowAndTheSettingThatTurnItOn(t *testing.
 	}
 	s.click("menu")
 	rows := s.rows()
-	at := slices.Index(rows, "Turn on a model on this device…")
-	if at < 1 || rows[at-1] != "-" || rows[at+1] != "-" || strings.Count(strings.Join(rows, "\n"), "odel") != 1 {
+	if strings.Contains(strings.Join(rows, "\n"), "odel") || s.doc.ByID("menu-model-on") != nil {
 		t.Fatalf("the menu lists\n%s", strings.Join(rows, "\n"))
 	}
 	s.clean()
@@ -141,6 +139,11 @@ func TestAModelThatIsOffShowsOnlyTheMenuRowAndTheSettingThatTurnItOn(t *testing.
 	s.settings()
 	if s.doc.ByID("set-model-on") == nil || s.node("set-model-on").Text() != "Turn on a model on this device…" {
 		t.Fatal("the settings have no button that turns a model on")
+	}
+	text := s.node("page").Text()
+	if at := strings.LastIndex(text, "Experimental"); at < 0 || at > strings.Index(text, "Turn on a model") ||
+		strings.Index(text, "Requests kept") > at {
+		t.Fatalf("the model is not under Experimental, last in the settings:\n%s", text)
 	}
 	s.nothingOfTheModel()
 	s.clean()
@@ -155,7 +158,7 @@ func TestTurningTheModelOnProposesOneAndDownloadsNothingBeforeItIsAgreedTo(t *te
 	fake.Manual = true
 	proposed, _ := fake.Recommended()
 	library, other := entryOf(t, fake, model.RuntimeID), others(fake)[0]
-	s.pick("menu-model-on")
+	s.turnsOn()
 	if !s.cardShown() || s.choosing() {
 		t.Fatalf("the row left the card open %v, the menu open %v", s.cardShown(), s.choosing())
 	}
@@ -201,7 +204,7 @@ func TestTurningTheModelOnProposesOneAndDownloadsNothingBeforeItIsAgreedTo(t *te
 	}
 	s.nothingOfTheModel()
 
-	s.pick("menu-model-on")
+	s.turnsOn()
 	s.click("model-pick-" + other.ID)
 	if picked := s.node("model-proposal").Text(); !strings.Contains(picked, other.Name) ||
 		!strings.Contains(picked, sized(other.Size)) {
@@ -220,7 +223,7 @@ func TestAModelAgreedToIsDownloadedShownComingAndCancelled(t *testing.T) {
 	fake.Manual = true
 	proposed, _ := fake.Recommended()
 	other := others(fake)[0]
-	s.pick("menu-model-on")
+	s.turnsOn()
 	s.click("model-embed")
 	s.click("model-confirm")
 	if !s.config.Model || s.config.ModelID != "" || !fake.Settings().On {
@@ -278,7 +281,7 @@ func TestAnInstallThatFailsSaysWhyAndIsTriedAgain(t *testing.T) {
 	bare(fake)
 	fake.Manual = true
 	proposed, _ := fake.Recommended()
-	s.pick("menu-model-on")
+	s.turnsOn()
 	s.click("model-embed")
 	s.click("model-confirm")
 	fake.Advance(proposed.ID, 0, errors.New("the network went away"))
@@ -567,7 +570,7 @@ func TestAFileOfTheUsersOwnIsLookedIntoOnlyOnceAgreedTo(t *testing.T) {
 	s, fake := modelled(t, Options{})
 	own := filepath.Join(t.TempDir(), "mine.gguf")
 	fake.Files = map[string]model.File{own: {Name: "Mine 7B", Size: 4 << 30, Template: true}}
-	s.pick("menu-model-on")
+	s.turnsOn()
 	if s.doc.ByID("model-file") != nil {
 		t.Fatal("the field of a file shows before it is asked for")
 	}
@@ -725,4 +728,12 @@ func TestTheCardStaysOpenWhileThePointerMovesOverThePage(t *testing.T) {
 	if !s.cardShown() {
 		t.Fatal("the pointer moving over the page closed the card")
 	}
+}
+
+// turnsOn opens the model's card from the settings, where a model that
+// is off is turned on.
+func (s *shown) turnsOn() {
+	s.t.Helper()
+	s.settings()
+	s.click("set-model-on")
 }

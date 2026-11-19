@@ -26,7 +26,7 @@ func (s *shown) nothingHelped(where string) {
 		id := n.ID()
 		src, _ := n.Attr("src")
 		switch {
-		case n.HasClass("robot-toggle"), strings.Contains(src, "robot") && n.Parent().ID() != "menu-model-on",
+		case n.HasClass("robot-toggle"), strings.Contains(src, "robot"),
 			strings.HasPrefix(id, "category"), strings.HasPrefix(id, "answer"), strings.HasPrefix(id, "picked"),
 			strings.HasPrefix(id, "history-ask"), strings.HasPrefix(id, "find-pass"), strings.HasPrefix(id, "set-recall"),
 			strings.HasPrefix(id, "complete-ask"),
