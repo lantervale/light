@@ -57,6 +57,11 @@ type session struct {
 	// note is what the status bubble says of the tab's last move when it
 	// showed nothing new.
 	note string
+	// left is where the page of each step of the tab's history was
+	// scrolled when the tab left it, by the step's number, and put the
+	// page last scrolled back there (anchors.go).
+	left map[int]left
+	put  *web.Page
 }
 
 // session is the shown tab's.
@@ -203,7 +208,7 @@ func (s *Screen) land(tab *tabs.Tab, address string, l *load, page *web.Page) {
 	if page.Err == nil && tab.Current() == page.Address {
 		s.record(page.Address, page.Title)
 	}
-	if page.Doc != nil && web.Fragment(page.Address) != "" {
+	if page.Doc != nil && web.Fragment(page.Address) != "" && session.put != page {
 		web.Reveal(page.Doc, page.Address)
 	}
 	if tab != s.browser.Tab() {
@@ -231,7 +236,9 @@ func (s *Screen) reloadOrStop() {
 		s.show()
 		return
 	}
-	s.depart(s.browser.Tab().Current(), true, func() {})
+	tab := s.browser.Tab()
+	s.keep(tab)
+	s.depart(tab.Current(), true, func() { s.restore(tab, "") })
 }
 
 // shownBy is the address whose page address shows: its own, or the one a

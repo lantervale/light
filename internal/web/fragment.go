@@ -51,11 +51,12 @@ func anchored(root *ui.Node, name string) *ui.Node {
 	return found
 }
 
-// Reveal scrolls doc to the element address names after its "#", once
-// it is laid out, and leaves it where it is for one that names nothing.
+// Reveal scrolls doc so the element address names after its "#" is at
+// the top of its view, once it is laid out, and leaves it where it is
+// for one that names nothing.
 func Reveal(doc *ui.Document, address string) {
 	if n := Indicated(doc, address); n != nil {
-		doc.ScrollIntoView(n)
+		doc.ScrollToStart(n)
 	}
 }
 

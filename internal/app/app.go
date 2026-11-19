@@ -323,6 +323,7 @@ func (s *Screen) Open(address string) {
 		return
 	}
 	s.depart(address, false, func() {
+		s.keep(tab)
 		tab.Visit(address)
 		s.visit(address)
 	})

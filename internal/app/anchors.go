@@ -1,7 +1,10 @@
 package app
 
 import (
+	"github.com/lantervale/ember/geom"
+
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/tabs"
 )
 
 // place moves the shown tab to address when it is a place in the page
@@ -16,6 +19,7 @@ func (s *Screen) place(address string) bool {
 		return false
 	}
 	s.giveUp(session)
+	s.keep(tab)
 	tab.Push(address)
 	session.pages[address] = page
 	web.Reveal(page.Doc, address)
@@ -25,16 +29,46 @@ func (s *Screen) place(address string) bool {
 	return true
 }
 
-// restore scrolls the page the shown tab came back to through its
-// history, from another place of it at from: to the place its address
-// names, the top for one that names none.
-func (s *Screen) restore(session *session, from string) {
-	at := s.browser.Tab().Current()
+// left is where the page of a step of a tab's history was scrolled when
+// the tab left the step, at that address.
+type left struct {
+	address string
+	scroll  geom.Vec2
+}
+
+// keep notes where the page tab stands on is scrolled, for the step it
+// is about to leave: restore puts the page back there when the tab's
+// history returns to the step.
+func (s *Screen) keep(tab *tabs.Tab) {
+	session := s.sessionOf(tab)
+	if session.left == nil {
+		session.left = map[int]left{}
+	}
+	at := tab.Current()
+	if page := session.pages[at]; page != nil && page.Doc != nil {
+		session.left[tab.At()] = left{address: at, scroll: page.Doc.Scroll(page.Doc.HTML())}
+	}
+}
+
+// restore scrolls the page tab came to through its history, or fetched
+// again, from the address from: where the step was left, a page fetched
+// again too; else, for another place of the page it was on, to the place
+// its address names, the top for one that names none.
+func (s *Screen) restore(tab *tabs.Tab, from string) {
+	session := s.sessionOf(tab)
+	at := tab.Current()
 	page := session.pages[at]
-	if page == nil || page.Doc == nil || page != session.pages[from] || web.Fragment(from) == web.Fragment(at) {
+	if page == nil || page.Doc == nil {
 		return
 	}
-	web.Reveal(page.Doc, at)
+	if was, kept := session.left[tab.At()]; kept && was.address == at {
+		page.Doc.SetScroll(page.Doc.HTML(), was.scroll)
+		session.put = page
+		return
+	}
+	if page == session.pages[from] && web.Fragment(from) != web.Fragment(at) {
+		web.Reveal(page.Doc, at)
+	}
 }
 
 // address is the address the document f shows is at: the one it gave

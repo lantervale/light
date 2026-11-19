@@ -18,7 +18,10 @@ func (s *Screen) posted(sent web.Submission) {
 		}
 		session.posts[sent.Address] = sent
 		session.note = ""
-		s.depart(sent.Address, true, func() { tab.Visit(sent.Address) })
+		s.depart(sent.Address, true, func() {
+			s.keep(tab)
+			tab.Visit(sent.Address)
+		})
 	})
 }
 

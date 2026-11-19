@@ -167,12 +167,14 @@ func (s *Screen) cross(change tabs.Change) {
 		s.arrive(change)
 		return
 	}
-	ahead, from := *tab, tab.Current()
+	ahead := *tab
 	ahead.Take(change)
 	s.depart(ahead.Current(), false, func() {
+		from := tab.Current()
+		s.keep(tab)
 		tab.Take(change)
 		session.note, session.returned = "", true
-		s.restore(session, from)
+		s.restore(tab, from)
 	})
 }
 

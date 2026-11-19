@@ -35,6 +35,7 @@ func heard(t *testing.T) (*httptest.Server, *asked) {
 			on("held", () => {});
 			on("clicker", () => { document.getElementById("to-low").click(); });
 			</script>`),
+		"/plain": typed("text/html", `<title>Plain</title><p id="to-low">plain</p>`),
 		"/framing": typed("text/html", `<title>Framing</title><body style="margin:0"><p id="log">nothing</p>
 			<iframe id="inner" src="/" width="300" height="200"></iframe>
 			<script>addEventListener("hashchange", () => { document.getElementById("log").textContent = "heard"; });
@@ -64,6 +65,21 @@ func TestAFragmentLinkTellsThePagesScripts(t *testing.T) {
 	}
 }
 
+func TestBackToAPageFetchedAgainReturnsToWhereItWasLeft(t *testing.T) {
+	srv, seen := heard(t)
+	s := show(t)
+	s.visit(srv.URL + "/")
+	s.scroll(700)
+	s.visit(srv.URL + "/plain")
+	s.click("back")
+	s.until("the page was fetched again", func() bool {
+		return seen.count("/") == 2 && s.session().pending == nil && s.session().pages[srv.URL+"/"] != nil
+	})
+	if got := s.scrolled(); got != 700 {
+		t.Fatalf("fetched again the page is scrolled %v, want the 700 it was left at", got)
+	}
+}
+
 func TestAScriptsHashScrollsAndItsPushStateDoesNot(t *testing.T) {
 	srv, seen := heard(t)
 	s := show(t)
@@ -75,7 +91,7 @@ func TestAScriptsHashScrollsAndItsPushStateDoesNot(t *testing.T) {
 	}
 	s.clickAt(s.inPage("by-script"))
 	s.at(srv.URL + "/#named")
-	if got := s.pageText("log"); !s.shows("by-name") || got != "hash #low>#named target none" {
+	if got := s.pageText("log"); !s.topmost("by-name") || got != "hash #low>#named target none" {
 		t.Fatalf("location.hash shows its place %v, and the page heard %q", s.shows("by-name"), got)
 	}
 	if got := seen.count("/"); got != 1 || s.browser.Tab().Len() != 4 {
@@ -110,8 +126,9 @@ func TestAFragmentLinkInAFrameTellsThatFramesScriptsAlone(t *testing.T) {
 	for range 4 {
 		s.frame()
 	}
-	if got := f.page.Doc.ByID("log").Text(); !inView(t, f.page.Doc, "low", 200) || got != "pop hash >#low target low" {
-		t.Fatalf("the frame shows the place %v, and its scripts heard %q", inView(t, f.page.Doc, "low", 200), got)
+	if got, at := f.page.Doc.ByID("log").Text(), box(t, f.page.Doc, "low").Y; at < -0.5 || at > 0.5 ||
+		got != "pop hash >#low target low" {
+		t.Fatalf("the frame has the place %v from its top, and its scripts heard %q", at, got)
 	}
 	if got := s.pageText("log"); got != "nothing" || seen.count("/") != 1 {
 		t.Fatalf("the page heard %q, and the frame's document was asked for %d times", got, seen.count("/"))
