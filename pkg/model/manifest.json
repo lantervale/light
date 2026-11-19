@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "runtime": {
+    "id": "llama.cpp",
+    "name": "llama.cpp",
+    "publisher": "ggml-org",
+    "licence": "MIT",
+    "version": "1.0.0-dev",
+    "tag": "b12359",
+    "archives": [
+      {
+        "os": "darwin",
+        "arch": "arm64",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-macos-arm64.tar.gz",
+        "size": 16907811,
+        "sha256": "82b00abc740160e1b9980e6cc79c117345fa34af058c80e6c0a69aa8ddccde75"
+      },
+      {
+        "os": "darwin",
+        "arch": "amd64",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-macos-x64.tar.gz",
+        "size": 12661621,
+        "sha256": "25320d529077ef5a3d16e7b5da26438f221d88c8c0930a32b0c79457f5eede56"
+      },
+      {
+        "os": "linux",
+        "arch": "amd64",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-ubuntu-x64.tar.gz",
+        "size": 23311084,
+        "sha256": "0bc1f091e8916102b6d8f2cf944233a620e90a0f856c72d0ce41150c65c2e72e"
+      },
+      {
+        "os": "linux",
+        "arch": "arm64",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-ubuntu-arm64.tar.gz",
+        "size": 18949862,
+        "sha256": "dc7aa17a67884619b7223870aca9fd6addbc01717713b04a714add1c31137359"
+      },
+      {
+        "os": "windows",
+        "arch": "amd64",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-win-cpu-x64.zip",
+        "size": 25097509,
+        "sha256": "837c1655e87df3b66989f4be33a792a1399c785bf259038dc75c900096683e69"
+      },
+      {
+        "os": "windows",
+        "arch": "arm64",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12359/llama-b12359-bin-win-cpu-arm64.zip",
+        "size": 13455326,
+        "sha256": "d27564c754478d2832789dfcebfc5ace018e36a224c41d810b7cbc1ba8243ec0"
+      }
+    ]
+  },
+  "models": [
+    {
+      "id": "qwen2.5-1.5b-instruct-q4",
+      "name": "Qwen2.5 1.5B Instruct",
+      "publisher": "Alibaba Cloud (Qwen)",
+      "kind": "chat",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "size": 1117320736,
+      "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+      "licence": "Apache-2.0",
+      "context": 8192,
+      "min_memory_gb": 4,
+      "recommended_from_gb": 0,
+      "tried": true,
+      "why": "Small and quick on any recent machine; fine for short answers, less sure of details in long summaries."
+    },
+    {
+      "id": "granite-3.3-2b-instruct-q4",
+      "name": "Granite 3.3 2B Instruct",
+      "publisher": "IBM",
+      "kind": "chat",
+      "url": "https://huggingface.co/ibm-granite/granite-3.3-2b-instruct-GGUF/resolve/7cdf86ccd1f1bb3491c9b7017b033f2e51367397/granite-3.3-2b-instruct-Q4_K_M.gguf",
+      "file": "granite-3.3-2b-instruct-Q4_K_M.gguf",
+      "size": 1545303328,
+      "sha256": "ac71e9e32c0bea919b409c5918f69ca74339854b0319c5065e4e9fb6d95c4852",
+      "licence": "Apache-2.0",
+      "context": 8192,
+      "min_memory_gb": 6,
+      "tried": false
+    },
+    {
+      "id": "qwen3-4b-q4",
+      "name": "Qwen3 4B",
+      "publisher": "Alibaba Cloud (Qwen)",
+      "kind": "chat",
+      "url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "size": 2497280256,
+      "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "licence": "Apache-2.0",
+      "context": 8192,
+      "min_memory_gb": 8,
+      "recommended_from_gb": 16,
+      "recommended_on": "darwin/arm64",
+      "tried": true,
+      "why": "Answers questions and explains passages more reliably than the small one; needs a graphics card to be quick, and about 4 GB of memory."
+    },
+    {
+      "id": "nomic-embed-text-v1.5-q8",
+      "name": "Nomic Embed Text v1.5",
+      "publisher": "Nomic AI",
+      "kind": "embedding",
+      "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/0188c9bf409793f810680a5a431e7b899c46104c/nomic-embed-text-v1.5.Q8_0.gguf",
+      "file": "nomic-embed-text-v1.5.Q8_0.gguf",
+      "size": 146146432,
+      "sha256": "3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7",
+      "licence": "Apache-2.0",
+      "context": 2048,
+      "min_memory_gb": 2,
+      "tried": false,
+      "query_prefix": "search_query: ",
+      "document_prefix": "search_document: "
+    }
+  ]
+}

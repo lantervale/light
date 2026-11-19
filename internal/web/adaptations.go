@@ -18,7 +18,8 @@ const (
 	maxBytes = 4 << 20
 	// maxPicture is the largest picture drawn.
 	maxPicture  = 8 << 20
-	maxSheets   = 16
+	maxSheets   = 64
+	maxScripts  = 64
 	maxElements = 8000
 	// maxIcons is how many of a site's icons are tried.
 	maxIcons = 3
@@ -26,8 +27,8 @@ const (
 
 // adaptation is one thing light does to a site's page for ui to
 // show it: ui reads a CSS subset checked against Chrome and refuses the
-// rest with a warning, and runs no script, where a site is written for a
-// browser. The page's sheets themselves go to ui as the site wrote them.
+// rest with a warning, and has no script engine, where a site is written
+// for a browser. The page's sheets themselves go to ui as the site wrote them.
 type adaptation struct {
 	name, what string
 	// option is set on the page's Document.
@@ -81,12 +82,34 @@ var adaptations = []adaptation{
 		what:   "font-family names the machine's fonts, where a ui Document knows only the engine's faces.",
 		option: ui.SystemFonts(),
 	},
+	{
+		name: "page fonts",
+		what: "The fonts of the page's @font-face rules are fetched through light's loader when text first " +
+			"needs them (ui.FetchFonts), each asked by its sheet, " + megabytes(maxFont) + " at most; the text " +
+			"shows in the next family until they land.",
+	},
 
 	{
 		name: "svg pictures",
 		what: "An SVG picture in an img or a url() is drawn, at the size it shows at (light imports " +
 			"ui/svg); what it uses that ember's svg reader doesn't draw (text, clipping, masks, filters, " +
 			"patterns…) is a warning naming the file.",
+	},
+
+	{
+		name: "svg elements",
+		what: "An svg element in the page is one picture, ui's svg element holding what it holds as SVG: sized " +
+			"by its attributes, its viewBox and the rules naming it, currentColor the colour of its text, and " +
+			"drawn again the frame after a script changed it. The rules of the page do not reach the shapes " +
+			"inside it, and what ember's svg reader doesn't draw is a warning.",
+	},
+
+	{
+		name: "chosen pictures",
+		what: "An img shows one picture, chosen when it is built and when a script changes it, for the view's " +
+			"width at one pixel a point: the candidate of its srcset that fills the slot its sizes gives, or of " +
+			"the first source of its picture whose type light draws and whose media holds (min-width and " +
+			"max-width; any other condition does not). It is not chosen again when the window is resized.",
 	},
 
 	// The page's elements: linked, dropped, build, link and skipped below.
@@ -97,8 +120,23 @@ var adaptations = []adaptation{
 	},
 	{
 		name: "elements left out",
-		what: "No script runs, and ui has no element for some: " + strings.Join(droppedNames(), ", ") +
+		what: "ui has no element for some: " + strings.Join(droppedNames(), ", ") +
 			" build nothing, their children neither.",
+	},
+	{
+		name: "scripts",
+		what: "No script is fetched or kept unless JavaScript is on in a build that has an engine. Then a " +
+			"page's scripts are kept in the order they run, the first " + strconv.Itoa(maxScripts) +
+			" of them, one with a src fetched as a sheet is. Scripts read the page as its parser made it: its " +
+			"comments, the elements ui has none for (svg, noscript, template, script, style…) and every " +
+			"attribute as written; ui is given only what it has an element for, as without scripts. A " +
+			"module script is kept with its address alone: the page's scripts fetch it, and what it imports.",
+	},
+	{
+		name: "noscript",
+		what: "A page loaded without its scripts is read as a browser that runs none reads it: what a " +
+			"noscript holds is the page's, its elements in its place and its sheets among the page's, in " +
+			"the head too. With scripts it builds nothing.",
 	},
 	{
 		name: "unknown elements",
@@ -116,13 +154,20 @@ var adaptations = []adaptation{
 			"name when it gives one, and leaves the tab where it is.",
 	},
 	{
+		name: "forms",
+		what: "A form is sent by a click on its submit button or by Enter in one of its fields, when its method " +
+			"is GET: the tab opens its action, from the page's address, with the names and values of its controls " +
+			"as the query, in the page's encoding. A form with another method is not sent.",
+	},
+	{
 		name: "attributes left out",
-		what: "on… handlers, autofocus, tabindex and srcset aren't copied, nor an href on anything but an a.",
+		what: "on… handlers, autofocus, tabindex, srcset and sizes aren't copied, nor an href on anything but an a.",
 	},
 	{
 		name: "refresh",
 		what: "A page that sends elsewhere at once, by a Refresh header or a meta refresh of 0 seconds, is " +
-			"followed there as a redirect is and counts as one; a refresh that waits is left alone.",
+			"followed there as a redirect is and counts as one; a refresh that waits is left alone, and one " +
+			"in a noscript when the page's scripts run.",
 	},
 	{
 		name: "limits",
@@ -131,9 +176,11 @@ var adaptations = []adaptation{
 	},
 }
 
-// options are the Document options of a page.
+// options are the Document options of a page: its adaptations', and a
+// drag of the right button selecting its text, which is light's own
+// and asks ui for what no browser does.
 func options() []ui.DocumentOption {
-	var opts []ui.DocumentOption
+	opts := []ui.DocumentOption{ui.RightDragSelects()}
 	for _, a := range adaptations {
 		if a.option != nil {
 			opts = append(opts, a.option)
@@ -150,7 +197,7 @@ func linked(n *html.Node) bool {
 //nolint:gochecknoglobals,exhaustive // the elements left out, not every element there is
 var dropped = map[atom.Atom]bool{
 	atom.Head: true, atom.Script: true, atom.Style: true, atom.Link: true, atom.Meta: true,
-	atom.Noscript: true, atom.Template: true, atom.Svg: true, atom.Iframe: true, atom.Object: true,
+	atom.Template: true, atom.Object: true,
 	atom.Embed: true, atom.Video: true, atom.Audio: true, atom.Canvas: true, atom.Dialog: true,
 	atom.Source: true, atom.Picture: false,
 }
@@ -174,6 +221,24 @@ func build(tag string) *ui.Node {
 	return ui.Div()
 }
 
+// skips reports whether an attribute of n stays off the element built
+// for it: those skipped, but a script's handlers and a link's href once
+// scripts run, and none on an element listed out of sight for them.
+func (b *builder) skips(n *html.Node, key string) bool {
+	switch {
+	case b.tree == nil:
+		return skipped(key)
+	case strings.HasPrefix(key, "on"):
+		b.tree.handlers = true
+		return false
+	case kept[n.DataAtom]:
+		return false
+	case key == "href":
+		return n.DataAtom != atom.A
+	}
+	return skipped(key)
+}
+
 // link makes a, an a element built from n, a link to its href: the href
 // :link matches by, and a click that opens it from the page's address,
 // or saves it when n has a download attribute, unless it is a place in
@@ -188,7 +253,7 @@ func (b *builder) link(a *ui.Node, n *html.Node) {
 	if address == "" || strings.HasPrefix(href, "#") {
 		return
 	}
-	follow := func() { b.links.Open(address) }
+	follow := func() { b.open(address, attr(n, "target")) }
 	if name, saved := lookup(n, "download"); saved {
 		follow = func() { b.links.Save(address, name) }
 	}
@@ -198,11 +263,11 @@ func (b *builder) link(a *ui.Node, n *html.Node) {
 }
 
 // skipped reports whether an attribute stays off the element built: a
-// script's handler, what would move light's focus, pictures ui
-// doesn't choose among, and href, which link sets on an a alone.
+// script's handler, what would move light's focus, the pictures an img
+// chooses among (chosen), and href, which link sets on an a alone.
 func skipped(key string) bool {
-	return strings.HasPrefix(key, "on") || key == "autofocus" || key == "srcset" || key == "tabindex" ||
-		key == "href"
+	return strings.HasPrefix(key, "on") || key == "autofocus" || key == attrSrcset || key == attrSizes ||
+		key == "tabindex" || key == "href"
 }
 
 // cut is text up to what is read of a page or a sheet.
@@ -211,9 +276,10 @@ func cut(text string) string {
 }
 
 // metaRefresh is the content of the first meta refresh of an HTML page,
-// "" for none.
-func metaRefresh(page string) string {
-	root, err := html.Parse(strings.NewReader(cut(page)))
+// "" for none: what a noscript holds is the page's only when its scripts
+// do not run.
+func metaRefresh(page string, scripts bool) string {
+	root, err := html.ParseWithOptions(strings.NewReader(cut(page)), html.ParseOptionEnableScripting(scripts))
 	if err != nil {
 		return ""
 	}

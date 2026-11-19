@@ -10,25 +10,45 @@ import (
 // historyPage is where the history is shown.
 const historyPage = own + historyName
 
-// visit notes a move to a page of light's own; one of the web is noted
-// when it lands, under the address that answered and its title.
+// visit notes a move to a page of light's own, but those that list what
+// light keeps and those of the model, where its categories are edited
+// and where a text is translated; one of the web is noted when it
+// lands, under the address that answered and its title.
 func (s *Screen) visit(address string) {
-	if _, _, lights := tabs.Own(address); lights && address != tabs.Home && address != historyPage {
+	if _, _, lights := tabs.Own(address); lights && address != tabs.Home && address != historyPage &&
+		address != bookmarksPage && address != categoriesPage && address != translatePage {
 		s.record(address, s.title(address))
 	}
 }
 
-func (s *Screen) record(address, title string) {
-	if !s.config.KeepHistory {
+func (p *Profile) record(address, title string) {
+	if !p.config.KeepHistory {
 		return
 	}
-	s.visits.Add(address, title, s.opts.Now())
-	s.history.touch()
+	p.visits.Add(address, title, p.opts.Now())
+	p.rewrite()
 }
 
-func (s *Screen) clearHistory() {
-	s.visits.Clear()
-	s.history.touch()
+func (p *Profile) clearHistory() {
+	p.visits.Clear()
+	p.unshut("")
+	p.forgetSorted()
+	p.rewrite()
+}
+
+// rewrite has the history that changed written, and listed again in
+// the windows that show it.
+func (p *Profile) rewrite() {
+	p.recorded++
+	p.history.touch()
+}
+
+// watchHistory lists the history again on the page that shows it, once
+// it changed, in this window or another.
+func (s *Screen) watchHistory() {
+	if s.relist != nil && s.visitsSeen != s.recorded {
+		s.relist()
+	}
 }
 
 // historyBody is the history page: a field that filters it, a button
@@ -47,14 +67,16 @@ func historyBody(s *Screen) []*ui.Node {
 		body = append(body, ui.P(ui.ID("history-problem"), ui.Text("The history's file is not in use: "+
 			s.unreadable.Error()+".")))
 	}
+	s.relist = func() { s.listVisits(list, s.doc.Value(filter)) }
 	s.listVisits(list, "")
-	return append(body, list)
+	return s.askable(append(body, list), filter, list)
 }
 
 // listVisits fills list with the visits filter keeps: a heading a day,
 // then each visit's time, icon, title and address, and a button that
 // removes it.
 func (s *Screen) listVisits(list *ui.Node, filter string) {
+	s.visitsSeen = s.recorded
 	empty(list)
 	days := s.visits.Days(filter)
 	if len(days) == 0 {
@@ -65,7 +87,7 @@ func (s *Screen) listVisits(list *ui.Node, filter string) {
 		for _, v := range day.Visits {
 			list.Append(s.visitRow(v, func() {
 				s.visits.Remove(v)
-				s.history.touch()
+				s.rewrite()
 				s.listVisits(list, filter)
 			}))
 		}
@@ -78,9 +100,9 @@ func (s *Screen) visitRow(v history.Visit, remove func()) *ui.Node {
 		title = shownAs(v.Address)
 	}
 	row := ui.Div(ui.Class("visit"), ui.Span(ui.Class("time"), ui.Text(v.At.Format("15:04"))))
-	icon := s.icon(v.Address)
-	if icon == nil {
-		icon = ui.Span(ui.Class("icon"))
+	icon := ui.Span(ui.Class("icon"))
+	if name := s.icon(v.Address); name != "" {
+		icon = ui.Img(ui.Class("icon"), ui.Attr("src", name), ui.Attr("alt", ""))
 	}
 	row.Append(icon)
 	row.Append(s.link(title, v.Address), ui.Span(ui.Class("address"), ui.Text(shownAs(v.Address))),

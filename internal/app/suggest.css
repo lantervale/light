@@ -1,0 +1,19 @@
+#bookmark-hint { flex: none; }
+#bookmark .inset { margin: 0 16px 14px; padding: 10px 12px; border-radius: 8px; background: #26242f; color: #dcd9e6;
+	font-size: 12.5px; line-height: 18px; overflow-wrap: anywhere; }
+#page .summary { margin: 0; color: var(--text); font-size: 12.5px; line-height: 18px; overflow-wrap: anywhere; }
+#bookmarks-list .summary { display: flex; gap: 8px; padding: 6px 10px 8px 26px; border-bottom: 1px solid var(--rule); }
+#bookmarks-list .summary img { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.card.summed { flex-direction: column; align-items: stretch; gap: 10px; }
+.card .top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+#page .card .summary { padding: 10px 12px; border-radius: 8px; background: var(--inset); color: var(--ink);
+	line-height: 19px; }
+#continue .head { align-items: center; }
+#continue .head.summed + .cards { grid-template-columns: minmax(0, 1fr); }
+#continue .robot-toggle { background: var(--rule); }
+#continue .robot-toggle[aria-pressed="false"] { background: transparent; }
+#continue .robot-toggle .tip { right: 36px; top: 4px; }
+#page .summary img, #continue .robot-toggle > img { display: none; }
+#page .summary img.ink, #continue .robot-toggle > img.ink { display: block; }
+.dark #page .summary img, .dark #continue .robot-toggle > img { display: block; }
+.dark #page .summary img.ink, .dark #continue .robot-toggle > img.ink { display: none; }

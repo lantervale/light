@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 
+	"github.com/lantervale/light/internal/devtools"
 	"github.com/lantervale/light/internal/menu"
 	"github.com/lantervale/light/pkg/netlog"
 	"github.com/lantervale/light/pkg/tabs"
@@ -24,6 +25,12 @@ type target struct {
 	link      string
 	picture   string
 	selection string
+	// archive is whether the click is on what saves the requests of the
+	// developer tools: its button, or their table.
+	archive bool
+	// node is the element of the page under the click, nil for what is
+	// not of the page.
+	node *ui.Node
 }
 
 // contextMenu opens the menu of what a right click is on, at the pointer.
@@ -44,20 +51,29 @@ func (s *Screen) closeMenuWhenMoved() {
 }
 
 // targetOf is what n, the element a right click is on, is part of. On
-// the canvas of a page of the web, it is what that page has under the
-// pointer.
+// the frame of a page of the web, it is what that page has under the
+// pointer, in the innermost of its own frames: the Inspector is shown
+// the page's iframe for what is in one.
 func (s *Screen) targetOf(n *ui.Node) target {
 	t := target{tab: -1, selection: s.doc.Selection().Text}
 	base := s.browser.Tab().Current()
-	if n == s.host {
-		page := s.session().pages[base]
-		at, _ := s.doc.PointerOn(s.host)
-		n, base, t.selection = page.Doc.ElementAt(at), page.Address, page.Doc.Selection().Text
+	var frame *ui.Node
+	if page := s.session().pages[base]; n == s.host && page != nil && page.Doc != nil {
+		at, _ := s.doc.FramePoint(s.host, s.win.Input().Mouse())
+		var doc *ui.Document
+		n, doc, base, frame = s.innermost(page, at)
+		if t.selection = doc.Selection().Text; t.selection == "" {
+			t.selection = page.Doc.Selection().Text
+		}
+	}
+	if t.node = s.ofPage(n); t.node == nil && frame != nil {
+		t.node = frame
 	}
 	for ; n != nil; n = n.Parent() {
 		if row, ok := s.tools.RowAt(n); ok && t.request == nil {
 			t.request = &row
 		}
+		t.archive = t.archive || n.ID() == devtools.ExportID || n.ID() == "dt-rows"
 		if number, ok := strings.CutPrefix(n.ID(), "tab-"); ok && n.HasClass("tab") {
 			t.tab, _ = strconv.Atoi(number)
 		}
@@ -100,23 +116,33 @@ func (s *Screen) entries(t target) []menu.Entry {
 	case t.tab >= 0:
 		return s.tabEntries(t.tab)
 	case t.request != nil:
-		return s.addressEntries("Open in new tab", "Copy address", t.request.Address)
+		return append(s.addressEntries("Open in new tab", "Copy address", t.request.Address),
+			s.archiveEntries(t.request.ID)...)
+	case t.archive:
+		return s.archiveEntries(0)[1:]
 	case t.field != nil:
 		return s.fieldEntries(t.field)
 	}
 	var groups [][]menu.Entry
 	if t.link != "" {
-		groups = append(groups, s.savedEntries("Open link in new tab", "Save link as…", "Copy link address", t.link))
+		groups = append(groups, s.linkEntries(t.link))
 	}
 	if t.picture != "" {
 		groups = append(groups,
 			s.savedEntries("Open image in new tab", "Save image as…", "Copy image address", t.picture))
 	}
 	if t.selection != "" {
-		groups = append(groups, []menu.Entry{{Label: "Copy", Do: func() { s.win.SetClipboard(t.selection) }}})
+		groups = append(groups, []menu.Entry{
+			{Label: "Copy", Do: func() { s.win.SetClipboard(t.selection) }},
+			{Label: searchLabel(s.engine().Name, t.selection),
+				Do: func() { s.openBeside(s.search(words(t.selection)), ahead) }},
+		})
 	}
 	if len(groups) == 0 {
 		groups = s.pageEntries()
+	}
+	if inspect := s.inspectEntries(t.node); inspect != nil {
+		groups = append(groups, inspect)
 	}
 	var entries []menu.Entry
 	for i, group := range groups {
@@ -128,9 +154,34 @@ func (s *Screen) entries(t target) []menu.Entry {
 	return entries
 }
 
+// words is text on one line, a space between its words.
+func words(text string) string { return strings.Join(strings.Fields(text), " ") }
+
+// searchLabel names the entry that asks engine for the selected text,
+// which it shows the beginning of.
+func searchLabel(engine, selection string) string {
+	const shown = 30
+	query := []rune(words(selection))
+	if len(query) > shown {
+		query = append(slices.Clone(query[:shown-1]), '…')
+	}
+	return "Search " + engine + " for “" + string(query) + "”"
+}
+
+// linkEntries open a link as the keys held at a click on it do: in a
+// tab behind the shown one, or in a window.
+func (s *Screen) linkEntries(link string) []menu.Entry {
+	return []menu.Entry{
+		{Label: "Open link in new tab", Do: func() { s.openBeside(link, behind) }},
+		{Label: "Open link in new window", Do: func() { s.openWindow(link) }},
+		{Label: "Save link as…", Do: func() { s.download(link, "") }, Disabled: !onTheWeb(link)},
+		{Label: "Copy link address", Do: func() { s.win.SetClipboard(link) }},
+	}
+}
+
 func (s *Screen) addressEntries(opens, copies, address string) []menu.Entry {
 	return []menu.Entry{
-		{Label: opens, Do: func() { s.OpenInNewTab(address) }},
+		{Label: opens, Do: func() { s.openBehind(address) }},
 		{Label: copies, Do: func() { s.win.SetClipboard(address) }},
 	}
 }
@@ -173,6 +224,11 @@ func (s *Screen) tabEntries(i int) []menu.Entry {
 		menu.Separator(),
 		{Label: "Close tab", Do: func() { s.closeTab(i) }},
 		{Label: "Close other tabs", Do: func() {
+			for other := range s.browser.Tabs {
+				if other != i {
+					s.closing(other)
+				}
+			}
 			s.browser.CloseOthers(i)
 			s.show()
 		}, Disabled: len(s.browser.Tabs) == 1},

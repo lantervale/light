@@ -14,7 +14,7 @@ import (
 )
 
 // tools is how the page's menu ends, whatever the page.
-const tools = "View page source History Downloads Developer tools Settings"
+const tools = "View page source History Downloads Developer tools Settings - Inspect element"
 
 func labels(entries []string) string { return fmt.Sprint(entries) }
 
@@ -56,7 +56,8 @@ func TestARightClickOnALinkOpensItInANewTabOrCopiesIt(t *testing.T) {
 	s := show(t)
 	s.visit(srv.URL + "/")
 	s.rightClickAt(s.inPage("vault"))
-	if got, want := labels(s.entries()), "[Open link in new tab Save link as… Copy link address]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Inspect element]"; got != want {
 		t.Fatalf("a link's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy link address")
@@ -66,10 +67,16 @@ func TestARightClickOnALinkOpensItInANewTabOrCopiesIt(t *testing.T) {
 	s.at(srv.URL + "/")
 	s.rightClickAt(s.inPage("vault"))
 	s.choose("Open link in new tab")
-	if len(s.browser.Tabs) != 2 || s.browser.Active != 1 {
-		t.Fatalf("%d tabs, tab %d shown", len(s.browser.Tabs), s.browser.Active)
+	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/vaults"; got != want {
+		t.Fatalf("the tabs are %s, want %s", got, want)
 	}
-	s.at(srv.URL + "/vaults")
+	s.at(srv.URL + "/")
+	s.rightClickAt(s.inPage("vault"))
+	s.choose("Open link in new window")
+	s.frame()
+	if len(s.screens) != 2 || s.window(1).opened() != "["+srv.URL+"/vaults]" || len(s.browser.Tabs) != 2 {
+		t.Fatalf("%d windows, the first's tabs are %s", len(s.screens), s.opened())
+	}
 }
 
 func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
@@ -78,7 +85,8 @@ func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
 	doc := s.visit(srv.URL + "/")
 	s.until("the map is drawn", func() bool { return box(t, doc, "map").W == 30 })
 	s.rightClickAt(s.inPage("map"))
-	if got, want := labels(s.entries()), "[Open image in new tab Save image as… Copy image address]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open image in new tab Save image as… Copy image address - Inspect element]"; got != want {
 		t.Fatalf("a picture's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy image address")
@@ -93,11 +101,15 @@ func TestARightClickOnAPictureOpensCopiesOrSavesIt(t *testing.T) {
 	s.until("the door is drawn", func() bool { return box(t, doc, "door").W == 30 })
 	s.rightClickAt(s.inPage("door"))
 	if got, want := labels(s.entries()),
-		"[Open link in new tab Save link as… Copy link address - Open image in new tab Save image as… "+
-			"Copy image address]"; got != want {
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Open image in new tab "+
+			"Save image as… Copy image address - Inspect element]"; got != want {
 		t.Fatalf("a picture in a link offers %s, want %s", got, want)
 	}
 	s.choose("Open image in new tab")
+	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/map.png"; got != want {
+		t.Fatalf("after opening the picture the tabs are %s, want %s", got, want)
+	}
+	s.click("tab-1")
 	s.at(srv.URL + "/map.png")
 }
 
@@ -108,7 +120,7 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 	words := doc.ByID("words").Children()[0]
 	doc.Select(ui.Position{Node: words, Offset: 4}, ui.Position{Node: words, Offset: 16})
 	s.rightClickAt(s.inPage("words"))
-	if got := labels(s.entries()); got != "[Copy]" {
+	if got := labels(s.entries()); got != "[Copy Search DuckDuckGo for “lower vaults” - Inspect element]" {
 		t.Fatalf("selected text offers %s", got)
 	}
 	s.choose("Copy")
@@ -116,7 +128,9 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 		t.Fatalf("copied %q", got)
 	}
 	s.rightClickAt(s.inPage("vault"))
-	if got, want := labels(s.entries()), "[Open link in new tab Save link as… Copy link address - Copy]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Copy "+
+			"Search DuckDuckGo for “lower vaults” - Inspect element]"; got != want {
 		t.Fatalf("a link with text selected offers %s, want %s", got, want)
 	}
 }
@@ -203,9 +217,6 @@ func TestARightClickOnATabOffersWhatTabsDo(t *testing.T) {
 		t.Fatalf("%d tabs after closing the others", len(s.browser.Tabs))
 	}
 	s.at(tabs.Home)
-	s.rightClick("tab-0")
-	s.choose("Close tab")
-	s.at(tabs.Home)
 }
 
 func TestALinkOfLightsOwnPagesHasALinksMenu(t *testing.T) {
@@ -215,7 +226,9 @@ func TestALinkOfLightsOwnPagesHasALinksMenu(t *testing.T) {
 	link := s.node("page").Children()[3].Children()[0]
 	r, _ := s.doc.BoxOf(link)
 	s.rightClickAt(r.Center())
-	if got, want := labels(s.entries()), "[Open link in new tab Save link as… (off) Copy link address]"; got != want {
+	if got, want := labels(s.entries()),
+		"[Open link in new tab Open link in new window Save link as… (off) Copy link address - "+
+			"Inspect element]"; got != want {
 		t.Fatalf("the menu is %s, want %s", got, want)
 	}
 	s.choose("Copy link address")
@@ -276,7 +289,9 @@ func TestARightClickOnARequestCopiesOrOpensItsAddress(t *testing.T) {
 	})
 	s.frame()
 	s.rightClick(s.requestRow("/site.css"))
-	if got, want := labels(s.entries()), "[Open in new tab Copy address]"; got != want {
+	if got, want := labels(s.entries()), "[Open in new tab Copy address - Copy as HAR (sanitized) "+
+		"Save as HAR (sanitized) Save all as HAR (sanitized) - Copy as HAR (with sensitive data) "+
+		"Save as HAR (with sensitive data) Save all as HAR (with sensitive data)]"; got != want {
 		t.Fatalf("a request's menu is %s, want %s", got, want)
 	}
 	s.choose("Copy address")
@@ -284,6 +299,13 @@ func TestARightClickOnARequestCopiesOrOpensItsAddress(t *testing.T) {
 		t.Fatalf("copied %q", got)
 	}
 	s.rightClick(s.requestRow("/site.css"))
+	s.newTab()
+	s.click("tab-0")
+	s.rightClick(s.requestRow("/site.css"))
 	s.choose("Open in new tab")
+	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/site.css "+tabs.Home; got != want {
+		t.Fatalf("after opening the request the tabs are %s, want %s", got, want)
+	}
+	s.click("tab-1")
 	s.at(srv.URL + "/site.css")
 }

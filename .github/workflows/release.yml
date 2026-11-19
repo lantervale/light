@@ -1,0 +1,153 @@
+# Releases light: a tag v* builds each target on its own system (light is cgo: GLFW, the audio device and V8 do not
+# cross compile between systems), each job packing its archive with GoReleaser's build and tools/release/bundle.sh;
+# one job then gathers them and adds their SBOMs, the source archive and the checksums (tools/release/assemble.sh),
+# and the last signs the checksums with cosign (keyless) and publishes the GitHub release, only once every target
+# built. Run by hand (workflow_dispatch), it does the same as a snapshot up to the publishing, which it leaves out:
+# the files stay as the run's artifacts.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # What the libc++ headers V8 is built with ask for (AppleClang 21 or Clang 21).
+  CLANG_VERSION: '21'
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Both Mac architectures build on one runner: clang there targets either.
+          - name: macOS (arm64, amd64)
+            runner: macos-latest
+            args: --id light-darwin
+          # 22.04 for its glibc (2.35): the binaries run on that and anything later.
+          - name: Linux (amd64)
+            runner: ubuntu-22.04
+            args: --id light-linux --single-target
+          - name: Linux (arm64)
+            runner: ubuntu-22.04-arm
+            args: --id light-linux --single-target
+          - name: Windows (amd64)
+            runner: windows-latest
+            args: --id light-windows --single-target
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # GoReleaser reads the version from the tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # libgl1-mesa-dev for GL/glx.h alone: GLFW's native header names GLX, and nothing links libGL.
+      - name: Linux libraries (GLFW's X11 and GLX headers, ALSA, Vulkan) and Clang for V8
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
+            libgl1-mesa-dev libasound2-dev libvulkan-dev
+          curl -fsSL https://apt.llvm.org/llvm.sh -o "$RUNNER_TEMP/llvm.sh"
+          sudo bash "$RUNNER_TEMP/llvm.sh" "$CLANG_VERSION"
+          echo "CC=clang-$CLANG_VERSION" >> "$GITHUB_ENV"
+          echo "CXX=clang++-$CLANG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Clang for V8, when Xcode's is older
+        if: runner.os == 'macOS'
+        run: |
+          clang --version
+          if [ "$(clang -dumpversion | cut -d. -f1)" -lt "$CLANG_VERSION" ]; then
+            brew install "llvm@$CLANG_VERSION"
+            prefix=$(brew --prefix "llvm@$CLANG_VERSION")
+            echo "CC=$prefix/bin/clang" >> "$GITHUB_ENV"
+            echo "CXX=$prefix/bin/clang++" >> "$GITHUB_ENV"
+          fi
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          install-only: true
+
+      - name: Build and pack
+        run: goreleaser --version && goreleaser build --clean ${{ matrix.args }} ${{ github.event_name == 'workflow_dispatch' && '--snapshot' || '' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: light-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/light_*.zip
+            dist/light_*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: SBOMs, source archive, checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: light-*
+          merge-multiple: true
+
+      - uses: anchore/sbom-action/download-syft@v0
+
+      - run: sh tools/release/assemble.sh dist && ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: GitHub release
+    if: github.event_name == 'push'
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release and its files
+      id-token: write # cosign's keyless signature
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+
+      - uses: sigstore/cosign-installer@v4.1.3
+
+      - name: Sign the checksums
+        run: |
+          for sums in dist/light_*-checksums.txt; do
+            cosign sign-blob --yes --bundle "$sums.sigstore.json" "$sums"
+          done
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          pre=
+          case "$TAG" in *-*) pre=--prerelease ;; esac
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" $pre \
+            --notes-file tools/release/notes.md --generate-notes

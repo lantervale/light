@@ -106,7 +106,7 @@ func TestTabsShrinkAsTheyMultiply(t *testing.T) {
 
 func TestTheTabListChoosesATab(t *testing.T) {
 	s := show(t)
-	s.click("go-guide")
+	s.enter("light://guide")
 	s.click("new-tab")
 	if _, laid := s.doc.BoxOf(s.list); laid {
 		t.Fatal("the tab list shows before its button is pressed")
@@ -128,7 +128,7 @@ func TestTheTabListChoosesATab(t *testing.T) {
 
 func TestAMiddleClickClosesItsTab(t *testing.T) {
 	s := show(t)
-	s.click("go-guide")
+	s.enter("light://guide")
 	s.click("new-tab")
 	s.in.SetMouse(s.box("tab-0").Center())
 	s.frame()
@@ -192,8 +192,9 @@ func TestReloadIsStopWhileThePageLoadsAndStopCancelsIt(t *testing.T) {
 	if label, _ := s.reload.Attr("aria-label"); label != "Reload" || src(s.reload.Children()[0]) != "reload.svg" {
 		t.Fatalf("an idle tab's button is %q", label)
 	}
+	s.OpenInNewTab(srv.URL + "/")
+	s.frame()
 	before := s.box("view")
-	s.Open(srv.URL + "/")
 	<-asked
 	s.frame()
 	if label, _ := s.reload.Attr("aria-label"); label != "Stop" || src(s.reload.Children()[0]) != "stop.svg" {
@@ -327,7 +328,7 @@ func TestTheStatusBubbleTakesNoPointerAndMovesAwayFromIt(t *testing.T) {
 	s.in.SetMouseButton(input.MouseLeft, false)
 	s.frame()
 	s.frame()
-	if got := s.browser.Tab().Current(); got != srv.URL+long {
+	if got := s.waited(s.browser.Tab()); got != srv.URL+long {
 		t.Fatalf("a click where the bubble stood opened %q, want the link under it", got)
 	}
 }
@@ -353,7 +354,8 @@ func TestTheUsualKeysDriveLight(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	s := show(t)
-	s.click("go-guide")
+	s.Open(tabs.Page(guideName))
+	s.frame()
 	s.command(input.KeyLeftBracket)
 	s.at(tabs.Home)
 	if !s.doc.Focused(s.doc.ByID("search")) {
@@ -427,10 +429,11 @@ func TestATabShowsItsSitesIconElseLightsLogo(t *testing.T) {
 	t.Cleanup(srv.Close)
 	s := show(t)
 	picture := func() *ui.Node {
-		if first := s.doc.ByID("tab-0").Children()[0].Children()[0]; first.HasClass("icon") {
-			return first
+		first := s.doc.ByID("tab-0").Children()[0].Children()[0]
+		if _, hidden := first.Attr("hidden"); hidden || !first.HasClass("icon") {
+			return nil
 		}
-		return nil
+		return first
 	}
 	if src(picture()) != logo {
 		t.Fatalf("a page of light's own shows %q", src(picture()))

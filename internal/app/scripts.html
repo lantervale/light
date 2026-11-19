@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+<title>Scripts</title>
+<style>
+body { max-width: 720px; margin: 0 auto; padding: 28px 24px 48px; color: #2a2530; font: 15px/1.5 sans-serif; }
+h1 { margin: 0 0 4px; font-size: 26px; }
+h2 { margin: 28px 0 8px; font-size: 17px; }
+p { margin: 6px 0; }
+.lead { color: #6d6777; }
+.card { padding: 14px 16px; border: 1px solid #ded9e6; border-radius: 8px; background: #ffffff; }
+.row { display: flex; align-items: center; gap: 10px; }
+button { height: 30px; padding: 0 14px; border: 1px solid #f15a2b; border-radius: 6px; background: #f15a2b;
+	color: #ffffff; font-size: 14px; cursor: pointer; }
+button.quiet { background: #ffffff; color: #f15a2b; }
+input[type="text"] { flex: 1; height: 28px; padding: 0 8px; border: 1px solid #c9c3d4; border-radius: 6px; font-size: 14px; }
+#count { min-width: 40px; font-size: 22px; font-weight: bold; text-align: center; }
+#todos { margin: 10px 0 0; padding: 0; list-style: none; }
+#todos li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #eeeaf3; }
+#todos li.done span { color: #9b95a6; text-decoration: line-through; }
+#todos li span { flex: 1; }
+#todos li button { height: 22px; padding: 0 8px; font-size: 12px; }
+.tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.tabs button { background: #ffffff; color: #2a2530; border-color: #c9c3d4; }
+.tabs button.on { background: #2a2530; color: #ffffff; border-color: #2a2530; }
+.panel { display: none; }
+.panel.on { display: block; }
+#clock, #engine, #fetched, #problem { color: #6d6777; }
+#problem { color: #c0392b; }
+#none { padding: 14px 16px; border: 1px solid #f0c674; border-radius: 8px; background: #fff8e6; }
+code { padding: 1px 4px; border-radius: 4px; background: #f1eef6; font-size: 13px; }
+body.dark { background: #000000; color: #f1f3f4; }
+.dark .lead, .dark #clock, .dark #engine, .dark #fetched { color: #9aa0a6; }
+.dark .card { border-color: #3a3d42; background: #121316; }
+.dark button.quiet, .dark .tabs button { background: #121316; }
+.dark .tabs button { color: #f1f3f4; border-color: #3a3d42; }
+.dark .tabs button.on { background: #f15a2b; border-color: #f15a2b; }
+.dark input[type="text"] { border-color: #3a3d42; background: #000000; color: #f1f3f4; }
+.dark #todos li { border-color: #3a3d42; }
+.dark code { background: #26282c; }
+.dark #none { background: #2b2410; }
+</style>
+</head>
+<body>
+<h1>Scripts</h1>
+<p class="lead">What light runs of a page's JavaScript, on this page: every part below is a script of its own
+changing the page it is in. Open the developer tools' Console to see what they say.</p>
+<p id="none">No script ran: this build of light has no JavaScript engine, or JavaScript is off in the
+<a href="light://config">settings</a>.</p>
+
+<h2>A counter</h2>
+<div class="card row">
+	<button id="less" class="quiet">&minus;</button><span id="count">0</span><button id="more">+</button>
+	<span id="parity"></span>
+</div>
+
+<h2>The console</h2>
+<div class="card">
+	<p>What a script says shows in the developer tools' Console (F12), with the errors nothing caught.</p>
+	<div class="row"><button id="speak" class="quiet">Say something</button>
+		<button id="fail" class="quiet">Throw an error</button></div>
+</div>
+
+<h2>A list kept between visits</h2>
+<div class="card">
+	<form id="add" class="row"><input id="todo" type="text" placeholder="Something to do"><button>Add</button></form>
+	<p id="problem"></p>
+	<ul id="todos"></ul>
+</div>
+
+<h2>Tabs</h2>
+<div class="card">
+	<div class="tabs"><button data-panel="timers" class="on">Timers</button><button data-panel="requests">Requests</button>
+		<button data-panel="engine-panel">Engine</button></div>
+	<div id="timers" class="panel on"><p>This page was shown <span id="clock">0.0</span> seconds ago, counted by
+		<code>setInterval</code>.</p></div>
+	<div id="requests" class="panel"><p><button id="fetch" class="quiet">Fetch light://scripts/data.json</button></p>
+		<p id="fetched">Nothing fetched yet.</p></div>
+	<div id="engine-panel" class="panel"><p id="engine"></p></div>
+</div>
+
+<script>
+document.getElementById("none").remove();
+console.log("light://scripts is running", navigator.userAgent);
+</script>
+<script>
+(function counter() {
+	let n = 0;
+	const count = document.getElementById("count"), parity = document.getElementById("parity");
+	const show = () => {
+		count.textContent = n;
+		parity.textContent = n === 0 ? "" : n % 2 ? "odd" : "even";
+		document.title = n === 0 ? "Scripts" : "Scripts (" + n + ")";
+	};
+	document.getElementById("more").addEventListener("click", () => { n++; show(); });
+	document.getElementById("less").addEventListener("click", () => { n--; show(); });
+})();
+</script>
+<script>
+(function speaking() {
+	let said = 0;
+	document.getElementById("speak").addEventListener("click", () => {
+		said++;
+		console.group("Said " + said);
+		console.log("a log with values", { said, list: [1, "two", null] }, document.body);
+		console.info("%cinfo%c with a style left out", "color: green", "");
+		console.warn("a warning");
+		console.error("an error");
+		console.debug("a debug line");
+		console.table([{ name: "ember", kind: "engine" }, { name: "light", kind: "browser" }]);
+		console.groupEnd();
+	});
+	document.getElementById("fail").addEventListener("click", function fail() { throw new RangeError("thrown by a click"); });
+})();
+</script>
+<script>
+(function todos() {
+	const list = document.getElementById("todos"), field = document.getElementById("todo");
+	const problem = document.getElementById("problem");
+	let items = [];
+	try { items = JSON.parse(localStorage.getItem("todos") || "[]"); } catch (e) { console.warn("the list was unreadable", e); }
+	const draw = () => {
+		list.innerHTML = "";
+		items.forEach((item, i) => {
+			const li = document.createElement("li");
+			li.className = item.done ? "done" : "";
+			const text = document.createElement("span");
+			text.textContent = item.text;
+			const done = document.createElement("button");
+			done.className = "quiet";
+			done.textContent = item.done ? "Undo" : "Done";
+			done.addEventListener("click", () => { item.done = !item.done; save(); });
+			const drop = document.createElement("button");
+			drop.className = "quiet";
+			drop.textContent = "Remove";
+			drop.addEventListener("click", () => { items.splice(i, 1); save(); });
+			li.append(text, done, drop);
+			list.appendChild(li);
+		});
+	};
+	const save = () => { localStorage.setItem("todos", JSON.stringify(items)); draw(); };
+	document.getElementById("add").addEventListener("submit", (event) => {
+		event.preventDefault();
+		const text = field.value.trim();
+		if (text.length < 3) {
+			problem.textContent = "Three letters at least.";
+			return;
+		}
+		problem.textContent = "";
+		items.push({ text, done: false });
+		field.value = "";
+		save();
+	});
+	draw();
+})();
+</script>
+<script>
+(function tabs() {
+	const buttons = document.querySelectorAll(".tabs button");
+	buttons.forEach((button) => button.addEventListener("click", () => {
+		buttons.forEach((other) => other.classList.toggle("on", other === button));
+		document.querySelectorAll(".panel").forEach((panel) => panel.classList.toggle("on", panel.id === button.dataset.panel));
+	}));
+	const began = performance.now(), clock = document.getElementById("clock");
+	setInterval(() => { clock.textContent = ((performance.now() - began) / 1000).toFixed(1); }, 100);
+	document.getElementById("engine").textContent = "This page is at " + location.href + ", " + innerWidth + " by " +
+		innerHeight + " points, and holds " + document.querySelectorAll("*").length + " elements.";
+	document.getElementById("fetch").addEventListener("click", async () => {
+		const out = document.getElementById("fetched");
+		out.textContent = "Fetching...";
+		try {
+			const answer = await fetch("light://scripts/data.json");
+			const data = await answer.json();
+			out.textContent = answer.status + ": " + data.message + " (" + data.items.join(", ") + ")";
+		} catch (error) {
+			out.textContent = String(error);
+		}
+	});
+})();
+</script>
+</body>
+</html>

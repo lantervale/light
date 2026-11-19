@@ -175,6 +175,26 @@ func TestTextIsDecodedByItsCharset(t *testing.T) {
 	}
 }
 
+func TestCodeIsUTF8UnlessItsTypeNamesACharset(t *testing.T) {
+	late := strings.Repeat(" ", 2048) + "var r = {À: 'A'}"
+	for name, c := range map[string]struct {
+		header, body, want string
+	}{
+		"no charset, the first bytes plain": {"text/javascript", late, late},
+		"a charset":                         {"text/javascript; charset=iso-8859-1", "var \xe9 = 1", "var é = 1"},
+		"a byte order mark":                 {"text/css", "\xef\xbb\xbfa { content: 'é' }", "a { content: 'é' }"},
+		"a charset no one knows":            {"text/css; charset=klingon", "a { content: 'é' }", "a { content: 'é' }"},
+	} {
+		a := &fetch.Answer{Header: http.Header{"Content-Type": {c.header}}, Body: []byte(c.body)}
+		if got := a.Code(); got != c.want {
+			t.Errorf("%s reads %q, want %q", name, got, c.want)
+		}
+	}
+	if a := (&fetch.Answer{Header: http.Header{"Content-Type": {"text/html"}}, Body: []byte(late)}); a.Text() == late {
+		t.Error("a page with no charset and plain first bytes is no longer sniffed")
+	}
+}
+
 func TestAStoppedOrSlowRequestEndsAlsoBehindARedirect(t *testing.T) {
 	srv := site(t)
 	c := fetch.New(nil)
@@ -283,5 +303,34 @@ func TestAClientFollowsAsManyRedirectsAsItIsSetUpTo(t *testing.T) {
 	}
 	if got := fetch.New(nil).MaxRedirects(); got != fetch.MaxRedirects {
 		t.Errorf("a client follows %d redirects unless told", got)
+	}
+}
+
+func TestEveryAddressOfACheckedRequestIsAskedBeforeItIsSent(t *testing.T) {
+	srv := site(t)
+	c := fetch.New(nil)
+	var asked []string
+	refuse := errors.New("not there")
+	check := func(stop string) func(*url.URL) error {
+		return func(to *url.URL) error {
+			asked = append(asked, to.Path)
+			if to.Path == stop {
+				return refuse
+			}
+			return nil
+		}
+	}
+	a, err := c.Get(fetch.Checked(t.Context(), check("")), srv.URL+"/found", "*/*")
+	if err != nil || a.URL.Path != "/pages/landing" || strings.Join(asked, " ") != "/found /pages/landing" {
+		t.Fatalf("checked and let through: %v %v, asked %v", a, err, asked)
+	}
+	asked = nil
+	if _, err = c.Get(fetch.Checked(t.Context(), check("/found")), srv.URL+"/found", "*/*"); !errors.Is(err, refuse) {
+		t.Fatalf("refused at its first address: %v", err)
+	}
+	asked = nil
+	_, err = c.Get(fetch.Checked(t.Context(), check("/pages/landing")), srv.URL+"/found", "*/*")
+	if !errors.Is(err, refuse) || len(asked) != 2 {
+		t.Fatalf("refused at the address it is redirected to: %v, asked %v", err, asked)
 	}
 }

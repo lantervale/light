@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,12 +26,18 @@ var tested = map[string]func(t *testing.T){
 	"scrolling viewport":  theViewportScrolls,
 	"overlay scrollbars":  theScrollbarTakesNoWidth,
 	"system fonts":        theMachinesFontsAreNamed,
+	"page fonts":          TestAPagesFontsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem,
 	"svg pictures":        svgPicturesAreDrawn,
+	"svg elements":        anSvgElementIsAPicture,
+	"chosen pictures":     TestAnImgShowsTheCandidateOfItsSrcsetOrOfItsPicturesSource,
 	"linked sheets":       onlyScreenSheetsAreFetched,
 	"elements left out":   scriptsAndTheLikeBuildNothing,
+	"scripts":             scriptsAreKeptOnlyWhenTheyRun,
+	"noscript":            aNoscriptIsThePagesWithoutScripts,
 	"unknown elements":    anUnknownElementIsADiv,
 	"links":               linksOpenFromThePagesAddress,
 	"download links":      aLinkWithDownloadIsSaved,
+	"forms":               aFormIsSentWithAGet,
 	"attributes left out": handlersAndTheLikeAreNotCopied,
 	"refresh":             anImmediateRefreshIsFollowed,
 	"limits":              aLongPageIsCut,
@@ -292,19 +299,21 @@ func theMachinesFontsAreNamed(t *testing.T) {
 
 func onlyScreenSheetsAreFetched(t *testing.T) {
 	var page strings.Builder
-	page.WriteString(`<link rel="StyleSheet" href="/screen.css"><link rel="stylesheet" media="print" href="/print.css">
+	page.WriteString(`<style>p { left: 0 }</style><style>p { right: 0 }</style><style>p { bottom: 0 }</style>
+		<link rel="StyleSheet" href="/screen.css"><link rel="stylesheet" media="print" href="/print.css">
 		<link rel="alternate" href="/feed.css"><link rel="stylesheet" href="/gone.css"><p id="p">text</p>`)
 	sheets := map[string]string{"/screen.css": "p { top: 0 }", "/print.css": "p { top: 0 }",
 		"/feed.css": "p { top: 0 }"}
+	more := func(i int) string { return "/more-" + strconv.Itoa(i) + ".css" }
 	for i := range maxSheets {
-		path := "/more-" + string(rune('a'+i)) + ".css"
-		page.WriteString(`<link rel="stylesheet" href="` + path + `">`)
-		sheets[path] = "p { top: 0 }"
+		page.WriteString(`<link rel="stylesheet" href="` + more(i) + `">`)
+		sheets[more(i)] = "p { top: 0 }"
 	}
 	doc, seen := built(t, page.String(), sheets)
+	// A page of a site builder links some fifty sheets.
 	for path, want := range map[string]bool{
 		"/screen.css": true, "/print.css": false, "/feed.css": false, "/gone.css": true,
-		"/more-a.css": true, "/more-n.css": true, "/more-o.css": false, "/more-p.css": false,
+		more(0): true, more(47): true, more(maxSheets - 3): true, more(maxSheets - 2): false, more(maxSheets - 1): false,
 	} {
 		if seen.has(path) != want {
 			t.Errorf("%s fetched: %v, want %v", path, seen.has(path), want)
@@ -315,13 +324,61 @@ func onlyScreenSheetsAreFetched(t *testing.T) {
 	}
 }
 
+func aNoscriptIsThePagesWithoutScripts(t *testing.T) {
+	const page = `<head><noscript><style>.cover { width: 50px; }</style></noscript></head>
+		<p class="cover" id="cover">cover</p><noscript><p id="without">without</p></noscript>`
+	doc, _ := built(t, page, nil)
+	doc.Layout(geom.V2(400, 300))
+	if doc.ByID("without") == nil || box(t, doc, "cover").W != 50 {
+		t.Errorf("without scripts a noscript's elements and sheets are not the page's")
+	}
+	with, _ := scripted(t, map[string]answer{"/": markup(page)}, "/")
+	with.Doc.Layout(geom.V2(400, 300))
+	if with.Doc.ByID("without") != nil || strings.TrimSpace(with.Doc.Body().Text()) != "cover" ||
+		box(t, with.Doc, "cover").W == 50 {
+		t.Errorf("with scripts a noscript is shown: %q", with.Doc.Body().Text())
+	}
+}
+
+func anSvgElementIsAPicture(t *testing.T) {
+	doc, _ := built(t, `<style>body { margin: 0; color: #c00; } .bar svg { height: 30px; }
+		svg[icon=search] { width: 20px; }
+		</style><div class="bar"><svg id="logo" viewBox="0 0 112 32"><path id="in-svg" d="M0 0h112v32z"/><title>lost</title>
+		</svg><svg id="find" icon="search" viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="currentColor"/></svg>
+		</div><svg id="sized" width="3em" height="24"><rect width="9" height="9" xlink:href="#in-svg"/></svg>`, nil)
+	doc.Layout(geom.V2(800, 600))
+	for id, want := range map[string]geom.Vec2{
+		"logo": geom.V2(105, 30), "find": geom.V2(20, 30), "sized": geom.V2(48, 24)} {
+		if r := box(t, doc, id); r.W != want.X || r.H != want.Y {
+			t.Errorf("#%s is %v by %v, want %v", id, r.W, r.H, want)
+		}
+	}
+	if doc.ByID("in-svg") != nil || strings.Contains(doc.Body().Text(), "lost") {
+		t.Error("what an svg holds was built as elements of the page")
+	}
+	find := doc.ByID("find")
+	address, _ := ui.PictureOf(find)
+	picture, _ := url.PathUnescape(address)
+	for _, want := range []string{`color="rgba(204,0,0,1)"`,
+		`<circle cx="16" cy="16" r="9" fill="currentColor"></circle>`} {
+		if !strings.Contains(picture, want) {
+			t.Errorf("the picture lacks %s: %s", want, picture)
+		}
+	}
+	if markup := doc.ByID("sized").Markup(); !strings.Contains(markup, `xlink:href="#in-svg"`) {
+		t.Errorf("the markup is %s", markup)
+	}
+	if warns := doc.Warnings(); len(warns) > 0 {
+		t.Errorf("an svg element warns: %v", warns)
+	}
+}
+
 func scriptsAndTheLikeBuildNothing(t *testing.T) {
 	markup := map[string]string{
 		"head": `<head id="gone-head"><title>lost</title></head><body><p id="kept">kept</p>`,
 		"meta": `<meta id="gone-meta" name="lost">`, "link": `<link id="gone-link" rel="lost" href="/lost">`,
 		"source": `<source id="gone-source" src="lost.ogg">`, "embed": `<embed id="gone-embed" src="lost.swf">`,
 		"style": `<style id="gone-style">p { top: 0 }</style>`, "script": `<script id="gone-script">lost()</script>`,
-		"svg": `<svg id="gone-svg"><text id="in-svg">lost</text></svg>`,
 	}
 	page := markup["head"]
 	for _, tag := range droppedNames() {
@@ -333,7 +390,7 @@ func scriptsAndTheLikeBuildNothing(t *testing.T) {
 		}
 	}
 	doc, _ := built(t, page+`<picture><source srcset="a.webp"><img id="shown" alt="shown"></picture>`, nil)
-	if len(droppedNames()) != 16 {
+	if len(droppedNames()) != 13 {
 		t.Errorf("%d elements are left out: %v", len(droppedNames()), droppedNames())
 	}
 	for _, tag := range droppedNames() {
@@ -341,7 +398,7 @@ func scriptsAndTheLikeBuildNothing(t *testing.T) {
 			t.Errorf("a %s was built", tag)
 		}
 	}
-	if text := doc.Body().Text(); text != "kept" || doc.ByID("in-svg") != nil || doc.ByID("shown") == nil {
+	if text := doc.Body().Text(); text != "kept" || doc.ByID("shown") == nil {
 		t.Errorf("the page reads %q, want only what it shows, and a picture's img", text)
 	}
 	if warns := doc.Warnings(); len(warns) > 0 {
@@ -438,6 +495,63 @@ func linksOpenFromThePagesAddress(t *testing.T) {
 	s.frame()
 	s.frame()
 	s.at(srv.URL + "/top")
+}
+
+// searchForm is a search engine's form: hidden fields, a field, two
+// buttons that submit, a box, a choice and what a form never sends.
+const searchForm = `<form action="/search" id="form"><input name="ie" value="ISO-8859-1" type="hidden">
+	<input id="q" name="q"><input id="go" name="btnG" value="Search it" type="submit">
+	<input id="lucky" name="btnI" value="Lucky" type="submit"><input name="off" value="1" disabled>
+	<input type="checkbox" name="safe" checked><input type="checkbox" name="images" value="1">
+	<select name="lang"><option value="fr">French<option value="en" selected>English</select>
+	<textarea name="note">a&amp;b</textarea><input type="button" name="plain" value="x"><input value="unnamed">
+	<button id="more" name="more" value="yes">More</button></form>
+	<form action="/login" method="post"><input name="user" value="ann"><button id="post">Log in</button></form>
+	<form action="other?kept=no#part" id="relative"><input name="a" value="1"><button id="there">Go</button></form>`
+
+func aFormIsSentWithAGet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=ISO-8859-1")
+		_, _ = w.Write([]byte(searchForm))
+	}))
+	t.Cleanup(srv.Close)
+	const sent = "ie=ISO-8859-1&q=caf%E9+%80+%26%2326085%3B&"
+	const rest = "safe=on&lang=en&note=a%26b"
+	for _, c := range []struct {
+		name string
+		do   func(s *shown, doc *ui.Document)
+		want string
+	}{
+		{"a click on a submit button", func(s *shown, doc *ui.Document) { s.click(doc.ByID("go")) },
+			"/search?" + sent + "btnG=Search+it&" + rest},
+		{"a click on another", func(s *shown, doc *ui.Document) { s.click(doc.ByID("lucky")) },
+			"/search?" + sent + "btnI=Lucky&" + rest},
+		{"a click on a button element", func(s *shown, doc *ui.Document) { s.click(doc.ByID("more")) },
+			"/search?" + sent + rest + "&more=yes"},
+		{"Enter in a field", func(s *shown, _ *ui.Document) {
+			s.in.SetKey(input.KeyEnter, true)
+			s.frame()
+			s.in.SetKey(input.KeyEnter, false)
+			s.frame()
+			s.frame()
+		}, "/search?" + sent + "btnG=Search+it&" + rest},
+		{"a form with another method", func(s *shown, doc *ui.Document) { s.click(doc.ByID("post")) }, "/dir/page"},
+		{"an action from the page's address", func(s *shown, doc *ui.Document) { s.click(doc.ByID("there")) },
+			"/dir/other?a=1#part"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := show(t)
+			s.t = t
+			doc := s.visit(srv.URL + "/dir/page")
+			s.click(doc.ByID("q"))
+			for _, r := range "café € 日" {
+				s.in.AddText(r)
+				s.frame()
+			}
+			c.do(s, doc)
+			s.at(srv.URL + c.want)
+		})
+	}
 }
 
 func handlersAndTheLikeAreNotCopied(t *testing.T) {

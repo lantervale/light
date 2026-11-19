@@ -7,3 +7,7 @@
 /.github/workflows/golangci.yml
 /.github/workflows/trufflehog.yml
 .env
+# web-platform-tests, their virtualenv, the light they run and their results (task wpt:setup, task wpt)
+/.wpt/
+/tools/wpt/*.egg-info/
+/tools/wpt/__pycache__/

@@ -1,0 +1,894 @@
+/url/url-tojson.any.html
+/url/urlsearchparams-get.any.html
+/url/url-statics-canparse.any.html
+/html/dom/historical.html
+/html/dom/reflection-sections.html
+/css/CSS2/backgrounds/background-001.xht
+/css/CSS2/backgrounds/background-004.xht
+/css/CSS2/borders/border-001.xht
+/css/CSS2/borders/border-color-001.xht
+/domparsing/DOMParser-parseFromString-html.html
+/domparsing/DOMParser-parseFromString-xml.html
+/domparsing/DOMParser-parseFromString-xml-parsererror.html
+/domparsing/XMLSerializer-serializeToString.html
+/css/CSS2/borders/border-003.xht
+/css/CSS2/backgrounds/background-005.xht
+/css/CSS2/backgrounds/background-006.xht
+/html/dom/reflection-embedded.html
+/html/dom/reflection-forms.html
+/html/dom/reflection-grouping.html
+/html/dom/reflection-metadata.html
+/html/dom/reflection-misc.html
+/html/dom/reflection-obsolete.html
+/html/dom/reflection-tabular.html
+/html/dom/reflection-text.html
+/domxpath/absolute-location-path-attribute-context.html
+/domxpath/booleans.html
+/domxpath/document.tentative.html
+/domxpath/elements-are-parents-of-their-attributes.html
+/domxpath/evaluate-non-node-set-result-type.html
+/domxpath/evaluator-constructor.html
+/domxpath/evaluator-cross-realm.tentative.html
+/domxpath/evaluator-different-document.tentative.html
+/domxpath/expression-cross-realm.tentative.html
+/domxpath/expression-different-document.tentative.html
+/domxpath/fn-concat.html
+/domxpath/fn-contains.html
+/domxpath/fn-id.html
+/domxpath/fn-lang.html
+/domxpath/fn-normalize-space.html
+/domxpath/fn-starts-with.html
+/domxpath/fn-substring-after.html
+/domxpath/fn-substring-before.html
+/domxpath/fn-substring.html
+/domxpath/fn-translate.html
+/domxpath/fns-name-related.html
+/domxpath/lexical-structure.html
+/domxpath/node-set-tree-order.html
+/domxpath/node-sets.html
+/domxpath/numbers.html
+/domxpath/predicates.html
+/domxpath/resolver-callback-interface-cross-realm.tentative.html
+/domxpath/resolver-callback-interface.html
+/domxpath/resolver-non-string-result.html
+/domxpath/result-iterateNext.html
+/domxpath/text-html-attributes.html
+/domxpath/text-html-elements.html
+/domxpath/variables-in-expression-crash.html
+/domxpath/xml_xpath_runner.html
+/domxpath/xpath-evaluate-crash.html
+/domxpath/xpath-shadow-dom.html
+/domxpath/xpathevaluatorbase-creatensresolver.html
+
+# The whole of dom/, but the tests that need what light cannot have yet, each named here with the
+# reason it is left out. A test that names one of these and passes all the same is kept.
+#
+# Left out, workers: light has none (40):
+#   /dom/abort/AbortSignal.any.worker.html
+#   /dom/abort/abort-signal-any.any.worker.html
+#   /dom/abort/event.any.worker.html
+#   /dom/abort/timeout.any.worker.html
+#   /dom/events/AddEventListenerOptions-once.any.worker.html
+#   /dom/events/AddEventListenerOptions-passive.any.worker.html
+#   /dom/events/AddEventListenerOptions-signal.any.worker.html
+#   /dom/events/Event-constructors.any.worker.html
+#   /dom/events/Event-isTrusted.any.worker.html
+#   /dom/events/EventTarget-add-remove-listener.any.worker.html
+#   /dom/events/EventTarget-addEventListener.any.worker.html
+#   /dom/events/EventTarget-constructible.any.worker.html
+#   /dom/events/EventTarget-removeEventListener.any.worker.html
+#   /dom/events/event-global.worker.html
+#   /dom/idlharness.any.serviceworker.html
+#   /dom/idlharness.any.sharedworker.html
+#   /dom/idlharness.any.worker.html
+#   /dom/observable/tentative/crashtests/observable-gc.any.worker.html
+#   /dom/observable/tentative/crashtests/observable-takeUntil-toArray.any.worker.html
+#   /dom/observable/tentative/observable-catch.any.worker.html
+#   /dom/observable/tentative/observable-constructor.any.worker.html
+#   /dom/observable/tentative/observable-drop.any.worker.html
+#   /dom/observable/tentative/observable-event-target.any.worker.html
+#   /dom/observable/tentative/observable-every.any.worker.html
+#   /dom/observable/tentative/observable-filter.any.worker.html
+#   /dom/observable/tentative/observable-finally.any.worker.html
+#   /dom/observable/tentative/observable-find.any.worker.html
+#   /dom/observable/tentative/observable-first.any.worker.html
+#   /dom/observable/tentative/observable-flatMap.any.worker.html
+#   /dom/observable/tentative/observable-forEach.any.worker.html
+#   /dom/observable/tentative/observable-from.any.worker.html
+#   /dom/observable/tentative/observable-inspect.any.worker.html
+#   /dom/observable/tentative/observable-last.any.worker.html
+#   /dom/observable/tentative/observable-map.any.worker.html
+#   /dom/observable/tentative/observable-reduce.any.worker.html
+#   /dom/observable/tentative/observable-some.any.worker.html
+#   /dom/observable/tentative/observable-switchMap.any.worker.html
+#   /dom/observable/tentative/observable-take.any.worker.html
+#   /dom/observable/tentative/observable-takeUntil.any.worker.html
+#   /dom/observable/tentative/observable-toArray.any.worker.html
+#
+# Left out, Observable: not built (29):
+#   /dom/observable/tentative/crashtests/observable-gc.any.html
+#   /dom/observable/tentative/crashtests/observable-takeUntil-toArray.any.html
+#   /dom/observable/tentative/idlharness.html
+#   /dom/observable/tentative/observable-catch.any.html
+#   /dom/observable/tentative/observable-constructor.any.html
+#   /dom/observable/tentative/observable-constructor.window.html
+#   /dom/observable/tentative/observable-drop.any.html
+#   /dom/observable/tentative/observable-event-target.any.html
+#   /dom/observable/tentative/observable-event-target.window.html
+#   /dom/observable/tentative/observable-every.any.html
+#   /dom/observable/tentative/observable-filter.any.html
+#   /dom/observable/tentative/observable-finally.any.html
+#   /dom/observable/tentative/observable-find.any.html
+#   /dom/observable/tentative/observable-first.any.html
+#   /dom/observable/tentative/observable-flatMap.any.html
+#   /dom/observable/tentative/observable-forEach.any.html
+#   /dom/observable/tentative/observable-forEach.window.html
+#   /dom/observable/tentative/observable-from.any.html
+#   /dom/observable/tentative/observable-inspect.any.html
+#   /dom/observable/tentative/observable-last.any.html
+#   /dom/observable/tentative/observable-map.any.html
+#   /dom/observable/tentative/observable-map.window.html
+#   /dom/observable/tentative/observable-reduce.any.html
+#   /dom/observable/tentative/observable-some.any.html
+#   /dom/observable/tentative/observable-switchMap.any.html
+#   /dom/observable/tentative/observable-take.any.html
+#   /dom/observable/tentative/observable-takeUntil.any.html
+#   /dom/observable/tentative/observable-takeUntil.window.html
+#   /dom/observable/tentative/observable-toArray.any.html
+#
+# Left out, scrolling by script and its events (scrollend, overscroll): light scrolls in ember, without them (61):
+#   /dom/events/scrolling/iframe-chains.html
+#   /dom/events/scrolling/input-text-scroll-event-when-using-arrow-keys.html
+#   /dom/events/scrolling/save-iframe-scroll-offset-when-display-none.html
+#   /dom/events/scrolling/scroll-cross-origin-iframes.html
+#   /dom/events/scrolling/scroll-event-fired-to-element.html
+#   /dom/events/scrolling/scroll-event-fired-to-iframe.html
+#   /dom/events/scrolling/scroll-event-not-fired-on-ancestor-style-change.html
+#   /dom/events/scrolling/scroll-events-fired-once-per-frame-across-display-none.html
+#   /dom/events/scrolling/scrollIntoView-in-onscroll-to-sticky.html
+#   /dom/events/scrolling/scrollend-event-fired-after-instant-scroll-in-microtask.html
+#   /dom/events/scrolling/scrollend-event-fired-after-layout-clamping.html
+#   /dom/events/scrolling/scrollend-event-fired-after-sequence-of-scrolls.tentative.html
+#   /dom/events/scrolling/scrollend-event-fired-after-snap.html
+#   /dom/events/scrolling/scrollend-event-fired-for-mandatory-snap-point-after-load.html
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=root-scrollBy-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=root-scrollBy-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=root-scrollTo-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=root-scrollTo-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=subframe-scrollBy-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=subframe-scrollBy-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=subframe-scrollTo-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html?include=subframe-scrollTo-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=root-scrollLeft-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=root-scrollLeft-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=root-scrollTop-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=root-scrollTop-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=subframe-scrollLeft-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=subframe-scrollLeft-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=subframe-scrollTop-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html?include=subframe-scrollTop-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html?include=nested-scrollIntoView
+#   /dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html?include=root-inline-end-block-end-behavior-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html?include=root-inline-start-block-start-behavior-smooth
+#   /dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html?include=subframe-inline-end-block-end-behavior-auto
+#   /dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html?include=subframe-inline-start-block-start-behavior-smooth
+#   /dom/events/scrolling/scrollend-event-fired-to-document.html
+#   /dom/events/scrolling/scrollend-event-fired-to-element-with-overscroll-behavior.html
+#   /dom/events/scrolling/scrollend-event-fired-to-window.html
+#   /dom/events/scrolling/scrollend-event-fires-for-repeat-key-ending-after-scroll-container-end-is-reached.html
+#   /dom/events/scrolling/scrollend-event-fires-on-visual-viewport.html
+#   /dom/events/scrolling/scrollend-event-fires-to-iframe-window.html
+#   /dom/events/scrolling/scrollend-event-for-user-scroll.html
+#   /dom/events/scrolling/scrollend-event-handler-content-attributes.html
+#   /dom/events/scrolling/scrollend-event-not-fired-after-removing-scroller.tentative.html
+#   /dom/events/scrolling/scrollend-event-not-fired-on-no-scroll.html
+#   /dom/events/scrolling/scrollend-fires-to-text-input.html
+#   /dom/events/scrolling/scrollend-with-snap-on-fractional-offset.html
+#   /dom/events/scrolling/visibility-hidden-scrolls.html
+#   /dom/events/scrolling/wheel-event-composed.html
+#   /dom/events/scrolling/wheel-event-no-scroll-after-prevent-default.html
+#   /dom/events/scrolling/wheel-event-transactions-basic.html?include=scroll-over-scrollable-child
+#   /dom/events/scrolling/wheel-event-transactions-basic.html?include=target-basic
+#   /dom/events/scrolling/wheel-event-transactions-basic.html?include=transaction-not-bound-to-scroll-frame
+#   /dom/events/scrolling/wheel-event-transactions-multiple-action-chains.html
+#   /dom/events/scrolling/wheel-event-transactions-target-display-change.html?include=contents
+#   /dom/events/scrolling/wheel-event-transactions-target-display-change.html?include=none
+#   /dom/events/scrolling/wheel-event-transactions-target-elements.html
+#   /dom/events/scrolling/wheel-event-transactions-target-move.html
+#   /dom/events/scrolling/wheel-event-transactions-target-removal.html
+#   /dom/events/scrolling/wheel-event-transactions-target-resize.html?include=passive-false
+#   /dom/events/scrolling/wheel-event-transactions-target-resize.html?include=passive-true
+#
+# Left out, touch and wheel input sent over WebDriver actions, which light's WebDriver does not take (42):
+#   /dom/events/non-cancelable-when-passive/generic-events-stay-cancelable.html
+#   /dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-body.html
+#   /dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-div.html
+#   /dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-document.html
+#   /dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-root.html
+#   /dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-window.html
+#   /dom/events/non-cancelable-when-passive/synthetic-events-cancelable.html
+#
+# Left out, OpaqueRange (tentative): not built (19):
+#   /dom/ranges/tentative/OpaqueRange-auto-disconnect.html
+#   /dom/ranges/tentative/OpaqueRange-basic.html
+#   /dom/ranges/tentative/OpaqueRange-disconnect.html
+#   /dom/ranges/tentative/OpaqueRange-display-none.html
+#   /dom/ranges/tentative/OpaqueRange-geometry-basic.html
+#   /dom/ranges/tentative/OpaqueRange-geometry-complexity-and-visibility.html
+#   /dom/ranges/tentative/OpaqueRange-geometry-multiline.html
+#   /dom/ranges/tentative/OpaqueRange-geometry-mutations.html
+#   /dom/ranges/tentative/OpaqueRange-highlight.html
+#   /dom/ranges/tentative/OpaqueRange-highlightsFromPoint.html
+#   /dom/ranges/tentative/OpaqueRange-interactive-basic.html
+#   /dom/ranges/tentative/OpaqueRange-interactive-overlap-and-selection.html
+#   /dom/ranges/tentative/OpaqueRange-offset.html
+#   /dom/ranges/tentative/OpaqueRange-programmatic-updates.html
+#   /dom/ranges/tentative/OpaqueRange-range-updates.html
+#   /dom/ranges/tentative/OpaqueRange-supported-elements.html
+#   /dom/ranges/tentative/OpaqueRange-unsupported-elements.html
+#   /dom/ranges/tentative/OpaqueRange-update-event-order.html
+#   /dom/ranges/tentative/OpaqueRange-validation.html
+#
+# Left out, shadow DOM: light has no shadow trees (51):
+#   /dom/events/Event-dispatch-detached-input-and-change.html
+#   /dom/events/Event-dispatch-listener-order.window.html
+#   /dom/events/event-global-extra.window.html
+#   /dom/events/event-global.html
+#   /dom/events/relatedTarget.window.html
+#   /dom/events/shadow-relatedTarget.html
+#   /dom/nodes/Document-adoptNode-DocumentFragment-with-host.window.html
+#   /dom/nodes/Node-cloneNode-document-allow-declarative-shadow-roots.window.html
+#   /dom/nodes/Node-isConnected-shadow-dom.html
+#   /dom/nodes/ParentNode-querySelector-host-pseudo-class.html
+#   /dom/nodes/ParentNode-querySelector-shadowroot-nth-child.html
+#   /dom/nodes/adoption.window.html
+#   /dom/nodes/attach-shadow-realm-after-adoption.html
+#   /dom/nodes/create-element-realm-after-adoption.html
+#   /dom/nodes/insertion-removing-steps/frame-post-connection-steps.html
+#   /dom/nodes/moveBefore/Node-moveBefore.html
+#   /dom/nodes/moveBefore/css-transition-cross-shadow.html
+#   /dom/nodes/moveBefore/custom-element-move-reactions.html
+#   /dom/nodes/moveBefore/form-associated-custom-element-reset.html
+#   /dom/nodes/moveBefore/listed-form-element-reset.html
+#   /dom/nodes/moveBefore/moveBefore-custom-element-registry.html
+#   /dom/nodes/moveBefore/moveBefore-disconnected-id-map.html
+#   /dom/nodes/moveBefore/moveBefore-id-map.html
+#   /dom/nodes/moveBefore/moveBefore-image-map.html
+#   /dom/nodes/moveBefore/moveBefore-name-map.html
+#   /dom/nodes/moveBefore/moveBefore-radio-groups.html
+#   /dom/nodes/moveBefore/moveBefore-shadow-boundary-id-change.html
+#   /dom/nodes/moveBefore/moveBefore-shadow-host-id-map.html
+#   /dom/nodes/moveBefore/moveBefore-shadow-inside.html
+#   /dom/nodes/moveBefore/moveBefore-shadow-root.html
+#   /dom/nodes/moveBefore/slotchange-events.html
+#   /dom/nodes/namespaced-attribute-mutations.html
+#   /dom/nodes/node-creation-realm.html
+#   /dom/nodes/post-connection-steps-shadow-tree.html
+#   /dom/nodes/remove-from-shadow-host-and-adopt-into-iframe.html
+#   /dom/nodes/rootNode.html
+#   /dom/ranges/Range-cloneContents-around-shadow.html
+#   /dom/ranges/Range-cloneContents-around-shadow.tentative.html
+#   /dom/ranges/Range-cloneContents-in-ShadowRoot.html
+#   /dom/ranges/Range-deleteContents-around-shadow.html
+#   /dom/ranges/Range-deleteContents-around-shadow.tentative.html
+#   /dom/ranges/Range-deleteContents-in-ShadowRoot.html
+#   /dom/ranges/Range-expand-shadow.tentative.html
+#   /dom/ranges/Range-extractContents-around-shadow.html
+#   /dom/ranges/Range-extractContents-around-shadow.tentative.html
+#   /dom/ranges/Range-extractContents-in-ShadowRoot.html
+#   /dom/ranges/Range-in-shadow-after-the-shadow-removed.html?mode=closed
+#   /dom/ranges/Range-in-shadow-after-the-shadow-removed.html?mode=open
+#   /dom/ranges/Range-intersectsNode-shadow.html
+#   /dom/slot-recalc.html
+#   /dom/xpath-evaluation-detached-nodes.html
+#
+# Left out, custom elements: light has none (4):
+#   /dom/events/EventTarget-add-listener-platform-object.html
+#   /dom/nodes/Node-appendChild-cereactions-vs-script.window.html
+#   /dom/nodes/insertion-removing-steps/Node-appendChild-script-and-custom-from-fragment.html
+#   /dom/nodes/node-realm-mixed-across-adoption.html
+#
+# Left out, window.open: light opens no window for a script (1):
+#   /dom/nodes/remove-and-adopt-thcrash.html
+
+/dom/abort/AbortSignal.any.html
+/dom/abort/abort-signal-any.any.html
+/dom/abort/abort-signal-timeout.html
+/dom/abort/event.any.html
+/dom/abort/reason-constructor.html
+/dom/abort/timeout.any.html
+/dom/attributes-are-nodes.html
+/dom/collections/HTMLCollection-as-prototype.html
+/dom/collections/HTMLCollection-delete.html
+/dom/collections/HTMLCollection-detached-root-gc.html
+/dom/collections/HTMLCollection-empty-name.html
+/dom/collections/HTMLCollection-iterator.html
+/dom/collections/HTMLCollection-live-item-removal.html
+/dom/collections/HTMLCollection-live-mutations.window.html
+/dom/collections/HTMLCollection-own-props.html
+/dom/collections/HTMLCollection-supported-property-indices.html
+/dom/collections/HTMLCollection-supported-property-names.html
+/dom/collections/domstringmap-supported-property-names.html
+/dom/collections/namednodemap-supported-property-names.html
+/dom/eventPathRemoved.html
+/dom/events/AddEventListenerOptions-once.any.html
+/dom/events/AddEventListenerOptions-passive.any.html
+/dom/events/AddEventListenerOptions-signal.any.html
+/dom/events/Body-FrameSet-Event-Handlers.html
+/dom/events/CustomEvent.html
+/dom/events/Event-cancelBubble.html
+/dom/events/Event-constants.html
+/dom/events/Event-constructors.any.html
+/dom/events/Event-defaultPrevented-after-dispatch.html
+/dom/events/Event-defaultPrevented.html
+/dom/events/Event-dispatch-bubble-canceled.html
+/dom/events/Event-dispatch-bubbles-false.html
+/dom/events/Event-dispatch-bubbles-true.html
+/dom/events/Event-dispatch-click.html
+/dom/events/Event-dispatch-click.tentative.html
+/dom/events/Event-dispatch-detached-click.html
+/dom/events/Event-dispatch-handlers-changed.html
+/dom/events/Event-dispatch-multiple-cancelBubble.html
+/dom/events/Event-dispatch-multiple-stopPropagation.html
+/dom/events/Event-dispatch-omitted-capture.html
+/dom/events/Event-dispatch-on-disabled-elements.html
+/dom/events/Event-dispatch-order-at-target.html
+/dom/events/Event-dispatch-order.html
+/dom/events/Event-dispatch-other-document.html
+/dom/events/Event-dispatch-propagation-stopped.html
+/dom/events/Event-dispatch-redispatch.html
+/dom/events/Event-dispatch-reenter.html
+/dom/events/Event-dispatch-single-activation-behavior.html
+/dom/events/Event-dispatch-target-moved.html
+/dom/events/Event-dispatch-target-removed.html
+/dom/events/Event-dispatch-throwing-multiple-globals.html
+/dom/events/Event-dispatch-throwing.html
+/dom/events/Event-init-while-dispatching.html
+/dom/events/Event-initEvent.html
+/dom/events/Event-isTrusted.any.html
+/dom/events/Event-propagation.html
+/dom/events/Event-returnValue.html
+/dom/events/Event-stopImmediatePropagation.html
+/dom/events/Event-stopPropagation-cancel-bubbling.html
+/dom/events/Event-subclasses-constructors.html
+/dom/events/Event-timestamp-cross-realm-getter.html
+/dom/events/Event-timestamp-high-resolution.html
+/dom/events/Event-timestamp-high-resolution.https.html
+/dom/events/Event-timestamp-safe-resolution.html
+/dom/events/Event-type-empty.html
+/dom/events/Event-type.html
+/dom/events/EventListener-addEventListener.sub.window.html
+/dom/events/EventListener-handleEvent-cross-realm.html
+/dom/events/EventListener-handleEvent.html
+/dom/events/EventListener-incumbent-global-1.sub.html
+/dom/events/EventListener-incumbent-global-2.sub.html
+/dom/events/EventListener-invoke-legacy.html
+/dom/events/EventListenerOptions-capture.html
+/dom/events/EventTarget-add-remove-listener.any.html
+/dom/events/EventTarget-addEventListener.any.html
+/dom/events/EventTarget-constructible.any.html
+/dom/events/EventTarget-dispatchEvent-returnvalue.html
+/dom/events/EventTarget-dispatchEvent.html
+/dom/events/EventTarget-removeEventListener.any.html
+/dom/events/EventTarget-this-of-listener.html
+/dom/events/EventTarget-window-constructor.html
+/dom/events/KeyEvent-initKeyEvent.html
+/dom/events/click-on-absolute-pseudo.html
+/dom/events/element-click.html
+/dom/events/event-disabled-dynamic.html
+/dom/events/event-global-event-targets.html
+/dom/events/event-global-is-still-set-when-coercing-beforeunload-result.html
+/dom/events/event-global-is-still-set-when-reporting-exception-onerror.html
+/dom/events/event-global-replaceable.html
+/dom/events/event-global-set-before-handleEvent-lookup.window.html
+/dom/events/event-handler-attribute-replace-preserves-passive.html
+/dom/events/event-listener-not-fully-active-adopted-node.html
+/dom/events/event-listener-not-fully-active-callback.html
+/dom/events/event-listener-not-fully-active-navigated.html
+/dom/events/event-listener-not-fully-active-target.html
+/dom/events/event-src-element-nullable.html
+/dom/events/focus-event-document-move.html
+/dom/events/handler-count.html?document
+/dom/events/handler-count.html?element
+/dom/events/handler-count.html?window
+/dom/events/label-default-action.html
+/dom/events/legacy-pre-activation-behavior.window.html
+/dom/events/mouse-event-retarget.html
+/dom/events/no-focus-events-at-clicking-editable-content-in-link.html
+/dom/events/passive-by-default-non-node.html
+/dom/events/passive-by-default.html
+/dom/events/pointer-event-document-move.html
+/dom/events/preventDefault-during-activation-behavior.html
+/dom/events/remove-all-listeners.html
+/dom/events/webkit-animation-end-event.html
+/dom/events/webkit-animation-iteration-event.html
+/dom/events/webkit-animation-start-event.html
+/dom/events/webkit-transition-end-event.html
+/dom/events/window-composed-path.html
+/dom/events/window-event-restored-after-throwing-onerror.html
+/dom/historical-mutation-events.html
+/dom/historical.html
+/dom/idlharness.window.html?exclude=Node
+/dom/idlharness.window.html?include=Node
+/dom/interface-objects.html
+/dom/lists/DOMTokenList-Iterable.html
+/dom/lists/DOMTokenList-coverage-for-attributes.html
+/dom/lists/DOMTokenList-iteration.html
+/dom/lists/DOMTokenList-stringifier.html
+/dom/lists/DOMTokenList-value.html
+/dom/nodes/Attr-prefix-xhtml.xhtml
+/dom/nodes/Attr-prefix.html
+/dom/nodes/CharacterData-appendChild.html
+/dom/nodes/CharacterData-appendData.html
+/dom/nodes/CharacterData-data.html
+/dom/nodes/CharacterData-deleteData.html
+/dom/nodes/CharacterData-insertData.html
+/dom/nodes/CharacterData-remove.html
+/dom/nodes/CharacterData-replaceData.html
+/dom/nodes/CharacterData-substringData.html
+/dom/nodes/CharacterData-surrogates.html
+/dom/nodes/ChildNode-after.html
+/dom/nodes/ChildNode-before.html
+/dom/nodes/ChildNode-replaceWith.html
+/dom/nodes/Comment-constructor.html
+/dom/nodes/Comment-in-doctype.xhtml
+/dom/nodes/DOMImplementation-createDocument-no-browsing-context.html
+/dom/nodes/DOMImplementation-createDocument.html
+/dom/nodes/DOMImplementation-createDocumentType.html
+/dom/nodes/DOMImplementation-createHTMLDocument-with-saved-implementation.html
+/dom/nodes/DOMImplementation-createHTMLDocument.html
+/dom/nodes/DOMImplementation-hasFeature.html
+/dom/nodes/Document-URL.html
+/dom/nodes/Document-adoptNode.html
+/dom/nodes/Document-base-url-not-live.window.html
+/dom/nodes/Document-characterSet-normalization-1.html
+/dom/nodes/Document-characterSet-normalization-2.html
+/dom/nodes/Document-cloneNode-about-base-url-relative.window.html
+/dom/nodes/Document-cloneNode-about-base-url.window.html
+/dom/nodes/Document-cloneNode-base-url-xml.window.html
+/dom/nodes/Document-cloneNode-base-url.window.html
+/dom/nodes/Document-cloneNode-srcdoc-base-url.window.html
+/dom/nodes/Document-constructor-svg.svg
+/dom/nodes/Document-constructor-xml.xml
+/dom/nodes/Document-constructor.html
+/dom/nodes/Document-contentType/contentType/contenttype_bmp.html
+/dom/nodes/Document-contentType/contentType/contenttype_css.html
+/dom/nodes/Document-contentType/contentType/contenttype_datauri_02.html
+/dom/nodes/Document-contentType/contentType/contenttype_gif.html
+/dom/nodes/Document-contentType/contentType/contenttype_html.html
+/dom/nodes/Document-contentType/contentType/contenttype_javascripturi.html
+/dom/nodes/Document-contentType/contentType/contenttype_jpg.html
+/dom/nodes/Document-contentType/contentType/contenttype_mimeheader_01.html
+/dom/nodes/Document-contentType/contentType/contenttype_mimeheader_02.html
+/dom/nodes/Document-contentType/contentType/contenttype_mimeheader_03.html
+/dom/nodes/Document-contentType/contentType/contenttype_png.html
+/dom/nodes/Document-contentType/contentType/contenttype_txt.html
+/dom/nodes/Document-contentType/contentType/contenttype_xml.html
+/dom/nodes/Document-contentType/contentType/createDocument.html
+/dom/nodes/Document-contentType/contentType/createHTMLDocument.html
+/dom/nodes/Document-contentType/contentType/xhr_responseType_document.html
+/dom/nodes/Document-createAttribute.html
+/dom/nodes/Document-createCDATASection-xhtml.xhtml
+/dom/nodes/Document-createCDATASection.html
+/dom/nodes/Document-createComment.html
+/dom/nodes/Document-createElement-namespace.html
+/dom/nodes/Document-createElement.html
+/dom/nodes/Document-createElementNS.html
+/dom/nodes/Document-createEvent-touchevent.window.html
+/dom/nodes/Document-createEvent.https.html
+/dom/nodes/Document-createProcessingInstruction-xhtml.xhtml
+/dom/nodes/Document-createProcessingInstruction.html
+/dom/nodes/Document-createTextNode.html
+/dom/nodes/Document-createTreeWalker.html
+/dom/nodes/Document-doctype.html
+/dom/nodes/Document-getElementById.html
+/dom/nodes/Document-getElementsByClassName.html
+/dom/nodes/Document-getElementsByTagName-xhtml.xhtml
+/dom/nodes/Document-getElementsByTagName.html
+/dom/nodes/Document-getElementsByTagNameNS.html
+/dom/nodes/Document-implementation.html
+/dom/nodes/Document-importNode.html
+/dom/nodes/DocumentFragment-constructor.html
+/dom/nodes/DocumentFragment-getElementById.html
+/dom/nodes/DocumentFragment-querySelectorAll-after-modification.html
+/dom/nodes/DocumentType-literal-xhtml.xhtml
+/dom/nodes/DocumentType-literal.html
+/dom/nodes/DocumentType-remove.html
+/dom/nodes/Element-childElement-null-svg.svg
+/dom/nodes/Element-childElement-null-xhtml.xhtml
+/dom/nodes/Element-childElement-null.html
+/dom/nodes/Element-childElementCount-dynamic-add-svg.svg
+/dom/nodes/Element-childElementCount-dynamic-add-xhtml.xhtml
+/dom/nodes/Element-childElementCount-dynamic-add.html
+/dom/nodes/Element-childElementCount-dynamic-remove-svg.svg
+/dom/nodes/Element-childElementCount-dynamic-remove-xhtml.xhtml
+/dom/nodes/Element-childElementCount-dynamic-remove.html
+/dom/nodes/Element-childElementCount-nochild-svg.svg
+/dom/nodes/Element-childElementCount-nochild-xhtml.xhtml
+/dom/nodes/Element-childElementCount-nochild.html
+/dom/nodes/Element-childElementCount-svg.svg
+/dom/nodes/Element-childElementCount-xhtml.xhtml
+/dom/nodes/Element-childElementCount.html
+/dom/nodes/Element-children.html
+/dom/nodes/Element-classlist.html
+/dom/nodes/Element-closest-null-selectors.html
+/dom/nodes/Element-closest.html
+/dom/nodes/Element-firstElementChild-entity-xhtml.xhtml
+/dom/nodes/Element-firstElementChild-entity.svg
+/dom/nodes/Element-firstElementChild-namespace-svg.svg
+/dom/nodes/Element-firstElementChild-namespace-xhtml.xhtml
+/dom/nodes/Element-firstElementChild-namespace.html
+/dom/nodes/Element-firstElementChild-svg.svg
+/dom/nodes/Element-firstElementChild-xhtml.xhtml
+/dom/nodes/Element-firstElementChild.html
+/dom/nodes/Element-getElementsByClassName.html
+/dom/nodes/Element-getElementsByTagName-change-document-HTMLNess.html
+/dom/nodes/Element-getElementsByTagName.html
+/dom/nodes/Element-getElementsByTagNameNS.html
+/dom/nodes/Element-hasAttribute.html
+/dom/nodes/Element-hasAttributes.html
+/dom/nodes/Element-insertAdjacentElement.html
+/dom/nodes/Element-insertAdjacentText.html
+/dom/nodes/Element-lastElementChild-svg.svg
+/dom/nodes/Element-lastElementChild-xhtml.xhtml
+/dom/nodes/Element-lastElementChild.html
+/dom/nodes/Element-matches-active-pseudo-class.html
+/dom/nodes/Element-matches-complex-nth-last-of-type.html
+/dom/nodes/Element-matches-disabled-pseudo-class.html
+/dom/nodes/Element-matches-namespaced-elements.html
+/dom/nodes/Element-matches.html
+/dom/nodes/Element-nextElementSibling-svg.svg
+/dom/nodes/Element-nextElementSibling-xhtml.xhtml
+/dom/nodes/Element-nextElementSibling.html
+/dom/nodes/Element-previousElementSibling-svg.svg
+/dom/nodes/Element-previousElementSibling-xhtml.xhtml
+/dom/nodes/Element-previousElementSibling.html
+/dom/nodes/Element-querySelectorAll-context-element.html
+/dom/nodes/Element-remove.html
+/dom/nodes/Element-removeAttribute.html
+/dom/nodes/Element-removeAttributeNS.html
+/dom/nodes/Element-setAttribute-crbug-1138487.html
+/dom/nodes/Element-setAttribute.html
+/dom/nodes/Element-setAttributeNodeNS.html
+/dom/nodes/Element-siblingElement-null-svg.svg
+/dom/nodes/Element-siblingElement-null-xhtml.xhtml
+/dom/nodes/Element-siblingElement-null.html
+/dom/nodes/Element-tagName-adopt.html
+/dom/nodes/Element-tagName.html
+/dom/nodes/Element-webkitMatchesSelector.html
+/dom/nodes/MutationObserver-attributes.html
+/dom/nodes/MutationObserver-callback-arguments.html
+/dom/nodes/MutationObserver-callback-order.window.html
+/dom/nodes/MutationObserver-callback-tricky.html
+/dom/nodes/MutationObserver-characterData.html
+/dom/nodes/MutationObserver-childList.html
+/dom/nodes/MutationObserver-cross-realm-callback-report-exception.html
+/dom/nodes/MutationObserver-disconnect.html
+/dom/nodes/MutationObserver-document.html
+/dom/nodes/MutationObserver-inner-outer.html
+/dom/nodes/MutationObserver-overlapping-registrations.html
+/dom/nodes/MutationObserver-sanity.html
+/dom/nodes/MutationObserver-takeRecords.html
+/dom/nodes/MutationObserver-textContent.html
+/dom/nodes/MutationObserver-transient-registered-observers.window.html
+/dom/nodes/MutationObserver-xml-parser.xhtml
+/dom/nodes/Node-appendChild.html
+/dom/nodes/Node-baseURI.html
+/dom/nodes/Node-childNodes-cache-2.html
+/dom/nodes/Node-childNodes-cache.html
+/dom/nodes/Node-childNodes.html
+/dom/nodes/Node-cloneNode-XMLDocument.html
+/dom/nodes/Node-cloneNode-document-with-doctype.html
+/dom/nodes/Node-cloneNode-external-stylesheet-no-bc.sub.html
+/dom/nodes/Node-cloneNode-parser-created-names.html
+/dom/nodes/Node-cloneNode-svg.html
+/dom/nodes/Node-cloneNode.html
+/dom/nodes/Node-compareDocumentPosition.html
+/dom/nodes/Node-constants.html
+/dom/nodes/Node-contains-xml.xml
+/dom/nodes/Node-contains.html
+/dom/nodes/Node-insertBefore.html
+/dom/nodes/Node-isConnected.html
+/dom/nodes/Node-isEqualNode-xhtml.xhtml
+/dom/nodes/Node-isEqualNode.html
+/dom/nodes/Node-isSameNode.html
+/dom/nodes/Node-lookupNamespaceURI.html
+/dom/nodes/Node-lookupPrefix.xhtml
+/dom/nodes/Node-mutation-adoptNode.html
+/dom/nodes/Node-nodeName-xhtml.xhtml
+/dom/nodes/Node-nodeName.html
+/dom/nodes/Node-nodeValue.html
+/dom/nodes/Node-normalize-2.html
+/dom/nodes/Node-normalize.html
+/dom/nodes/Node-parentElement.html
+/dom/nodes/Node-parentNode.html
+/dom/nodes/Node-properties.html
+/dom/nodes/Node-removeChild.html
+/dom/nodes/Node-replaceChild.html
+/dom/nodes/Node-textContent.html
+/dom/nodes/NodeList-Iterable.html
+/dom/nodes/NodeList-live-mutations.window.html
+/dom/nodes/NodeList-static-length-getter-tampered-1.html
+/dom/nodes/NodeList-static-length-getter-tampered-2.html
+/dom/nodes/NodeList-static-length-getter-tampered-3.html
+/dom/nodes/NodeList-static-length-getter-tampered-indexOf-1.html
+/dom/nodes/NodeList-static-length-getter-tampered-indexOf-2.html
+/dom/nodes/NodeList-static-length-getter-tampered-indexOf-3.html
+/dom/nodes/NonDocumentTypeChildNode-sibling-element.html
+/dom/nodes/ParentNode-append.html
+/dom/nodes/ParentNode-children.html
+/dom/nodes/ParentNode-prepend.html
+/dom/nodes/ParentNode-properties.html
+/dom/nodes/ParentNode-querySelector-All-comma-selector.html
+/dom/nodes/ParentNode-querySelector-All-multiple-not.html
+/dom/nodes/ParentNode-querySelector-All-scope.html
+/dom/nodes/ParentNode-querySelector-All-xht.xht
+/dom/nodes/ParentNode-querySelector-All.html
+/dom/nodes/ParentNode-querySelector-argument-stringification.html
+/dom/nodes/ParentNode-querySelector-attribute-change.html
+/dom/nodes/ParentNode-querySelector-basic-has.html
+/dom/nodes/ParentNode-querySelector-case-insensitive.html
+/dom/nodes/ParentNode-querySelector-class-change.html
+/dom/nodes/ParentNode-querySelector-dupe-id.html
+/dom/nodes/ParentNode-querySelector-empty-attribute-value.html
+/dom/nodes/ParentNode-querySelector-escapes.html
+/dom/nodes/ParentNode-querySelector-external-siblings.html
+/dom/nodes/ParentNode-querySelector-hyphen-prefix.html
+/dom/nodes/ParentNode-querySelector-innerHTML.html
+/dom/nodes/ParentNode-querySelector-invalid-comment-like.html
+/dom/nodes/ParentNode-querySelector-is-nested-pseudo-class.html
+/dom/nodes/ParentNode-querySelector-is-not.html
+/dom/nodes/ParentNode-querySelector-last-child-combinator.html
+/dom/nodes/ParentNode-querySelector-matches.html
+/dom/nodes/ParentNode-querySelector-multiple-attributes-xml.xhtml
+/dom/nodes/ParentNode-querySelector-namespace-tagname-attribute.html
+/dom/nodes/ParentNode-querySelector-nested-nth-child.html
+/dom/nodes/ParentNode-querySelector-nested.html
+/dom/nodes/ParentNode-querySelector-nth-of-type-complex.html
+/dom/nodes/ParentNode-querySelector-orphan-scope.html
+/dom/nodes/ParentNode-querySelector-parent-context.html
+/dom/nodes/ParentNode-querySelector-scope-in-not.html
+/dom/nodes/ParentNode-querySelector-scope-numeric-id.xhtml
+/dom/nodes/ParentNode-querySelector-scope.html
+/dom/nodes/ParentNode-querySelector-svg-not-root.html
+/dom/nodes/ParentNode-querySelector-tag-case.html
+/dom/nodes/ParentNode-querySelector-underscore-local-name.xhtml
+/dom/nodes/ParentNode-querySelector-xml-capitalization.window.html
+/dom/nodes/ParentNode-querySelectorAll-case-insensitive-attribute-flag.html
+/dom/nodes/ParentNode-querySelectorAll-namespace.html
+/dom/nodes/ParentNode-querySelectorAll-nested-not-has.html
+/dom/nodes/ParentNode-querySelectorAll-not-descendant.html
+/dom/nodes/ParentNode-querySelectorAll-removed-elements.html
+/dom/nodes/ParentNode-querySelectorAll-scope-change.html
+/dom/nodes/ParentNode-querySelectorAll-scope-colon-id-class.html
+/dom/nodes/ParentNode-querySelectorAll-svg-append.html
+/dom/nodes/ParentNode-querySelectorAll-svg-class.html
+/dom/nodes/ParentNode-querySelectors-exclusive.html
+/dom/nodes/ParentNode-querySelectors-namespaces.html
+/dom/nodes/ParentNode-querySelectors-space-and-dash-attribute-value.html
+/dom/nodes/ParentNode-replaceChildren.html
+/dom/nodes/ProcessingInstruction-escapes-1.xhtml
+/dom/nodes/ProcessingInstruction-in-doctype.xhtml
+/dom/nodes/ProcessingInstruction-literal-1.xhtml
+/dom/nodes/ProcessingInstruction-literal-2.xhtml
+/dom/nodes/Text-constructor.html
+/dom/nodes/Text-splitText.html
+/dom/nodes/Text-wholeText.html
+/dom/nodes/append-on-Document.html
+/dom/nodes/attributes-namednodemap-cross-document.window.html
+/dom/nodes/attributes-namednodemap.html
+/dom/nodes/attributes.html
+/dom/nodes/case.html
+/dom/nodes/getElementById-namespaced-id.html
+/dom/nodes/getElementsByClassName-01.htm
+/dom/nodes/getElementsByClassName-02.htm
+/dom/nodes/getElementsByClassName-03.htm
+/dom/nodes/getElementsByClassName-04.htm
+/dom/nodes/getElementsByClassName-05.htm
+/dom/nodes/getElementsByClassName-06.htm
+/dom/nodes/getElementsByClassName-07.htm
+/dom/nodes/getElementsByClassName-08.htm
+/dom/nodes/getElementsByClassName-09.htm
+/dom/nodes/getElementsByClassName-10.xml
+/dom/nodes/getElementsByClassName-11.xml
+/dom/nodes/getElementsByClassName-12.htm
+/dom/nodes/getElementsByClassName-13.htm
+/dom/nodes/getElementsByClassName-14.htm
+/dom/nodes/getElementsByClassName-15.htm
+/dom/nodes/getElementsByClassName-16.htm
+/dom/nodes/getElementsByClassName-17.htm
+/dom/nodes/getElementsByClassName-18.htm
+/dom/nodes/getElementsByClassName-19.htm
+/dom/nodes/getElementsByClassName-20.htm
+/dom/nodes/getElementsByClassName-21.htm
+/dom/nodes/getElementsByClassName-22.htm
+/dom/nodes/getElementsByClassName-23.htm
+/dom/nodes/getElementsByClassName-24.htm
+/dom/nodes/getElementsByClassName-25.htm
+/dom/nodes/getElementsByClassName-26.htm
+/dom/nodes/getElementsByClassName-27.htm
+/dom/nodes/getElementsByClassName-28.htm
+/dom/nodes/getElementsByClassName-29.htm
+/dom/nodes/getElementsByClassName-30.htm
+/dom/nodes/getElementsByClassName-31.htm
+/dom/nodes/getElementsByClassName-32.html
+/dom/nodes/getElementsByClassName-empty-set.html
+/dom/nodes/getElementsByClassName-whitespace-class-names.html
+/dom/nodes/insert-adjacent.html
+/dom/nodes/insertion-removing-steps/Node-append-form-and-script-from-fragment.html
+/dom/nodes/insertion-removing-steps/Node-append-meta-referrer-and-script-from-fragment.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-and-button-from-div.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-and-default-style-meta-from-fragment.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-and-div-from-fragment.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-and-iframe.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-and-source-from-fragment.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-and-style.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-in-script.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-script-with-mutation-observer-takeRecords.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-text-and-script-in-style.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-text-in-script.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-three-scripts-from-fragment.html
+/dom/nodes/insertion-removing-steps/Node-appendChild-three-scripts.html
+/dom/nodes/insertion-removing-steps/blur-event.window.html
+/dom/nodes/insertion-removing-steps/change-event.window.html
+/dom/nodes/insertion-removing-steps/insertion-removing-steps-iframe.window.html
+/dom/nodes/insertion-removing-steps/insertion-removing-steps-script.window.html
+/dom/nodes/insertion-removing-steps/later-script-removed-by-earlier-script.html
+/dom/nodes/insertion-removing-steps/script-does-not-run-on-child-removal.window.html
+/dom/nodes/live-collections-batched-mutations.window.html
+/dom/nodes/moveBefore/child-style-preserve.html
+/dom/nodes/moveBefore/continue-css-animation-left.html
+/dom/nodes/moveBefore/continue-css-animation-transform.html
+/dom/nodes/moveBefore/continue-css-transition-left-pseudo.html
+/dom/nodes/moveBefore/continue-css-transition-left.html
+/dom/nodes/moveBefore/continue-css-transition-transform-pseudo.html
+/dom/nodes/moveBefore/continue-css-transition-transform.html
+/dom/nodes/moveBefore/css-animation-commit-styles.html
+/dom/nodes/moveBefore/css-transition-cross-document.html
+/dom/nodes/moveBefore/css-transition-to-disconnected-document.html
+/dom/nodes/moveBefore/css-transition-trigger.html
+/dom/nodes/moveBefore/fieldset-child-blur-event.html
+/dom/nodes/moveBefore/fieldset-child-date-input-blur-event.html
+/dom/nodes/moveBefore/fire-focusin-focusout.html
+/dom/nodes/moveBefore/focus-preserve-render.html
+/dom/nodes/moveBefore/focus-preserve.html
+/dom/nodes/moveBefore/focus-within.html
+/dom/nodes/moveBefore/fullscreen-preserve.html
+/dom/nodes/moveBefore/hover-style-update.html
+/dom/nodes/moveBefore/iframe-document-preserve.window.html
+/dom/nodes/moveBefore/live-range-updates.html
+/dom/nodes/moveBefore/modal-dialog.html
+/dom/nodes/moveBefore/moveBefore-as-flex-item.html
+/dom/nodes/moveBefore/moveBefore-child-list-selector-invalidation.html
+/dom/nodes/moveBefore/moveBefore-dir.html
+/dom/nodes/moveBefore/moveBefore-from-light-to-shadow.html
+/dom/nodes/moveBefore/moveBefore-into-display-none.html
+/dom/nodes/moveBefore/moveBefore-lang.html
+/dom/nodes/moveBefore/moveBefore-nodeiterator.html
+/dom/nodes/moveBefore/moveBefore-optgroup.html
+/dom/nodes/moveBefore/moveBefore-option-recalc-style.html
+/dom/nodes/moveBefore/moveBefore-selector-matching.html
+/dom/nodes/moveBefore/moveBefore-size-query.html
+/dom/nodes/moveBefore/mutation-observer-moved-subtree.window.html
+/dom/nodes/moveBefore/mutation-observer.html
+/dom/nodes/moveBefore/nonce.html
+/dom/nodes/moveBefore/object-crash-regression.html
+/dom/nodes/moveBefore/pointer-events.html
+/dom/nodes/moveBefore/popover-preserve.html
+/dom/nodes/moveBefore/preserve-render-blocking-script.html
+/dom/nodes/moveBefore/preserve-render-blocking-style.html
+/dom/nodes/moveBefore/relevant-mutations.html
+/dom/nodes/moveBefore/role-updates-after-move.html
+/dom/nodes/moveBefore/script-move-before.html
+/dom/nodes/moveBefore/select-option-optgroup.html
+/dom/nodes/moveBefore/selection-preserve.html
+/dom/nodes/moveBefore/style-applies.html
+/dom/nodes/moveBefore/stylesheet-cascade-order.html
+/dom/nodes/moveBefore/stylesheet-no-refetch.html
+/dom/nodes/moveBefore/throws-exception.html
+/dom/nodes/name-validation.html
+/dom/nodes/node-realm-adoption-after-frame-removal.html
+/dom/nodes/node-realm-preserved-across-adoption.html
+/dom/nodes/node-realm-preserved-across-frameless-adoption.html
+/dom/nodes/prepend-on-Document.html
+/dom/nodes/processing-instruction-attributes-clone-and-range.html
+/dom/nodes/processing-instruction-attributes.html
+/dom/nodes/query-target-in-load-event.html
+/dom/nodes/querySelector-empty-id.html
+/dom/nodes/querySelector-id-nth-child.html
+/dom/nodes/querySelector-mixed-case.html
+/dom/nodes/remove-next-sibling-during-replace-with.html
+/dom/nodes/remove-unscopable.html
+/dom/nodes/svg-template-querySelector.html
+/dom/ranges/Range-adopt-test.html
+/dom/ranges/Range-attribute-nodes.html
+/dom/ranges/Range-attributes.html
+/dom/ranges/Range-cloneContents.html
+/dom/ranges/Range-cloneRange.html
+/dom/ranges/Range-collapse.html
+/dom/ranges/Range-commonAncestorContainer-2.html
+/dom/ranges/Range-commonAncestorContainer.html
+/dom/ranges/Range-compareBoundaryPoints.html
+/dom/ranges/Range-comparePoint-2.html
+/dom/ranges/Range-comparePoint.html
+/dom/ranges/Range-constructor.html
+/dom/ranges/Range-deleteContents.html
+/dom/ranges/Range-detach.html
+/dom/ranges/Range-extractContents-dynamic-end.html
+/dom/ranges/Range-extractContents.html
+/dom/ranges/Range-insertNode.html
+/dom/ranges/Range-intersectsNode-2.html
+/dom/ranges/Range-intersectsNode-binding.html
+/dom/ranges/Range-intersectsNode.html
+/dom/ranges/Range-isPointInRange.html
+/dom/ranges/Range-mutations-appendChild.html
+/dom/ranges/Range-mutations-appendData.html
+/dom/ranges/Range-mutations-dataChange.html
+/dom/ranges/Range-mutations-deleteData.html
+/dom/ranges/Range-mutations-insertBefore.html
+/dom/ranges/Range-mutations-insertData.html
+/dom/ranges/Range-mutations-normalize.html
+/dom/ranges/Range-mutations-removeChild.html
+/dom/ranges/Range-mutations-replaceChild.html
+/dom/ranges/Range-mutations-replaceData.html
+/dom/ranges/Range-mutations-splitText.html
+/dom/ranges/Range-selectNode.html
+/dom/ranges/Range-set.html
+/dom/ranges/Range-stringifier.html
+/dom/ranges/Range-surroundContents.html
+/dom/ranges/StaticRange-constructor.html
+/dom/traversal/NodeFilter-constants.html
+/dom/traversal/NodeIterator-removal-during-filtering.html
+/dom/traversal/NodeIterator-removal.html
+/dom/traversal/NodeIterator.html
+/dom/traversal/TreeWalker-acceptNode-filter-cross-realm-null-browsing-context.html
+/dom/traversal/TreeWalker-acceptNode-filter-cross-realm.html
+/dom/traversal/TreeWalker-acceptNode-filter.html
+/dom/traversal/TreeWalker-basic.html
+/dom/traversal/TreeWalker-currentNode.html
+/dom/traversal/TreeWalker-nextNode-detached-currentNode.window.html
+/dom/traversal/TreeWalker-previousNodeLastChildReject.html
+/dom/traversal/TreeWalker-previousSiblingLastChildSkip.html
+/dom/traversal/TreeWalker-realm.html
+/dom/traversal/TreeWalker-traversal-reject.html
+/dom/traversal/TreeWalker-traversal-skip-most.html
+/dom/traversal/TreeWalker-traversal-skip.html
+/dom/traversal/TreeWalker-walking-outside-a-tree.html
+/dom/traversal/TreeWalker.html
+/dom/window-extends-event-target.html
+/dom/xpath-result-single-node-value-nullable.html

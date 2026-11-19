@@ -41,6 +41,7 @@ const (
 	jpeg        = "image/jpeg"
 	png         = "image/png"
 	gif         = "image/gif"
+	webp        = "image/webp"
 	svg         = "image/svg+xml"
 	json        = "application/json"
 	script      = "text/javascript"
@@ -61,6 +62,7 @@ var Kinds = []struct {
 	{png, Picture},
 	{jpeg, Picture},
 	{gif, Picture},
+	{webp, Picture},
 	{svg, Picture},
 	{icon, Picture},
 	{"image/vnd.microsoft.icon", Picture},
@@ -82,7 +84,7 @@ var extensions = map[string]string{
 	".html": html, ".htm": html, ".css": "text/css", ".js": script,
 	".mjs": script, ".json": json, ".xml": "text/xml", ".md": "text/markdown",
 	".txt": plainText, ".svg": svg, ".png": png, ".jpg": jpeg,
-	".jpeg": jpeg, ".gif": gif, ".ico": icon,
+	".jpeg": jpeg, ".gif": gif, ".webp": webp, ".ico": icon,
 }
 
 // Of is how the answer to address is shown and the media type it is taken
@@ -229,7 +231,7 @@ var reserved = []string{
 //nolint:gochecknoglobals // the table, read only
 var saved = map[string]string{
 	html: ".html", "text/css": ".css", script: ".js", json: ".json", plainText: ".txt",
-	svg: ".svg", png: ".png", jpeg: ".jpg", gif: ".gif", "image/webp": ".webp",
+	svg: ".svg", png: ".png", jpeg: ".jpg", gif: ".gif", webp: ".webp",
 	"application/pdf": ".pdf", "application/zip": ".zip", "application/gzip": ".gz", "audio/mpeg": ".mp3",
 	"video/mp4": ".mp4",
 }

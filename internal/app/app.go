@@ -7,25 +7,27 @@ package app
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 	"net/http"
-	"sync"
+	"net/netip"
+	"slices"
 	"sync/atomic"
 	"time"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui"
 	_ "github.com/lantervale/ember/ui/svg" // the glyphs, the logo and the web's SVG pictures
-	"github.com/lantervale/ember/world"
 
 	"github.com/lantervale/light/internal/devtools"
+	"github.com/lantervale/light/internal/devtools/inspector"
+	"github.com/lantervale/light/internal/dom"
 	"github.com/lantervale/light/internal/menu"
 	"github.com/lantervale/light/internal/web"
-	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/downloads"
-	"github.com/lantervale/light/pkg/history"
+	"github.com/lantervale/light/pkg/localnet"
+	"github.com/lantervale/light/pkg/model"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -41,8 +43,11 @@ const (
 type Options struct {
 	// Transport makes the requests, http.DefaultTransport when nil.
 	Transport http.RoundTripper
-	// Dir is the folder the history is kept in between runs; with none,
-	// it is kept in memory only.
+	// Space is the space of an address, for tests whose servers are all
+	// of this machine; nil for each address's own (localnet.Of).
+	Space func(netip.AddrPort) localnet.Space
+	// Dir is the folder the history and the bookmarks are kept in between
+	// runs; with none, they are kept in memory only.
 	Dir string
 	// Downloads is the folder downloads are saved to whatever the
 	// settings say, and DefaultDownloads the one they are saved to when
@@ -53,53 +58,154 @@ type Options struct {
 	Files Files
 	// Now tells the time of a visit, time.Now when nil.
 	Now func() time.Time
+	// ScriptBudget is how long one script of a page may run, the
+	// engine's own limit when 0.
+	ScriptBudget time.Duration
+	// Patient has a script that runs long go on while the window does,
+	// its user told and asked whether to stop it, in place of being
+	// stopped at ScriptBudget: for a light with somebody at its window.
+	// Patience is how long it waits, the browser's own times when zero.
+	Patient  bool
+	Patience dom.Patience
+	// Version is light's, which the HAR files it saves name, and its
+	// User-Agent when a build was given one ("" and "dev" are a build
+	// made by hand).
+	Version string
+	// Preview warns, at the first start of each release, that light is
+	// an early preview no secret should be typed in: for a light with
+	// somebody at its window.
+	Preview bool
+	// Languages are the languages the system's user prefers, most
+	// wanted first, and Driven whether the run is driven by something
+	// else than a person at its window: what light tells a site
+	// (identity.go).
+	Languages []string
+	Driven    bool
+	// Preferences is what the user chose on the system, kept up to date
+	// by the World it is in: light follows its appearance and its
+	// languages as they change. With none, or while it knows neither,
+	// the system's appearance is light and its languages are Languages.
+	Preferences *platform.Preferences
+	// ExactText draws the pages' text at its exact coverage, without
+	// stem darkening, unless a page says how its own is smoothed: for a
+	// light a test runner compares the pictures of.
+	ExactText bool
+	// Model is the language model that runs on this device and Library
+	// what its settings change of it; with either nil this light has no
+	// model, and shows nothing of one.
+	Model   model.Model
+	Library model.Library
 }
 
-// Screen is the window's screen, redrawn from the browser after each
-// move.
+// Screen is a window's screen, redrawn from the browser after each
+// move. What it shares with the other windows' is its Profile's.
 type Screen struct {
+	*Profile
+
 	doc     *ui.Document
 	win     *platform.Window
 	browser *tabs.Browser
 	loader  atomic.Pointer[web.Loader]
-	opts    Options
+	viewed  atomic.Uint64
 
-	// config is the settings, misread why their file could not be read,
-	// settings their file, and fields what shows each on the shown page
-	// again after a change.
-	config   config.Config
-	misread  error
-	settings *store
-	fields   []func()
+	// fields are what shows each setting on the shown page again after
+	// a change, and relist what lists the history again on the page
+	// that shows it, which listed it when it had changed visitsSeen
+	// times.
+	fields     []func()
+	relist     func()
+	visitsSeen uint64
+	// shutSeen is how many times the tabs closed had changed when the
+	// start page last listed them.
+	shutSeen uint64
+	// relistMarks lists the bookmarks again on the page that shows them,
+	// and marksSeen is how many times they had changed when the star and
+	// that page were last shown.
+	relistMarks func()
+	marksSeen   uint64
+	// star is the address field's star and panel the card it opens; more
+	// is the navigation row's last button and choices the menu it opens,
+	// whose zoom reads zoomed and whose entry that saves the page is
+	// keeps. again is the entry the menu opens on again once chosen.
+	star, more, choices, zoomed, keeps, again *ui.Node
+	panel                                     bookmarkPanel
+	// hint is what the model suggests for the panel's bookmark, and read
+	// the page of the web the shown tab showed at the last frame, which
+	// is summed up once it is left.
+	hint hinting
+	read *web.Page
+	// card is the model's card and marks, and features what the model
+	// helps with.
+	card     modelCard
+	features []feature
+	// settled is the shown page as what it says is remembered, and
+	// asking the history page's question (recall.go, historyask.go).
+	settled settling
+	asking  *historyAsk
+	// sorting is what the window shows of the page categories.
+	sorting sorter
+	// replying is the card of an answer from the page, excerpt the card of
+	// the page's selection.
+	replying answerCard
+	excerpt  pickedCard
+	// completing is the list under the address field while it is typed
+	// in (complete.go).
+	completing completion
+	// find is the card that finds words in the page, and its marks.
+	find findCard
+	// desk is the page that translates a text, and rendered what the
+	// window shows of the pages translated in place.
+	desk     desk
+	rendered rendered
+
+	// sought shows the search engine's mark in the address field while
+	// words are typed there.
+	sought *ui.Node
 
 	tabs, back, forward, reload, lock, field, address, view, status, list *ui.Node
+	strip                                                                 []stripTab
 	menu                                                                  *menu.Menu
 	tools                                                                 *devtools.Panel
+	inspect                                                               *inspector.Inspector
 
 	// sessions is what each open tab holds beside its addresses.
 	sessions map[*tabs.Tab]*session
-	// landed brings what ended off the frame to Update, which runs it.
+	// landed brings what ended off the frame to the screen's frame,
+	// which runs it.
 	landed chan func()
-	// pictures are what the Document's img elements draw that no file
-	// holds, by name: ui asks for them off the frame.
-	pictures sync.Map
 
-	visits *history.Log
-	// unreadable is why the history's file could not be read.
-	unreadable error
-	// history and saved are the files the visits and the downloads are
-	// kept in.
-	history, saved *store
+	// later is what scripts asked of the tab, done once they returned,
+	// and from the page a navigation is being opened by, "" for the
+	// player's own.
+	later []func()
+	from  string
+	// unasked is whether that navigation is a script's doing, not an
+	// act of the player's.
+	unasked bool
 
-	// saves runs the downloads; savesSeen is its version last shown, and
-	// announced the state each download was last said to be in.
-	saves     *downloads.Manager
+	// savesSeen is the downloads' version last shown, and announced the
+	// state each download was last said to be in.
 	savesSeen uint64
 	announced map[int]downloads.State
+	// archived are the downloads that are HAR files of the developer
+	// tools, each with whether it holds the sensitive data; telling is
+	// whether the status bubble says what came of one over the address
+	// under the pointer, which was at told then.
+	archived map[int]bool
+	telling  bool
+	told     geom.Vec2
 	// downloads is the navigation row's button, recent its list, and
 	// listed the list of the downloads page while it is shown.
 	downloads, progress, recent, listed *ui.Node
 	recentShown, listedShown            listing
+
+	// line is the line that says how far the shown tab's load is, lineAt
+	// the share of it filled, turn what the spinners of the tabs that
+	// load are turned by, and dimAfter how long a page is held as it is.
+	line     *ui.Node
+	lineAt   float32
+	turn     int
+	dimAfter time.Duration
 
 	// host is the canvas the shown web page draws in, nil for a page of
 	// light's own.
@@ -114,46 +220,47 @@ type Screen struct {
 	size    geom.Vec2
 	editing bool
 	over    string
+	// aimed is the link the middle button went down on.
+	aimed string
+	// picked counts the times a page was asked what is under the pointer
+	// for its scripts, for tests.
+	picked int
 }
 
-// New is the screen of win, on the start page.
-func New(win *platform.Window, opts Options) *Screen {
-	if opts.Now == nil {
-		opts.Now = time.Now
+// New is the screen of win, on the start page, with a Profile of its
+// own: light with one window.
+func New(win *platform.Window, opts Options) *Screen { return NewProfile(opts).Screen(win) }
+
+// screen is the screen of win, a window of light's, on address.
+func (p *Profile) screen(win *platform.Window, address string) *Screen {
+	s := &Screen{Profile: p, win: win, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64),
+		announced: map[int]downloads.State{}, archived: map[int]bool{}, dimAfter: dimAfter}
+	s.browser = tabs.NewBrowser(address)
+	for _, item := range p.saves.Items() {
+		s.announced[item.ID] = item.State
 	}
-	s := &Screen{win: win, opts: opts, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64)}
-	s.restore()
-	s.browser = tabs.NewBrowser(s.config.StartPage)
-	s.restoreDownloads()
+	s.savesSeen = p.saves.Version()
 	s.apply()
+	s.features = features()
 	s.doc = ui.NewDocument(ui.CSS(sheet), ui.CSS(menu.Sheet), ui.CSS(devtools.Sheet), ui.Images(icons()),
-		ui.FetchImages(s.picture))
+		ui.FetchImages(s.picture), ui.RightDragSelects(), ui.WheelScroll(p.config.ScrollFactor()))
 	s.build()
 	s.header()
+	s.visit(address)
 	s.show()
+	s.showProgress(p.saves.Items())
+	p.screens = append(p.screens, s)
 	return s
 }
 
-// restore reads the settings and the history from the folder light was
-// given; with none, they are the defaults and empty.
-func (s *Screen) restore() {
-	s.config, s.visits = config.Default(), history.New(config.Default().HistoryLimit)
-	s.settings = &store{name: configFile, write: func(path string) error { return config.Save(path, s.config) }}
-	s.history = &store{name: historyFile, write: func(path string) error { return history.Save(path, s.visits) }}
-	if s.opts.Dir == "" {
-		return
-	}
-	s.config, s.misread = config.Load(s.settings.path(s.opts.Dir))
-	s.visits, s.unreadable = history.Load(s.history.path(s.opts.Dir), s.config.HistoryLimit)
-}
-
-// keep writes the files that changed and were not written lately.
-func (s *Screen) keep() {
-	for _, file := range []*store{s.settings, s.history, s.saved} {
-		if err := file.keep(s.opts.Dir); err != nil {
-			s.unreadable = err
-		}
-	}
+// shut ends what the screen's tabs hold, as its window closes: their
+// loads, their scripts and the frames of their pages.
+func (s *Screen) shut() {
+	s.digest(s.read)
+	s.menu.Close()
+	s.doc.SetFrame(s.host, nil)
+	s.browser.Tabs = nil
+	s.forget()
 }
 
 // Document is the screen's Document, for its window.
@@ -166,26 +273,55 @@ func (s *Screen) build() {
 	s.status = ui.Div(ui.ID("status"), ui.Attr("aria-hidden", "true"))
 	s.list = ui.Div(ui.ID("tab-list"))
 	s.menu = menu.New(s.doc)
+	s.inspect = devtools.Inspect(s.doc, s.inspectorHost())
 	s.tools = devtools.New(s.doc, devtools.Host{
-		Point:  s.point,
-		Serve:  func(name string, picture []byte) { s.pictures.Store(name, picture) },
-		Closed: s.show,
+		Point:      s.point,
+		Serve:      func(name string, picture []byte) { s.pictures.Store(name, picture) },
+		Closed:     s.show,
+		Evaluate:   s.evaluate,
+		Contexts:   s.contexts,
+		EvaluateIn: s.evaluateIn,
+		Unscripted: s.unscripted,
+		Pointer: func() (geom.Vec2, bool) {
+			in := s.win.Input()
+			return in.Mouse(), in.Down(input.MouseLeft)
+		},
+		Resized: func(height int) {
+			s.config.ToolsHeight = height
+			s.settings.touch()
+		},
+		Source:  func(address string, _ int) { s.openBehind(tabs.SourceOf(address)) },
+		Open:    s.openBehind,
+		Storage: s.storedBy,
+		Export:  func() { s.saveHAR(0, false) },
+		Title:   s.titled,
+		Version: s.opts.Version,
+		Timing:  s.timingOf,
 	})
+	s.tools.SetHeight(s.config.ToolsHeight)
 	s.doc.Body().Append(
 		s.tabs,
 		s.navigation(),
-		ui.Div(ui.ID("split"), ui.Div(ui.ID("stage"), s.view, s.status, s.list, s.recent), s.tools.Node()),
+		ui.Div(ui.ID("split"), ui.Div(ui.ID("stage"), s.view, s.loadline(), s.inspect.Overlay(), s.status, s.list,
+			s.recent, s.buildPanel(), s.choices, s.card.root, s.buildAnswer(), s.buildPicked(), s.buildFind()),
+			s.tools.Node()),
 		s.shortcuts(),
 		s.menu.Node())
+	s.buildSorting()
+	s.buildTranslation()
 	ui.OnContextMenu(s.contextMenu).Apply(s.doc.Body())
 }
 
-// Open shows address in the shown tab.
+// Open shows address in the shown tab: at once for a page light has,
+// and once it is ready for one that is fetched, the tab holding the
+// page it shows till then (loading.go).
 func (s *Screen) Open(address string) {
+	tab := s.browser.Tab()
 	s.session().note = ""
-	s.browser.Tab().Visit(address)
-	s.visit(address)
-	s.show()
+	s.depart(address, false, func() {
+		tab.Visit(address)
+		s.visit(address)
+	})
 }
 
 // OpenInNewTab shows address in a tab of its own.
@@ -195,57 +331,82 @@ func (s *Screen) OpenInNewTab(address string) {
 	s.show()
 }
 
+// move goes through the shown tab's history as step does, past the
+// steps of frames its page has no more.
 func (s *Screen) move(step func(*tabs.Tab)) {
-	s.session().note = ""
-	step(s.browser.Tab())
-	s.show()
+	tab := s.browser.Tab()
+	ahead := *tab
+	for {
+		before := ahead.At()
+		step(&ahead)
+		if ahead.At() == before || ahead.Since(before, s.framed).Moved() {
+			break
+		}
+	}
+	s.cross(ahead.Since(tab.At(), s.framed))
 }
 
-// Update runs what ended off the frame since the last one, has the shown
-// web page drawn again (its Document lives by being drawn), and follows
-// the window, the pointer and the requests.
-func (s *Screen) Update(world.Frame) {
+// tick runs what ended off the frame since the last one, and follows
+// the window, the pointer, the requests and the frames of the shown
+// page.
+func (s *Screen) tick() {
 	s.header()
 	s.closeUnderMiddle()
+	s.followUnderMiddle()
 	s.closeMenuWhenMoved()
 	s.follow()
 	s.sizePicture()
 	s.tools.Update()
 	s.watchDownloads()
-	s.keep()
+	s.watchHistory()
+	s.watchShut()
+	s.watchBookmarks()
+	s.watchModel()
+	s.watchRecall()
+	s.watchSorting()
+	s.watchTranslation()
+	s.followDesk()
+	s.followChoices()
+	s.measure()
+	s.drew()
+	s.stopByKey()
+	s.followPanel()
+	s.followCard()
+	s.followSorting()
+	s.followHint()
+	s.followSummaries()
+	s.followAnswer()
+	s.followComplete()
+	s.followPicked()
+	s.followFind()
+	s.runScripts()
 	if s.host != nil {
-		if page := s.session().pages[s.browser.Tab().Current()]; page != nil && page.Err != nil {
+		page := s.session().pages[s.browser.Tab().Current()]
+		s.broken(page)
+		if page != nil && page.Err != nil {
 			s.show()
 			return
 		}
-		if !s.overlaid() {
-			s.doc.Invalidate(s.host)
-		}
+		s.frames()
 	}
 	for {
 		select {
 		case land := <-s.landed:
 			land()
 		default:
+			s.progressing()
+			s.tellRequests()
 			return
 		}
 	}
 }
 
 // overlaid reports whether a menu or a list of light's is open over the
-// page. The page's Document is then left as last drawn: drawing it is
-// what gives it the pointer, and a press on what is over it is not the
-// page's.
+// page: a press or a key is then not the page's scripts' to hear.
 func (s *Screen) overlaid() bool {
-	return s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown")
-}
-
-// Close ends the downloads in progress, whose files are removed, and
-// writes what is not yet written, as the window closes.
-func (s *Screen) Close() error {
-	s.saves.Close()
-	s.saved.touch()
-	return errors.Join(s.settings.flush(s.opts.Dir), s.history.flush(s.opts.Dir), s.saved.flush(s.opts.Dir))
+	return s.sortingOpen() || s.covered() || s.translationOpen() ||
+		s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
+		s.panelOpen() || s.choosing() || s.cardOpen() || s.answerOpen() || s.pickedOpen() || s.completeOpen()
 }
 
 // show redraws the screen from the browser: the tabs, the shown tab's
@@ -254,24 +415,46 @@ func (s *Screen) show() {
 	s.forget()
 	s.menu.Close()
 	s.recent.RemoveClass("shown")
-	s.showTabs()
-	tab := s.browser.Tab()
+	s.closePanel(false)
+	s.closeChoices()
+	s.closeCard(false)
+	s.closeSorting(false)
+	s.closeTranslation(false)
+	s.closeAnswer(false)
+	s.closePicked()
+	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
-	s.host, s.alone, s.listed, s.fields = nil, nil, nil, nil
+	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks = nil, nil, nil, nil, nil, nil
 	s.view.Append(s.page(tab.Current()))
+	s.showTabs()
+	s.leave(tab, session)
+	s.quitFrames(tab, session)
 	s.showNavigation()
-	session := s.session()
-	s.tools.Show(&session.tools, session.log, s.warnings)
+	s.tools.SetDark(s.dark())
+	s.keepBodies(session)
+	s.tools.Show(&session.tools, session.log, session.said, s.warnings)
 	s.over = ""
 	s.say()
 }
 
-// warnings are what ui refused in the shown page of the web.
+// warnings are what ui refused in the shown page of the web, and in
+// the documents of its frames.
 func (s *Screen) warnings() []error {
-	if page := s.session().pages[s.browser.Tab().Current()]; page != nil && page.Doc != nil {
-		return page.Doc.Warnings()
+	session := s.session()
+	page := session.pages[s.browser.Tab().Current()]
+	if page == nil || page.Doc == nil {
+		return nil
 	}
-	return nil
+	all := slices.Clone(page.Doc.Warnings())
+	for _, f := range session.frames[page].frameList() {
+		if f.gone || f.page == nil || f.page.Doc == nil {
+			continue
+		}
+		for _, warned := range f.page.Doc.Warnings() {
+			all = append(all, fmt.Errorf("in the frame %s: %w", f.label(), warned))
+		}
+	}
+	return all
 }
 
 // picture gives the Document a picture stored under name.

@@ -307,9 +307,10 @@ func TestTheDownloadsPageListsThemWithWhatCanBeDone(t *testing.T) {
 	s.clean()
 }
 
-func TestDownloadsAreReachedByTheirTileTheirKeysAndTheMenu(t *testing.T) {
+func TestDownloadsAreReachedByTheMenuTheirKeysAndARightClick(t *testing.T) {
 	s := show(t)
-	s.click("go-downloads")
+	s.click("menu")
+	s.click("menu-downloads")
 	s.at(downloadsPage)
 	s.Open("light://guide")
 	s.frame()

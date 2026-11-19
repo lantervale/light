@@ -1,0 +1,15 @@
+#complete { top: 2px; padding: 6px; }
+#complete-keys { display: none; }
+#complete.shown { display: flex; flex-direction: column; gap: 2px; }
+.offer { display: flex; flex: none; align-items: center; gap: 10px; box-sizing: border-box; height: 32px;
+	padding: 0 8px; border: 1px solid transparent; border-radius: 8px; color: #e8e6ef; font-size: 13px;
+	line-height: 18px; white-space: nowrap; cursor: pointer; }
+.offer:hover { background: #26242f; }
+.offer[aria-selected="true"] { border-color: #7ab0ff; background: #1f2a44; }
+.offer .lead { display: flex; flex: none; align-items: center; justify-content: center; width: 20px; height: 20px; }
+.offer .lead img { display: block; width: 16px; height: 16px; }
+.offer .label { flex: none; color: #a9a6b8; }
+.offer .words { flex: 0 1 auto; min-width: 0; overflow: hidden; color: #ffffff; text-overflow: ellipsis; }
+.offer .where { flex: 1 1 0; min-width: 30%; overflow: hidden; color: #a9a6b8; font-size: 12px;
+	text-overflow: ellipsis; }
+#complete .site.pictured { background: #2b2937; }

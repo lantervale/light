@@ -55,6 +55,22 @@ type shown struct {
 	// address is the page shown, or the one a click on a link asked for,
 	// saved what a click on a download link asked to save.
 	address, saved string
+	// scripts loads the pages visited with their scripts.
+	scripts bool
+}
+
+// click presses and releases the left button over n, an element of the
+// page shown.
+func (s *shown) click(n *ui.Node) {
+	s.t.Helper()
+	host, _ := s.doc.BoxOf(s.host)
+	s.in.SetMouse(n.Box().Center().Add(geom.V2(host.X, host.Y)))
+	s.frame()
+	s.in.SetMouseButton(input.MouseLeft, true)
+	s.frame()
+	s.in.SetMouseButton(input.MouseLeft, false)
+	s.frame()
+	s.frame()
 }
 
 func show(t *testing.T) *shown {
@@ -85,7 +101,9 @@ func show(t *testing.T) *shown {
 func (s *shown) visit(address string) *ui.Document {
 	s.t.Helper()
 	s.address = address
-	s.page = testLoader().Load(s.t.Context(), address, Links{
+	loader := testLoader()
+	loader.Scripts = s.scripts
+	s.page = loader.Load(s.t.Context(), address, Links{
 		Open: func(to string) { s.address = to },
 		Over: func(over string) { s.status.address = over },
 		Save: func(from, name string) { s.saved = from + " as " + name },

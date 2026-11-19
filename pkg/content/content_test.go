@@ -54,7 +54,7 @@ func TestEveryListedTypeIsShownAsItsKind(t *testing.T) {
 
 func TestWhatNoRowListsIsADownload(t *testing.T) {
 	for _, media := range []string{"application/octet-stream", "application/pdf", "application/zip", "audio/mpeg",
-		"video/mp4", "font/woff2", "image/webp", "image/avif", "image/bmp", "application/wasm"} {
+		"video/mp4", "font/woff2", "image/avif", "image/bmp", "application/wasm"} {
 		if kind, _ := content.Of(media, []byte{0, 1, 2}, "https://site.test/file"); kind != content.Download {
 			t.Errorf("%s is shown as %v, want a download", media, kind)
 		}
@@ -80,6 +80,9 @@ func TestATypeMissingOrLyingIsSniffed(t *testing.T) {
 		"a header no one can read": {";;", "https://s.test/", []byte("<html><body>"), content.Page, "text/html"},
 		"octet-stream that is a png": {"application/octet-stream", "https://s.test/x", picture(t), content.Picture,
 			"image/png"},
+		"octet-stream that is a webp": {"application/octet-stream", "https://s.test/x",
+			[]byte("RIFF\x28\x00\x00\x00WEBPVP8L"), content.Picture, "image/webp"},
+		"no type, a webp": {"", "https://s.test/x", []byte("RIFF\x28\x00\x00\x00WEBPVP8 "), content.Picture, "image/webp"},
 		"octet-stream that is a page": {"application/octet-stream", "https://s.test/x.html", []byte("<html>"),
 			content.Download, "application/octet-stream"},
 		"text/plain that is bytes": {"text/plain", "https://s.test/x.txt", binary, content.Download,

@@ -13,7 +13,7 @@ import (
 
 // The menu's sizes in points, which place it before it is laid out.
 const (
-	width     = 240
+	width     = 272
 	padding   = 5
 	row       = 28
 	separator = 9

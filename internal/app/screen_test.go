@@ -10,8 +10,11 @@ import (
 	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui/align"
+	"github.com/lantervale/ember/world"
 
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -21,6 +24,7 @@ type shown struct {
 	win   *platform.Window
 	in    *input.State
 	frame func()
+	world *world.World
 }
 
 // show is a window showing light with no network, its history in memory
@@ -30,14 +34,28 @@ func show(t *testing.T) *shown {
 	return showWith(t, Options{Downloads: t.TempDir()})
 }
 
+// walled refuses every request that would leave this machine: no test
+// reaches the Internet.
+type walled struct{}
+
+func (walled) RoundTrip(r *http.Request) (*http.Response, error) {
+	if host := r.URL.Hostname(); host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return nil, errors.New(host + " is not reached from a test")
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
 func showWith(t *testing.T, opts Options) *shown {
 	t.Helper()
-	win := platform.NewWindow(platform.Size(1024, 680))
+	if opts.Transport == nil {
+		opts.Transport = walled{}
+	}
+	win := Window(nil)
 	screen := New(win, opts)
 	win.Add(screen.Document())
 	w := ember.New().AddEntities(win).AddSystems(screen)
 	t.Cleanup(func() { _ = screen.Close() })
-	s := &shown{Screen: screen, t: t, win: win, in: win.Input(), frame: func() { w.RunFrames(1) }}
+	s := &shown{Screen: screen, t: t, win: win, in: win.Input(), frame: func() { w.RunFrames(1) }, world: w}
 	s.frame()
 	return s
 }
@@ -116,12 +134,12 @@ func TestTheAboutPageListsEveryAdaptation(t *testing.T) {
 	}
 }
 
-func TestATileOpensItsPageAndBackReturns(t *testing.T) {
+func TestBackReturnsFromAPageAndForwardGoesToItAgain(t *testing.T) {
 	s := show(t)
 	if !s.disabled("back") || !s.disabled("forward") {
 		t.Fatal("a new tab can already go back or forward")
 	}
-	s.click("go-guide")
+	s.enter("light://guide")
 	s.at("light://guide")
 	if s.disabled("back") {
 		t.Fatal("back stays disabled after a visit")
@@ -134,6 +152,7 @@ func TestATileOpensItsPageAndBackReturns(t *testing.T) {
 
 func TestATypedWordSearchesThePages(t *testing.T) {
 	s := show(t)
+	s.configure(func(c *config.Config) { c.SearchEngine = search.Own })
 	s.enter("tile maps")
 	s.at("light://search?q=tile+maps")
 	if text := s.doc.ByID("page").Text(); !strings.Contains(text, "Examples") || s.doc.ByID("none") != nil {
@@ -161,7 +180,7 @@ func TestAnAddressOfAnotherSchemeHasNoPage(t *testing.T) {
 
 func TestTabsKeepTheirOwnPage(t *testing.T) {
 	s := show(t)
-	s.click("go-about")
+	s.enter("light://about")
 	s.click("new-tab")
 	s.at(tabs.Home)
 	s.click("tab-0")
@@ -176,13 +195,3 @@ func TestTabsKeepTheirOwnPage(t *testing.T) {
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestTheStartPagesDemoTileOpensCSSZenGarden(t *testing.T) {
-	s := showWith(t, Options{Transport: roundTrip(func(*http.Request) (*http.Response, error) {
-		return nil, errors.New("no network in tests")
-	})})
-	s.click("go-demo")
-	if got := s.browser.Tab().Current(); got != "https://csszengarden.com" {
-		t.Fatalf("the demo tile opened %q", got)
-	}
-}

@@ -1,40 +1,134 @@
-#devtools { display: none; flex: none; flex-direction: column; box-sizing: border-box; height: 280px;
-	border-top: 1px solid #5b5763; background: #1d1a22; color: #ddd8e6; font-size: 12px; }
+#devtools { --dt-bg: #1c1b22; --dt-bar: #2b2a33; --dt-ink: #cfcfd8; --dt-strong: #fbfbfe; --dt-faint: #8f8f9d;
+	--dt-rule: #3f3e4a; --dt-hair: rgba(255, 255, 255, 0.07); --dt-accent: #75bfff; --dt-field: #1c1b22;
+	--dt-odd: rgba(255, 255, 255, 0.03); --dt-hover: rgba(255, 255, 255, 0.08); --dt-selected: #204e8a;
+	--dt-selected-ink: #ffffff; --dt-error: #4b2f36; --dt-error-ink: #ffb3d2; --dt-warn: #42381f;
+	--dt-warn-ink: #fce2a1; --dt-ok: #1d4a2e; --dt-ok-ink: #86e3a6; --dt-moved: #3a3a45; --dt-result: #9ecbff;
+	display: none; position: relative; flex: none; flex-direction: column; box-sizing: border-box; height: 280px;
+	border-top: 1px solid var(--dt-rule); background: var(--dt-bg); color: var(--dt-ink); font-size: 12px; }
+#devtools.light { --dt-bg: #ffffff; --dt-bar: #f0f0f4; --dt-ink: #38383d; --dt-strong: #15141a; --dt-faint: #6f6f7b;
+	--dt-rule: #d7d7db; --dt-hair: rgba(0, 0, 0, 0.08); --dt-accent: #0060df; --dt-field: #ffffff;
+	--dt-odd: rgba(0, 0, 0, 0.025); --dt-hover: rgba(0, 0, 0, 0.06); --dt-selected: #0060df;
+	--dt-error: #fdf2f5; --dt-error-ink: #a4000f; --dt-warn: #fffbd6; --dt-warn-ink: #715100; --dt-ok: #d9f2e0;
+	--dt-ok-ink: #0b6b2e; --dt-moved: #e4e4ea; --dt-result: #0a56b8; }
 #devtools.shown { display: flex; }
-#devtools button { height: 22px; padding: 0 8px; border-radius: 4px; color: #ddd8e6; font-size: 12px; }
-#devtools button:hover { background: rgba(255, 255, 255, 0.12); }
-#devtools button.chosen { background: rgba(241, 90, 43, 0.3); color: #ffffff; }
-.dt-bar { display: flex; flex: none; align-items: center; gap: 4px; box-sizing: border-box; height: 30px;
-	padding: 0 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.09); }
-.dt-bar .dt-space { flex: 1; }
-.dt-bar .dt-rule { width: 1px; height: 16px; margin: 0 4px; background: rgba(255, 255, 255, 0.14); }
-#dt-filter { width: 150px; height: 22px; padding: 0 8px; border: 1px solid rgba(255, 255, 255, 0.16);
-	border-radius: 4px; outline: none; background: #121016; color: #f4f1f8; font-size: 12px; }
-#dt-filter:focus { border-color: #f15a2b; }
-.dt-check { display: flex; align-items: center; gap: 5px; padding: 0 4px; cursor: pointer; }
+#devtools button { height: 22px; padding: 0 8px; border: none; border-radius: 3px; background: transparent;
+	color: var(--dt-ink); font-size: 12px; cursor: pointer; }
+#devtools button:hover { background: var(--dt-hover); }
+#devtools .dt-icon { display: block; flex: none; width: 16px; height: 16px; }
+#dt-handle { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 5px; cursor: row-resize; }
+#dt-handle:hover { background: var(--dt-accent); opacity: 0.6; }
+#devtools.sizing { border-top-color: var(--dt-accent); }
+#devtools.sizing #dt-handle { top: -4000px; height: 8000px; background: transparent; }
+.dt-tools { display: flex; flex: none; align-items: center; box-sizing: border-box; height: 30px;
+	padding-right: 6px; border-bottom: 1px solid var(--dt-rule); background: var(--dt-bar); }
+#devtools .dt-tab { display: flex; align-items: center; gap: 6px; box-sizing: border-box; height: 29px;
+	padding: 0 12px; border-top: 2px solid transparent; border-bottom: 2px solid transparent; border-radius: 0; }
+#devtools .dt-tab.chosen { border-top-color: var(--dt-accent); background: var(--dt-bg); color: var(--dt-strong); }
+.dt-space { flex: 1; }
+.dt-check { display: flex; align-items: center; gap: 5px; padding: 0 8px; color: var(--dt-faint); cursor: pointer; }
+#devtools #dt-console-errors { display: flex; align-items: center; height: 29px; padding: 0 4px; color: #ffffff;
+	font-size: 11px; }
+#devtools #dt-console-errors.away { display: none; }
+#devtools #dt-console-errors:hover { background: transparent; }
+#dt-console-errors .dt-pill { display: flex; align-items: center; gap: 2px; height: 18px; padding: 0 5px;
+	border-radius: 9px; background: #d7264d; }
+#dt-console-errors:hover .dt-pill { background: #e5484d; }
+#devtools #dt-close { display: flex; align-items: center; justify-content: center; width: 28px; height: 29px;
+	padding: 0; }
+#devtools .dt-glyph { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+	padding: 0; }
+.dt-tool { display: none; flex: 1; flex-direction: column; min-height: 0; }
+.dt-tool.shown { display: flex; }
+.dt-bar { display: flex; flex: none; align-items: center; gap: 2px; box-sizing: border-box; height: 30px;
+	padding: 0 6px; border-bottom: 1px solid var(--dt-rule); background: var(--dt-bar); }
+.dt-bar .dt-rule { flex: none; width: 1px; height: 16px; margin: 0 5px; background: var(--dt-rule); }
+.dt-field { position: relative; display: flex; flex: none; margin: 0 4px; }
+.dt-field .dt-icon { position: absolute; top: 4px; left: 5px; }
+.dt-field input { box-sizing: border-box; width: 190px; height: 24px; padding: 0 6px 0 25px;
+	border: 1px solid var(--dt-rule); border-radius: 3px; outline: none; background: var(--dt-field);
+	color: var(--dt-strong); font-size: 12px; }
+.dt-field input:focus { border-color: var(--dt-accent); }
+#devtools .dt-chip { box-sizing: border-box; height: 24px; padding: 0 8px; border-top: 2px solid transparent;
+	border-bottom: 2px solid transparent; border-radius: 0; }
+#devtools .dt-chip.chosen { border-bottom-color: var(--dt-accent); color: var(--dt-accent); }
 .dt-body { display: flex; flex: 1; min-height: 0; }
 #dt-rows, #dt-warnings { flex: 1; min-width: 0; overflow-y: auto; }
-.dt-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 56px 86px 90px 70px 64px; align-items: center;
-	height: 22px; padding: 0 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); cursor: default; }
-.dt-row span { min-width: 0; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dt-row.dt-head { position: sticky; top: 0; background: #26222d; color: #a59fb0; }
-.dt-row.redirect { color: #8d879a; }
-.dt-row.failed { color: #ff7b6b; }
-.dt-row:hover { background: rgba(255, 255, 255, 0.06); }
-.dt-row.dt-head:hover { background: #26222d; }
-.dt-row.selected { background: rgba(241, 90, 43, 0.28); }
-.dt-warning { padding: 4px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: #f0c674; }
-.dt-none { padding: 10px; color: #a59fb0; }
+.dt-row { display: grid;
+	grid-template-columns: 58px 58px minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 0.9fr) 62px 86px 78px 70px;
+	align-items: center; height: 22px; font-family: monospace; cursor: default; }
+.dt-row > span { display: flex; align-items: center; gap: 4px; box-sizing: border-box; min-width: 0; height: 100%;
+	padding: 0 6px; border-right: 1px solid var(--dt-hair); white-space: nowrap; overflow: hidden;
+	text-overflow: ellipsis; }
+.dt-row > span > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dt-row .dt-transferred, .dt-row .dt-size, .dt-row .dt-duration { justify-content: flex-end; }
+#dt-rows.beside .dt-row { grid-template-columns: 58px 58px minmax(0, 1fr) minmax(0, 1.5fr); }
+#dt-rows.beside .dt-initiator, #dt-rows.beside .dt-type, #dt-rows.beside .dt-transferred,
+#dt-rows.beside .dt-size, #dt-rows.beside .dt-duration { display: none; }
+.dt-row:nth-child(odd) { background: var(--dt-odd); }
+.dt-row:hover { background: var(--dt-hover); }
+.dt-row.dt-head { position: sticky; z-index: 1; top: 0; height: 24px; border-bottom: 1px solid var(--dt-rule);
+	background: var(--dt-bar); color: var(--dt-faint); font-family: sans-serif; }
+.dt-row.dt-head > span { cursor: pointer; }
+.dt-row.dt-head > span:hover { color: var(--dt-strong); }
+.dt-row .dt-code { padding: 0 5px; border-radius: 3px; background: var(--dt-ok); color: var(--dt-ok-ink);
+	line-height: 16px; }
+.dt-row .dt-code.dt-moved { background: var(--dt-moved); color: var(--dt-ink); }
+.dt-row .dt-code.dt-bad { background: var(--dt-error); color: var(--dt-error-ink); }
+.dt-row.redirect { color: var(--dt-faint); }
+.dt-row.failed { background: var(--dt-error); color: var(--dt-error-ink); }
+.dt-row.selected { background: var(--dt-selected); color: var(--dt-selected-ink); }
+.dt-warning { display: flex; align-items: flex-start; gap: 6px; padding: 3px 8px;
+	border-bottom: 1px solid var(--dt-hair); background: var(--dt-warn); color: var(--dt-warn-ink);
+	font-family: monospace; line-height: 16px; }
+.dt-warning span { min-width: 0; overflow-wrap: anywhere; }
+#devtools .away, #dt-keys { display: none; }
+#dt-said { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+#dt-console { flex: 1; min-height: 0; overflow-y: auto; user-select: text; }
+.dt-line { display: flex; align-items: flex-start; gap: 6px; padding: 2px 8px;
+	border-bottom: 1px solid var(--dt-hair); font-family: monospace; line-height: 16px; }
+.dt-line .dt-mark { flex: none; width: 16px; height: 16px; }
+.dt-line .dt-icon { user-select: none; }
+#devtools .dt-fold { flex: none; width: 16px; height: 16px; padding: 0; }
+.dt-line .dt-times { flex: none; padding: 0 5px; border-radius: 8px; background: var(--dt-accent);
+	color: var(--dt-bg); font-size: 11px; user-select: none; }
+.dt-line .dt-said { flex: 1; min-width: 0; }
+.dt-line .dt-frame { flex: none; max-width: 30%; margin: -1px 0; padding: 0 5px; border: 1px solid var(--dt-faint); border-radius: 8px;
+	color: var(--dt-faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-line .dt-text, .dt-line .dt-stack { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dt-line .dt-stack { padding-left: 16px; opacity: 0.8; }
+.dt-line .dt-where { flex: none; max-width: 40%; color: var(--dt-faint); overflow: hidden; text-overflow: ellipsis;
+	white-space: nowrap; }
+.dt-line .dt-where[role="link"], .dt-line .dt-link { color: var(--dt-accent); text-decoration: underline;
+	cursor: pointer; }
+.dt-line.dt-warn, .dt-line.dt-css { background: var(--dt-warn); color: var(--dt-warn-ink); }
+.dt-line.dt-error { background: var(--dt-error); color: var(--dt-error-ink); }
+.dt-line.dt-warn .dt-times { background: var(--dt-warn-ink); color: var(--dt-warn); }
+.dt-line.dt-error .dt-times { background: var(--dt-error-ink); color: var(--dt-error); }
+.dt-line.dt-debug, .dt-line.dt-net { color: var(--dt-faint); }
+.dt-line.dt-net-failed { color: var(--dt-error-ink); }
+.dt-line.dt-result { color: var(--dt-result); }
+#dt-prompt { display: flex; flex: none; align-items: center; gap: 6px; box-sizing: border-box; height: 26px;
+	padding: 0 8px; border-top: 1px solid var(--dt-rule); }
+#dt-eval { flex: 1; min-width: 0; height: 20px; padding: 0; border: 0; outline: none; background: transparent;
+	color: var(--dt-strong); font-family: monospace; font-size: 12px; }
+#dt-eval:disabled { color: var(--dt-faint); }
+#dt-context { display: none; flex: none; max-width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#dt-context.shown { display: block; }
+.dt-none { padding: 10px; color: var(--dt-faint); }
 #dt-details { display: none; flex: none; flex-direction: column; box-sizing: border-box; width: 46%;
-	border-left: 1px solid rgba(255, 255, 255, 0.12); }
+	border-left: 1px solid var(--dt-rule); }
 #dt-details.shown { display: flex; }
 #dt-detail { flex: 1; min-height: 0; padding: 6px 10px; overflow: auto; user-select: text; }
-#dt-detail h4 { margin: 8px 0 4px; color: #ffffff; font-size: 12px; }
-.dt-pair { display: flex; gap: 8px; padding: 1px 0; line-height: 16px; }
-.dt-pair .dt-name { flex: none; width: 130px; color: #a59fb0; }
+#dt-detail h4 { margin: 8px 0 4px; color: var(--dt-strong); font-size: 12px; }
+.dt-pair { display: flex; gap: 8px; padding: 1px 0; font-family: monospace; line-height: 16px; }
+.dt-pair .dt-name { flex: none; width: 130px; color: var(--dt-accent); }
 .dt-pair .dt-value { min-width: 0; overflow-wrap: anywhere; }
 #dt-preview { margin: 0; font-size: 12px; line-height: 16px; white-space: pre; }
 #dt-preview img { display: block; max-width: 100%; background: #ffffff; }
 #dt-foot { flex: none; box-sizing: border-box; height: 24px; padding: 0 10px;
-	border-top: 1px solid rgba(255, 255, 255, 0.09); color: #a59fb0; line-height: 23px; white-space: nowrap;
-	overflow: hidden; text-overflow: ellipsis; }
+	border-top: 1px solid var(--dt-rule); background: var(--dt-bar); color: var(--dt-faint); line-height: 23px;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+#dt-storage { flex: 1; min-width: 0; overflow-y: auto; padding: 0 8px 8px; }
+#dt-storage h4 { margin: 8px 0 4px; color: var(--dt-strong); font-size: 12px; }
+.dt-pair .dt-about { flex: none; color: var(--dt-faint); }

@@ -30,9 +30,10 @@ func (s *shown) settings() {
 	s.frame()
 }
 
-func TestTheSettingsAreReachedByTheirTileTheirKeysAndTheMenu(t *testing.T) {
+func TestTheSettingsAreReachedByTheMenuTheirKeysAndARightClick(t *testing.T) {
 	s := show(t)
-	s.click("go-config")
+	s.click("menu")
+	s.click("menu-settings")
 	s.at(configPage)
 	s.Open(tabs.Page(guideName))
 	s.frame()
@@ -57,10 +58,6 @@ func TestASettingIsAppliedAtOnceAndKeptBetweenRuns(t *testing.T) {
 	s.at(tabs.Page(guideName))
 	s.Open(tabs.Page(aboutName))
 	s.click("home")
-	s.at(tabs.Page(guideName))
-	s.closeTab(1)
-	s.closeTab(0)
-	s.frame()
 	s.at(tabs.Page(guideName))
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
@@ -294,5 +291,25 @@ func TestTheAboutPageSaysWhereTheFilesAreKept(t *testing.T) {
 	none.frame()
 	if text = none.node("kept").Text(); !strings.Contains(text, "Nothing is kept") {
 		t.Fatalf("with no folder the page says %q", text)
+	}
+}
+
+func TestEachStepOfTheZoomStartsFromTheZoomShown(t *testing.T) {
+	srv, _ := crypt(t)
+	s := show(t)
+	doc := s.visit(srv.URL + "/vaults")
+	s.doc.Focus(nil)
+	s.command(input.KeyEqual)
+	s.command(input.KeyEqual)
+	if doc.Zoom() != 1.2 {
+		t.Fatalf("zoomed in twice, the page is at %v", doc.Zoom())
+	}
+	s.command(input.KeyMinus)
+	if doc.Zoom() != 1.1 {
+		t.Fatalf("zoomed out once from 120 %%, the page is at %v", doc.Zoom())
+	}
+	s.command(input.KeyMinus)
+	if doc.Zoom() != 1 || s.status.Text() != "Zoom 100 %" {
+		t.Fatalf("zoomed back, the page is at %v, the bubble says %q", doc.Zoom(), s.status.Text())
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lantervale/ember/ui"
@@ -11,7 +12,9 @@ import (
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/fetch"
-	"github.com/lantervale/light/pkg/netlog"
+	"github.com/lantervale/light/pkg/identity"
+	"github.com/lantervale/light/pkg/script"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -30,12 +33,6 @@ const (
 // one it began with.
 func (s *Screen) current() *web.Loader { return s.loader.Load() }
 
-// Open asks through the client of the settings as they stand, so a
-// download is sent as a page is.
-func (s *Screen) open(ctx context.Context, address, accept string) (*fetch.Stream, error) {
-	return s.current().Client.Open(ctx, address, accept)
-}
-
 // opener is a function as the downloads' fetch.
 type opener func(ctx context.Context, address, accept string) (*fetch.Stream, error)
 
@@ -44,49 +41,92 @@ func (o opener) Open(ctx context.Context, address, accept string) (*fetch.Stream
 }
 
 // configure changes the settings: what is out of bounds falls back to
-// its default, and what changed is applied at once and written.
-func (s *Screen) configure(change func(c *config.Config)) {
-	c := s.config
+// its default, and what changed is applied at once, in every window,
+// and written.
+func (p *Profile) configure(change func(c *config.Config)) {
+	c := p.config
 	change(&c)
-	if c = c.Valid(); c != s.config {
-		s.config = c
-		s.settings.touch()
+	if c = c.Valid(); c != p.config {
+		p.config = c
+		p.settings.touch()
+		p.settle()
+	}
+	p.reshow()
+}
+
+// settle has the settings, and what of the system they follow, hold
+// from now on, in every window.
+func (p *Profile) settle() {
+	p.hold()
+	for _, s := range p.screens {
 		s.apply()
 		s.shade()
 	}
-	for _, refresh := range s.fields {
-		refresh()
+}
+
+// reshow shows again what the shown pages show of the settings.
+func (p *Profile) reshow() {
+	for _, s := range p.screens {
+		for _, refresh := range s.fields {
+			refresh()
+		}
 	}
 }
 
-// apply has the settings hold: the requests and the pages loaded from
-// now on, the pages already loaded where they can, the downloads'
-// folder, the history's and the requests' caps.
+// viewport is the size of the view pages show in as the last frame saw
+// it, in the pixels of a page at the zoom they are built at: read by
+// the loader off the frame. It is nothing before the view shows.
+func (s *Screen) viewport() (float32, float32) {
+	size := s.viewed.Load()
+	return float32(size >> 32), float32(size & 0xffffffff)
+}
+
+// measure keeps the size viewport answers.
+func (s *Screen) measure() {
+	if s.host == nil {
+		return
+	}
+	box, _ := s.doc.BoxOf(s.host)
+	zoom := max(float32(s.config.Zoom)/100, 0.01)
+	s.viewed.Store(uint64(max(box.W/zoom, 0))<<32 | uint64(uint32(max(box.H/zoom, 0))))
+}
+
+// apply has the settings hold in the screen's window: the pages loaded
+// from now on, those already loaded where they can, the page a new tab
+// starts on, the requests' cap, and what the wheel scrolls, which the
+// screen's Document says for the pages it shows too.
 func (s *Screen) apply() {
 	c := s.config
 	s.loader.Store(&web.Loader{
-		Client: fetch.New(&netlog.Transport{Base: s.opts.Transport}, fetch.Agent(c.UserAgent),
-			fetch.Redirects(c.Redirects)),
-		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100,
+		Client:     s.client.Load(),
+		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100, Scripts: s.scripting(),
+		Viewport: s.viewport, Exact: s.opts.ExactText,
 	})
 	s.browser.Start = c.StartPage
-	s.visits.SetLimit(c.HistoryLimit)
-	s.saves.SetDir(s.downloadsDir())
+	if s.doc != nil {
+		s.doc.SetWheelScroll(c.ScrollFactor())
+	}
 	for _, session := range s.sessions {
 		session.log.SetLimit(c.Requests)
 		s.zoomPages(session)
 	}
 }
 
-// shade draws the shown page dark when the settings say so. A page of
-// the web is left as its site made it.
+// shade draws the shown page dark when the settings say so, or the
+// system they follow. A page of the web is left as its site made it.
 func (s *Screen) shade() {
-	toggle(s.view, "dark", s.config.DarkMode && s.host == nil)
+	_, _, lights := tabs.Own(s.browser.Tab().Current())
+	dark := s.dark()
+	toggle(s.view, "dark", dark && (s.host == nil || lights))
+	if page := s.session().pages[scriptsPage]; page != nil && page.Doc != nil {
+		toggle(page.Doc.Body(), "dark", dark)
+	}
+	s.tools.SetDark(dark)
 }
 
-// logo is the logo the start page shows, by the settings.
+// logo is the logo the start page shows, by the appearance.
 func (s *Screen) logo() string {
-	if s.config.DarkMode {
+	if s.dark() {
 		return darkLogo
 	}
 	return logo
@@ -94,14 +134,14 @@ func (s *Screen) logo() string {
 
 // downloadsDir is the folder downloads are saved to: the one the run was
 // given, else the settings', else the system's.
-func (s *Screen) downloadsDir() string {
+func (p *Profile) downloadsDir() string {
 	switch {
-	case s.opts.Downloads != "":
-		return s.opts.Downloads
-	case s.config.Downloads != "":
-		return s.config.Downloads
+	case p.opts.Downloads != "":
+		return p.opts.Downloads
+	case p.config.Downloads != "":
+		return p.config.Downloads
 	}
-	return s.opts.DefaultDownloads
+	return p.opts.DefaultDownloads
 }
 
 // timeout is how long a page and its sheets may take.
@@ -129,8 +169,9 @@ func (s *Screen) zoomPages(session *session) {
 // settings' bounds; no step is back to the settings' zoom.
 func (s *Screen) zoom(steps int) {
 	session := s.session()
-	session.zoom = 0
-	if steps != 0 {
+	if steps == 0 {
+		session.zoom = 0
+	} else {
 		session.zoom = min(max(s.zoomOf(session)+steps*zoomStep, config.MinZoom), config.MaxZoom)
 	}
 	s.zoomPages(session)
@@ -152,13 +193,14 @@ func configBody(s *Screen) []*ui.Node {
 		body = append(body, ui.P(ui.ID("config-problem"), ui.Text("The settings' file is not in use: "+
 			s.misread.Error()+". It is written again when a setting changes.")))
 	}
-	return append(body,
+	body = append(body,
 		ui.H2(ui.Text("Start")),
 		s.textSetting("set-start-page", "Start page", "What a new tab and the home button show: "+tabs.Home+
-			" or an address.", func(c *config.Config) *string { return &c.StartPage }, tabs.Resolve),
+			" or an address.", func(c *config.Config) *string { return &c.StartPage }, address),
+		ui.H2(ui.Text("Search")),
+		s.engineSetting(),
 		ui.H2(ui.Text("Appearance")),
-		s.checkSetting("set-dark-mode", "Dark mode (light's own pages; the start page's logo switches it too)",
-			func(c *config.Config) *bool { return &c.DarkMode }),
+		s.appearanceSetting(),
 		ui.H2(ui.Text(saves)),
 		s.textSetting("set-downloads", "Folder", "Where files are saved. Empty is the system's: "+
 			s.opts.DefaultDownloads+".", func(c *config.Config) *string { return &c.Downloads }, same),
@@ -172,26 +214,132 @@ func configBody(s *Screen) []*ui.Node {
 			ui.OnClick(s.clearHistory))),
 		ui.H2(ui.Text("Pages")),
 		s.zoomSetting(),
+		s.checkSetting("set-scroll-reversed", "Reverse the way the wheel and the trackpad scroll (light's own "+
+			"pages too)", func(c *config.Config) *bool { return &c.ScrollReversed }),
+		s.numberSetting("set-scroll-speed", "Scroll speed", "How far the wheel and the trackpad scroll, in "+
+			"percent of what the system says; light's own pages too.", config.MinScrollSpeed, config.MaxScrollSpeed,
+			func(c *config.Config) *int { return &c.ScrollSpeed }),
 		s.checkSetting("set-pictures", "Load pictures (pages loaded from now on)",
 			func(c *config.Config) *bool { return &c.Pictures }),
+		s.checkSetting("set-frames", "Load frames (the pages other pages show inside them)",
+			func(c *config.Config) *bool { return &c.Frames }),
 		s.checkSetting("set-meta-refresh", "Follow a page that refreshes elsewhere at once (from now on)",
 			func(c *config.Config) *bool { return &c.MetaRefresh }),
+		s.checkSetting("set-javascript", "Run JavaScript (pages loaded from now on)",
+			func(c *config.Config) *bool { return &c.JavaScript }),
+		ui.P(ui.ID("javascript-engine"), ui.Class("hint"), ui.Text(engine())),
+		ui.H2(ui.Text("Cookies")),
+		s.checkSetting("set-cookies", "Keep the cookies sites set, and send them back",
+			func(c *config.Config) *bool { return &c.Cookies }),
+		s.checkSetting("set-third-party-cookies", "Those of other sites than the page's too",
+			func(c *config.Config) *bool { return &c.ThirdPartyCookies }),
+		s.clearCookiesSetting(),
+		s.clearDatabasesSetting(),
 		ui.H2(ui.Text("Network")),
+		s.checkSetting("set-local-network", "Let pages reach this machine and the local network",
+			func(c *config.Config) *bool { return &c.LocalNetwork }),
 		s.numberSetting("set-timeout", "Request timeout", "Seconds a page and its sheets may take.",
 			config.MinTimeout, config.MaxTimeout, func(c *config.Config) *int { return &c.Timeout }),
 		s.numberSetting("set-redirects", "Redirects followed", "For one navigation.",
 			config.MinRedirects, config.MaxRedirects, func(c *config.Config) *int { return &c.Redirects }),
-		s.textSetting("set-user-agent", "User-Agent", "What light says it is to a server.",
-			func(c *config.Config) *string { return &c.UserAgent }, same),
+		placeholder(s.textSetting("set-user-agent", "User-Agent", "What light says it is to a server and to a "+
+			"page's scripts. Empty is light's own.", func(c *config.Config) *string { return &c.UserAgent }, same),
+			identity.Default(s.opts.Version)),
+		s.languagesSetting(),
 		ui.H2(ui.Text("Developer tools")),
 		s.checkSetting("set-preserve-log", "Preserve the log in new tabs",
 			func(c *config.Config) *bool { return &c.PreserveLog }),
 		s.numberSetting("set-requests", "Requests kept", "In each tab's Network panel.",
 			config.MinRequests, config.MaxRequests, func(c *config.Config) *int { return &c.Requests }),
 	)
+	if s.modelGiven() {
+		body = append(body, ui.H2(ui.ID("experimental"), ui.Text("Experimental")),
+			ui.P(ui.Class("hint"), ui.Text("New, and it can be wrong. Off unless you turn it on.")),
+			ui.H3(ui.Text(modelName)), s.modelSettings(), s.sortingSettings(), s.recallSettings(),
+			s.translationSettings())
+	}
+	return body
 }
 
 func same(text string) string { return text }
+
+// address is what was typed as an address, words as a search of
+// light's own pages.
+func address(typed string) string { return tabs.Resolve(typed, nil) }
+
+// asSystem is the value of the appearance's choice that follows the
+// system.
+const asSystem = "system"
+
+// appearanceSetting is the choice of the appearance: the system's, or
+// one whatever the system's.
+func (s *Screen) appearanceSetting() *ui.Node {
+	const id = "set-appearance"
+	field := ui.Select(ui.ID(id), ui.Option(ui.Value(asSystem), ui.Text("As the system")),
+		ui.Option(ui.Value(config.AppearanceLight), ui.Text("Light")),
+		ui.Option(ui.Value(config.AppearanceDark), ui.Text("Dark")))
+	ui.On(field, ui.EventChange, func() {
+		chosen := s.doc.Value(field)
+		if chosen == asSystem {
+			chosen = config.AppearanceSystem
+		}
+		s.configure(func(c *config.Config) { c.Appearance = chosen })
+	})
+	show := func() {
+		chosen := s.config.Appearance
+		if chosen == config.AppearanceSystem {
+			chosen = asSystem
+		}
+		s.doc.SetValue(field, chosen)
+	}
+	s.fields = append(s.fields, show)
+	show()
+	return setting(id, "Appearance", "Of light's own pages: as the system is, and as it changes, or always "+
+		"light or dark. A click on the start page's logo sets the other one than shown.", field)
+}
+
+// languagesSetting is the languages a site is asked for, over the
+// system's as they stand.
+func (s *Screen) languagesSetting() *ui.Node {
+	const id = "set-accept-language"
+	row := s.textSetting(id, "Languages", "The languages a site is asked for, most wanted first, as fr-FR, en. "+
+		"Empty is the system's.", func(c *config.Config) *string { return &c.Languages }, same)
+	show := func() { placeholder(row, strings.Join(identity.Languages(s.preferred()), ", ")) }
+	s.fields = append(s.fields, show)
+	show()
+	return row
+}
+
+// engineSetting is the choice of the search engine.
+func (s *Screen) engineSetting() *ui.Node {
+	const id = "set-search-engine"
+	field := ui.Select(ui.ID(id))
+	for _, e := range search.Engines() {
+		field.Append(ui.Option(ui.Value(e.ID), ui.Text(e.Name)))
+	}
+	ui.On(field, ui.EventChange, func() {
+		chosen := s.doc.Value(field)
+		s.configure(func(c *config.Config) { c.SearchEngine = chosen })
+	})
+	mark := ui.Img(ui.ID("engine-mark"), ui.Attr("alt", ""))
+	show := func() {
+		s.doc.SetValue(field, s.config.SearchEngine)
+		mark.SetAttr("src", s.mark())
+	}
+	s.fields = append(s.fields, show)
+	show()
+	return setting(id, "Search engine", "What is typed in the address bar and is not an address is sent to it, "+
+		"on Enter.", ui.Div(ui.Class("choice"), mark, field))
+}
+
+// engine says what runs a page's scripts in this build.
+func engine() string {
+	if !script.Available() {
+		return "This build of light has no JavaScript engine: no script runs, whatever the setting. " +
+			"Build it with -tags v8 to have one."
+	}
+	return "Scripts run in " + script.Engine() + ", see " + scriptsPage + "."
+}
 
 // given says the run was given a downloads folder, which the setting
 // does not change.
@@ -234,6 +382,13 @@ func (s *Screen) textSetting(id, label, hint string, of func(*config.Config) *st
 		})
 	}, func() { s.doc.SetValue(field, *of(&s.config)) })
 	return setting(id, label, hint, field)
+}
+
+// placeholder has the field of a text setting's row show what the
+// setting is when it is left empty.
+func placeholder(row *ui.Node, text string) *ui.Node {
+	row.Children()[1].SetAttr("placeholder", text)
+	return row
 }
 
 // numberSetting is a setting that is a whole number between low and

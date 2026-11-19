@@ -12,6 +12,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/lantervale/light/pkg/identity"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -30,14 +32,44 @@ const (
 	MaxRedirects = 20
 	MinRequests  = 100
 	MaxRequests  = 10000
+	// A height of the developer tools out of these is their own.
+	MinToolsHeight = 120
+	MaxToolsHeight = 4000
+	// Hours a page keeps the category the model gave it; none at 0.
+	MinCategoryHours = 0
+	MaxCategoryHours = 720
+	MinScrollSpeed   = 25
+	MaxScrollSpeed   = 400
 )
+
+// The appearances light's own pages are drawn in.
+const (
+	// AppearanceSystem follows the system's, light where it says none.
+	AppearanceSystem = ""
+	AppearanceLight  = "light"
+	AppearanceDark   = "dark"
+)
+
+// formerDarkMode is the key an earlier light kept its dark mode under,
+// on or off: on, it is read as AppearanceDark in a file that names no
+// appearance, and it is not written again.
+const formerDarkMode = "dark_mode"
 
 // Config is every setting. The file names each by its json name.
 type Config struct {
 	// StartPage is the address a new tab and the home button show.
 	StartPage string `json:"start_page"`
-	// DarkMode is whether light's own pages are drawn dark.
-	DarkMode bool `json:"dark_mode"`
+	// SearchEngine is the engine what is typed in the address bar and
+	// is not an address is sent to, by its id (search.Engines).
+	SearchEngine string `json:"search_engine"`
+	// Appearance is how light's own pages are drawn: AppearanceLight,
+	// AppearanceDark, or AppearanceSystem for as the system is.
+	Appearance string `json:"appearance"`
+	// ScrollReversed is whether the wheel scrolls a page the other way
+	// than it comes from the system, and ScrollSpeed how far, in percent
+	// of what the system says.
+	ScrollReversed bool `json:"scroll_reversed"`
+	ScrollSpeed    int  `json:"scroll_speed"`
 	// Downloads is the folder files are saved to, "" for the user's
 	// Downloads folder.
 	Downloads string `json:"downloads"`
@@ -53,22 +85,82 @@ type Config struct {
 	// Redirects how many redirects one navigation follows.
 	Timeout   int `json:"timeout"`
 	Redirects int `json:"redirects"`
-	// UserAgent is the User-Agent requests are sent with.
+	// UserAgent is the User-Agent requests are sent with, "" for
+	// light's own (identity.UserAgent).
 	UserAgent string `json:"user_agent"`
+	// Languages is the languages a site is asked for, most wanted
+	// first, as "fr-FR, en"; "" for the system's.
+	Languages string `json:"accept_language"`
 	// MetaRefresh is whether a page that refreshes elsewhere at once is
 	// followed there.
 	MetaRefresh bool `json:"meta_refresh"`
+	// JavaScript is whether a page's scripts run, in a build that has an
+	// engine for them.
+	JavaScript bool `json:"javascript"`
+	// Frames is whether the documents a page shows in its iframes are
+	// loaded.
+	Frames bool `json:"frames"`
+	// Cookies is whether sites' cookies are kept and sent, and
+	// ThirdPartyCookies whether those of another site than the page's
+	// are too.
+	Cookies           bool `json:"cookies"`
+	ThirdPartyCookies bool `json:"third_party_cookies"`
+	// LocalNetwork is whether pages of the Internet reach this machine
+	// and the network around it, which they do not unless it is set.
+	LocalNetwork bool `json:"local_network"`
 	// PreserveLog is whether a new tab's developer tools keep the
 	// requests over a navigation; Requests how many its log keeps.
 	PreserveLog bool `json:"preserve_log"`
 	Requests    int  `json:"requests"`
+	// ToolsHeight is the height the developer tools were dragged to, 0
+	// for their own.
+	ToolsHeight int `json:"tools_height"`
+	// Model is whether the language model that runs on this device is
+	// on: nothing of it is downloaded or started until it is. ModelID is
+	// the one chosen among those light knows (model.Known), "" for the
+	// one proposed to this device, and ModelFile the path of a GGUF file
+	// of the user's in its place: never both. ModelThreads is how many
+	// threads compute, 0 for light's own choice, and ModelCPU whether
+	// the graphics card is left out of it.
+	Model        bool   `json:"model"`
+	ModelID      string `json:"model_id"`
+	ModelFile    string `json:"model_file"`
+	ModelThreads int    `json:"model_threads"`
+	ModelCPU     bool   `json:"model_cpu"`
+	// HideSummaries is whether the start page keeps to itself what the
+	// model wrote of the pages visited.
+	HideSummaries bool `json:"hide_summaries"`
+	// PreviewSeen is the release whose warning, that light is an early
+	// preview, its user agreed to; "" for none.
+	PreviewSeen string `json:"preview_seen"`
+	// TranslateInto is the language a selection, a page and a text typed
+	// on light://translate are translated into, by its tag, "" for the
+	// reader's.
+	TranslateInto string `json:"translate_into"`
+	// TranslateAlways and TranslateNever are the languages whose pages
+	// are translated as they show and those whose pages are never
+	// offered a translation, as "fr, de" (PageRule).
+	TranslateAlways string `json:"translate_always"`
+	TranslateNever  string `json:"translate_never"`
+	// RecallExcluded are the sites whose pages are never remembered for
+	// the history asked by meaning, by their hosts, as "bank.example,
+	// mail.example".
+	RecallExcluded string `json:"recall_excluded"`
+	// CategoryHours is how many hours a page keeps the category the
+	// model gave it before the model is asked again, 0 for not at all.
+	CategoryHours int `json:"category_hours"`
 }
+
+// formerUserAgent is the User-Agent light once had by default and wrote
+// in its file: it is read as the default.
+const formerUserAgent = "light/1.0 (ember)"
 
 // Default is the settings light starts with.
 func Default() Config {
 	return Config{
-		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
-		Timeout: 30, Redirects: 10, UserAgent: "light/1.0 (ember)", MetaRefresh: true, Requests: 1000,
+		StartPage: tabs.Home, SearchEngine: search.Default, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
+		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
+		JavaScript: true, Frames: true, Cookies: true, CategoryHours: 24, ScrollSpeed: 100,
 	}
 }
 
@@ -76,14 +168,26 @@ func Default() Config {
 func (c Config) Valid() Config {
 	d := Default()
 	c.StartPage = text(c.StartPage, d.StartPage)
+	if !search.Known(c.SearchEngine) {
+		c.SearchEngine = d.SearchEngine
+	}
+	if c.Appearance != AppearanceLight && c.Appearance != AppearanceDark {
+		c.Appearance = AppearanceSystem
+	}
+	c.ScrollSpeed = within(c.ScrollSpeed, MinScrollSpeed, MaxScrollSpeed, d.ScrollSpeed)
 	c.Downloads = strings.TrimSpace(c.Downloads)
-	c.UserAgent = text(c.UserAgent, d.UserAgent)
+	if c.UserAgent = text(c.UserAgent, d.UserAgent); c.UserAgent == formerUserAgent {
+		c.UserAgent = d.UserAgent
+	}
+	c.Languages = strings.Join(identity.Tags(text(c.Languages, d.Languages)), ", ")
 	c.HistoryLimit = within(c.HistoryLimit, MinHistory, MaxHistory, d.HistoryLimit)
 	c.Zoom = within(c.Zoom, MinZoom, MaxZoom, d.Zoom)
 	c.Timeout = within(c.Timeout, MinTimeout, MaxTimeout, d.Timeout)
 	c.Redirects = within(c.Redirects, MinRedirects, MaxRedirects, d.Redirects)
 	c.Requests = within(c.Requests, MinRequests, MaxRequests, d.Requests)
-	return c
+	c.ToolsHeight = within(c.ToolsHeight, MinToolsHeight, MaxToolsHeight, d.ToolsHeight)
+	c.CategoryHours = within(c.CategoryHours, MinCategoryHours, MaxCategoryHours, d.CategoryHours)
+	return c.validModel().validRecall().validTranslate()
 }
 
 // text is value trimmed, or fallback when nothing is left or it holds a
@@ -94,6 +198,22 @@ func text(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// Dark reports whether light's own pages are drawn dark on a system
+// that is dark or not: as set, else as the system.
+func (c Config) Dark(system bool) bool {
+	return c.Appearance == AppearanceDark || c.Appearance == AppearanceSystem && system
+}
+
+// ScrollFactor is how many times what the wheel says a page scrolls
+// by, negative the other way.
+func (c Config) ScrollFactor() float32 {
+	factor := float32(c.ScrollSpeed) / 100
+	if c.ScrollReversed {
+		return -factor
+	}
+	return factor
 }
 
 func within(value, low, high, fallback int) int {
@@ -119,8 +239,9 @@ func (c Config) Encode() ([]byte, error) {
 
 // Decode reads what Encode wrote, each setting alone: a key it does not
 // know is ignored, and a value that is not of its kind or out of its
-// bounds is the default. Data that is no such file is the defaults and
-// an error.
+// bounds is the default. The dark mode an earlier light kept is read as
+// its appearance. Data that is no such file is the defaults and an
+// error.
 func Decode(data []byte) (Config, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil || fields == nil {
@@ -137,6 +258,9 @@ func Decode(data []byte) (Config, error) {
 		if json.Unmarshal(raw, read.Interface()) == nil {
 			value.Field(i).Set(read.Elem())
 		}
+	}
+	if _, named := fields["appearance"]; !named && string(fields[formerDarkMode]) == "true" {
+		c.Appearance = AppearanceDark
 	}
 	return c.Valid(), nil
 }

@@ -1,0 +1,82 @@
+# light is cgo on every system (GLFW, the audio device, V8), so each target is built on its own system:
+# .github/workflows/release.yml runs `goreleaser build --id light-<os> --single-target` once per target, and later
+# jobs gather the archives into the release. GoReleaser (OSS, v2) therefore only builds here: `goreleaser release`
+# builds every target on one machine and publishes from it, and splitting it between machines is Pro.
+#
+# Each build's post hook (tools/release/bundle.sh) packs the binary with the wgpu-native library it loads at run time
+# into dist/light_<version>_<os>_<arch>.zip|tar.gz. Locally: task release:snapshot.
+version: 2
+
+project_name: light
+
+before:
+  hooks:
+    - sh tools/release/preflight.sh {{ .IsSnapshot }}
+
+builds:
+  - id: light-darwin
+    main: ./cmd/light
+    binary: light
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    tags: [v8]
+    env:
+      - CGO_ENABLED=1
+      - CGO_CXXFLAGS=-nostdinc++
+      # The oldest macOS the build runs on, rather than the build machine's own: 13.0 is what the V8 libraries were
+      # built for (wgpu-native and ember go back to 11.0). bundle.sh checks the result against the same number.
+      - MACOSX_DEPLOYMENT_TARGET=13.0
+      - CGO_CFLAGS=-O2 -g -mmacosx-version-min=13.0
+      - CGO_LDFLAGS=-O2 -g -mmacosx-version-min=13.0
+    flags: &flags
+      - -trimpath
+    mod_timestamp: &mod_timestamp '{{ .CommitTimestamp }}'
+    ldflags: &ldflags
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }}
+    hooks: &hooks
+      post:
+        - cmd: sh tools/release/bundle.sh
+          output: true
+          env:
+            - LIGHT_OS={{ .Os }}
+            - LIGHT_ARCH={{ .Arch }}
+            - LIGHT_BIN={{ .Path }}
+            - LIGHT_VERSION={{ .Version }}
+
+  - id: light-linux
+    main: ./cmd/light
+    binary: light
+    goos: [linux]
+    goarch: [amd64, arm64]
+    # vulkan: GLFW links the Vulkan loader, which wgpu draws through, rather than libGL, which light never calls.
+    tags: [v8, vulkan]
+    env:
+      - CGO_ENABLED=1
+      - CGO_CXXFLAGS=-nostdinc++
+    flags: *flags
+    mod_timestamp: *mod_timestamp
+    ldflags: *ldflags
+    hooks: *hooks
+
+  # No v8 tag: the V8 the binding ships for Windows is built for the MSVC ABI, and GLFW and ember build with mingw-w64.
+  - id: light-windows
+    main: ./cmd/light
+    binary: light
+    goos: [windows]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC={{ if eq .Runtime.Goos "windows" }}gcc{{ else }}x86_64-w64-mingw32-gcc{{ end }}
+    flags: *flags
+    mod_timestamp: *mod_timestamp
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }}
+      # A windowed program: no console opens with it.
+      - -H=windowsgui
+    hooks: *hooks
+
+gomod:
+  proxy: false
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-SNAPSHOT-{{ .ShortCommit }}'

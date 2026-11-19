@@ -7,6 +7,7 @@ import (
 
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -15,16 +16,18 @@ const (
 	guideName     = "guide"
 	examplesName  = "examples"
 	aboutName     = "about"
+	bookmarksName = "bookmarks"
 	historyName   = "history"
 	downloadsName = "downloads"
 	configName    = "config"
+	scriptsName   = "scripts"
+	// categoriesName is the page the categories are edited on: there
+	// only while the model helps with them, so it is none of pages.
+	categoriesName = "categories"
 )
 
 // own is what the address of a page of light's begins with.
 const own = tabs.Scheme + "://"
-
-// demo is the page of the web the start page offers.
-const demo = "https://csszengarden.com"
 
 // site is one page of light's own, found at tabs.Page(name).
 type site struct {
@@ -32,9 +35,16 @@ type site struct {
 	body                 func(s *Screen) []*ui.Node
 }
 
+// made is a page of light's the model makes, with the feature it is
+// of.
+type made struct {
+	site
+	feature string
+}
+
 // pages are light's own pages, the start page first: what an address of
-// its scheme opens, and what the start page, a search, the About page
-// and the page of an unknown one list.
+// its scheme opens, and what a search, the About page and the page of
+// an unknown one list.
 func pages() []site {
 	return []site{
 		{tabs.HomeName, "New Tab", "The start page: a search box and the pages light knows.", homePage},
@@ -44,18 +54,48 @@ func pages() []site {
 			"sound.", examplesPage},
 		{aboutName, "About", "What light is: tabs, a history and an address bar over pages built in Go and the " +
 			"web.", aboutPage},
+		{bookmarksName, bookmarked, "The pages kept by the star of the address field, by folder.", bookmarksBody},
 		{historyName, visited, "Every page visited, newest first, kept between runs.", historyBody},
 		{downloadsName, saves, "The files saved from the web, in progress and done.", downloadsBody},
 		{configName, settings, "The start page, the downloads' folder, the history, the zoom, the network.",
 			configBody},
+		{scriptsName, "Scripts", "What light runs of a page's JavaScript: a counter, a list, tabs, a fetch.", nil},
 	}
 }
 
+// assisted are the pages of light's the model makes, each with the
+// feature it is of: they are listed nowhere while it does not help.
+func assisted() []made {
+	return []made{{site{translateName, translateTitle, "A text typed or pasted, translated by the model on this " +
+		"device.", translateBody}, translateFeature}}
+}
+
+// lists are light's own pages as its lists have them: those the model
+// makes among them only while it does.
+func (s *Screen) lists() []site {
+	all := pages()
+	if s.helps(sortingFeature) {
+		all = append(all, site{categoriesName, sortedTitle, "The categories pages are sorted into, in your words, " +
+			"and what light does with the pages of each.", categoriesBody})
+	}
+	for _, page := range assisted() {
+		if s.helps(page.feature) {
+			all = append(all, page.site)
+		}
+	}
+	return all
+}
+
 // pageNamed is light's page of that name.
-func pageNamed(name string) (site, bool) {
-	for _, page := range pages() {
+func (s *Screen) pageNamed(name string) (site, bool) {
+	for _, page := range s.lists() {
 		if page.name == name {
 			return page, true
+		}
+	}
+	for _, page := range assisted() {
+		if page.name == name {
+			return page.site, true
 		}
 	}
 	return site{}, false
@@ -64,38 +104,35 @@ func pageNamed(name string) (site, bool) {
 // ownPages lists light's pages by their addresses.
 func (s *Screen) ownPages() *ui.Node {
 	list := ui.Div(ui.ID("own-pages"), ui.Class("list"))
-	for _, page := range pages() {
+	for _, page := range s.lists() {
 		list.Append(ui.Div(s.link(tabs.Page(page.name), tabs.Page(page.name)), ui.Text(": "+page.summary)))
 	}
 	return list
 }
 
-func homePage(s *Screen) []*ui.Node {
-	search := ui.Input(ui.ID("search"), ui.Type("search"), ui.Placeholder("Search the pages or type an address"),
-		ui.Attr("autofocus", ""))
-	ui.On(search, ui.EventSubmit, func() { s.Open(tabs.Resolve(s.doc.Value(search))) })
-	tiles := ui.Div(ui.ID("tiles"))
-	for _, page := range pages()[1:] {
-		tiles.Append(tile("go-"+page.name, page.title, page.summary, func() { s.Open(tabs.Page(page.name)) }))
+// searches says what the start page's field does with what is typed.
+func (s *Screen) searches() string {
+	if e := s.engine(); e.ID != search.Own {
+		return "Search with " + e.Name + " or type an address"
 	}
-	tiles.Append(tile("go-demo", "CSS Zen Garden", "A page of the web, to see what light draws: csszengarden.com",
-		func() { s.Open(demo) }))
-	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")), search, tiles}
+	return "Search light's own pages or type an address"
 }
 
-// switcher is the start page's logo: a click switches the dark mode,
-// and it is shown in the colours of the one that is on.
+// switcher is the start page's logo: a click sets the appearance that
+// is not the one shown, whatever the system's, and it is shown in the
+// colours of the one that is on.
 func (s *Screen) switcher() *ui.Node {
 	picture := ui.Img(ui.ID("logo"), ui.Attr("src", s.logo()), ui.TabIndex(0), ui.Attr("alt",
 		"light's logo: a disc with eight orange rays. It switches the dark mode"),
-		ui.OnClick(func() { s.configure(func(c *config.Config) { c.DarkMode = !c.DarkMode }) }))
+		ui.OnClick(func() {
+			other := config.AppearanceDark
+			if s.dark() {
+				other = config.AppearanceLight
+			}
+			s.configure(func(c *config.Config) { c.Appearance = other })
+		}))
 	s.fields = append(s.fields, func() { picture.SetAttr("src", s.logo()) })
 	return picture
-}
-
-func tile(id, title, summary string, open func()) *ui.Node {
-	return ui.Button(ui.ID(id), ui.Class("tile"), ui.Strong(ui.Text(title)), ui.Span(ui.Text(summary)),
-		ui.OnClick(open))
 }
 
 func guidePage(s *Screen) []*ui.Node {
@@ -137,10 +174,11 @@ func examplesPage(s *Screen) []*ui.Node {
 func aboutPage(s *Screen) []*ui.Node {
 	return []*ui.Node{
 		ui.H1(ui.Text("About light")),
-		ui.P(ui.Text("light is a small web browser made as a demo of ember: tabs, an address bar and a " +
-			"history over pages built in Go, and over the web. An http or https address is fetched with its " +
-			"stylesheets and pictures and built as a Document of its own; a picture, a text or a file is " +
-			"shown or saved by its type. No script runs, and the CSS is the subset ui knows.")),
+		ui.P(ui.Text("light is a small web browser made as a demo of ember: tabs, an address bar and a "+
+			"history over pages built in Go, and over the web. An http or https address is fetched with its "+
+			"stylesheets and pictures and built as a Document of its own; a picture, a text or a file is "+
+			"shown or saved by its type. The CSS is the subset ui knows; a page's scripts run in a build that "+
+			"has an engine for them, as far as "), s.link(scriptsPage, scriptsPage), ui.Text(" shows.")),
 		ui.P(ui.Text("The tabs are the window's title bar (platform.OwnTitleBar): the empty part of " +
 			"the strip drags the window, and a double click there zooms it. The address of a link " +
 			"under the pointer, and the site a page is waited for, show in a bubble at the bottom-left.")),
@@ -168,7 +206,7 @@ func (s *Screen) kept() *ui.Node {
 	for _, file := range []struct {
 		what  string
 		store *store
-	}{{visited, s.history}, {saves + " list", s.saved}, {settings, s.settings}} {
+	}{{visited, s.history}, {bookmarked, s.markFile}, {saves + " list", s.saved}, {settings, s.settings}} {
 		list.Append(ui.Div(ui.Strong(ui.Text(file.what)), ui.Text(": "+file.store.path(s.opts.Dir))))
 	}
 	return list
@@ -186,7 +224,7 @@ func adapted() *ui.Node {
 func (s *Screen) results(query string) []*ui.Node {
 	body := []*ui.Node{ui.H1(ui.Text("Results for “" + query + "”"))}
 	words := strings.Fields(strings.ToLower(query))
-	for _, found := range pages() {
+	for _, found := range s.lists() {
 		text := strings.ToLower(found.title + " " + found.summary)
 		if len(words) == 0 || !containsAll(text, words) {
 			continue

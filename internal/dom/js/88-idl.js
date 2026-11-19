@@ -1,0 +1,47 @@
+// ---- what the standards' Web IDL says of light's interfaces
+//
+// Written by tools/wpt/idl.py from: dom. Of each interface: the
+// arguments each operation needs (ops), its attributes (attrs),
+// its static members (statics), its constants (consts), the
+// arguments its constructor needs (length) and the members a
+// with block leaves out (unscopables).
+const IDL = {
+  AbortController: {"ops":{"abort":0},"attrs":{"signal":0}},
+  AbortSignal: {"ops":{"throwIfAborted":0},"attrs":{"aborted":0,"reason":0,"onabort":0},"statics":{"abort":0,"timeout":1,"any":1}},
+  AbstractRange: {"attrs":{"startOffset":0,"endOffset":0,"collapsed":0}},
+  Attr: {"attrs":{"namespaceURI":0,"prefix":0,"localName":0,"name":0,"value":0,"ownerElement":0,"specified":0}},
+  CDATASection: {},
+  CharacterData: {"ops":{"substringData":2,"appendData":1,"insertData":2,"deleteData":2,"replaceData":3,"before":0,"after":0,"replaceWith":0,"remove":0},"attrs":{"data":0,"length":0,"previousElementSibling":0,"nextElementSibling":0},"unscopables":["before","after","replaceWith","remove"]},
+  Comment: {},
+  CustomEvent: {"ops":{"initCustomEvent":1},"attrs":{"detail":0},"length":1},
+  DOMImplementation: {"ops":{"createDocumentType":3,"createDocument":2,"createHTMLDocument":0,"hasFeature":0}},
+  DOMTokenList: {"ops":{"item":1,"contains":1,"add":0,"remove":0,"toggle":1,"replace":2,"supports":1,"toString":0,"entries":0,"keys":0,"values":0,"forEach":1},"attrs":{"length":0,"value":0}},
+  Document: {"ops":{"getElementsByTagName":1,"getElementsByTagNameNS":2,"getElementsByClassName":1,"createElement":1,"createElementNS":2,"createDocumentFragment":0,"createTextNode":1,"createCDATASection":1,"createComment":1,"createProcessingInstruction":2,"importNode":1,"adoptNode":1,"createAttribute":1,"createAttributeNS":2,"createEvent":1,"createRange":0,"createNodeIterator":1,"createTreeWalker":1,"getElementById":1,"prepend":0,"append":0,"replaceChildren":0,"moveBefore":2,"querySelector":1,"querySelectorAll":1,"createExpression":1,"createNSResolver":1,"evaluate":2},"attrs":{"implementation":0,"URL":0,"documentURI":0,"compatMode":0,"characterSet":0,"charset":0,"inputEncoding":0,"contentType":0,"doctype":0,"documentElement":0,"customElementRegistry":0,"children":0,"firstElementChild":0,"lastElementChild":0,"childElementCount":0},"unscopables":["prepend","append","replaceChildren"]},
+  DocumentFragment: {"ops":{"getElementById":1,"prepend":0,"append":0,"replaceChildren":0,"moveBefore":2,"querySelector":1,"querySelectorAll":1},"attrs":{"children":0,"firstElementChild":0,"lastElementChild":0,"childElementCount":0},"unscopables":["prepend","append","replaceChildren"]},
+  DocumentType: {"ops":{"before":0,"after":0,"replaceWith":0,"remove":0},"attrs":{"name":0,"publicId":0,"systemId":0},"unscopables":["before","after","replaceWith","remove"]},
+  Element: {"ops":{"hasAttributes":0,"getAttributeNames":0,"getAttribute":1,"getAttributeNS":2,"setAttribute":2,"setAttributeNS":3,"removeAttribute":1,"removeAttributeNS":2,"toggleAttribute":1,"hasAttribute":1,"hasAttributeNS":2,"getAttributeNode":1,"getAttributeNodeNS":2,"setAttributeNode":1,"setAttributeNodeNS":1,"removeAttributeNode":1,"attachShadow":1,"closest":1,"matches":1,"webkitMatchesSelector":1,"getElementsByTagName":1,"getElementsByTagNameNS":2,"getElementsByClassName":1,"insertAdjacentElement":2,"insertAdjacentText":2,"prepend":0,"append":0,"replaceChildren":0,"moveBefore":2,"querySelector":1,"querySelectorAll":1,"before":0,"after":0,"replaceWith":0,"remove":0},"attrs":{"namespaceURI":0,"prefix":0,"localName":0,"tagName":0,"id":0,"className":0,"classList":0,"slot":0,"attributes":0,"shadowRoot":0,"customElementRegistry":0,"children":0,"firstElementChild":0,"lastElementChild":0,"childElementCount":0,"previousElementSibling":0,"nextElementSibling":0,"assignedSlot":0},"unscopables":["slot","prepend","append","replaceChildren","before","after","replaceWith","remove"]},
+  Event: {"ops":{"composedPath":0,"stopPropagation":0,"stopImmediatePropagation":0,"preventDefault":0,"initEvent":1},"attrs":{"type":0,"target":0,"srcElement":0,"currentTarget":0,"eventPhase":0,"cancelBubble":0,"bubbles":0,"cancelable":0,"returnValue":0,"defaultPrevented":0,"composed":0,"isTrusted":0,"timeStamp":0},"consts":{"NONE":0,"CAPTURING_PHASE":1,"AT_TARGET":2,"BUBBLING_PHASE":3},"length":1},
+  EventListener: {},
+  EventTarget: {"ops":{"addEventListener":2,"removeEventListener":2,"dispatchEvent":1}},
+  HTMLCollection: {"ops":{"item":1,"namedItem":1},"attrs":{"length":0}},
+  MutationObserver: {"ops":{"observe":1,"disconnect":0,"takeRecords":0},"length":1},
+  MutationRecord: {"attrs":{"type":0,"target":0,"addedNodes":0,"removedNodes":0,"previousSibling":0,"nextSibling":0,"attributeName":0,"attributeNamespace":0,"oldValue":0}},
+  NamedNodeMap: {"ops":{"item":1,"getNamedItem":1,"getNamedItemNS":2,"setNamedItem":1,"setNamedItemNS":1,"removeNamedItem":1,"removeNamedItemNS":2},"attrs":{"length":0}},
+  Node: {"ops":{"getRootNode":0,"hasChildNodes":0,"normalize":0,"cloneNode":0,"isEqualNode":1,"isSameNode":1,"compareDocumentPosition":1,"contains":1,"lookupPrefix":1,"lookupNamespaceURI":1,"isDefaultNamespace":1,"insertBefore":2,"appendChild":1,"replaceChild":2,"removeChild":1},"attrs":{"nodeType":0,"nodeName":0,"baseURI":0,"isConnected":0,"ownerDocument":0,"parentNode":0,"parentElement":0,"childNodes":0,"firstChild":0,"lastChild":0,"previousSibling":0,"nextSibling":0,"nodeValue":0,"textContent":0},"consts":{"ELEMENT_NODE":1,"ATTRIBUTE_NODE":2,"TEXT_NODE":3,"CDATA_SECTION_NODE":4,"ENTITY_REFERENCE_NODE":5,"ENTITY_NODE":6,"PROCESSING_INSTRUCTION_NODE":7,"COMMENT_NODE":8,"DOCUMENT_NODE":9,"DOCUMENT_TYPE_NODE":10,"DOCUMENT_FRAGMENT_NODE":11,"NOTATION_NODE":12,"DOCUMENT_POSITION_DISCONNECTED":1,"DOCUMENT_POSITION_PRECEDING":2,"DOCUMENT_POSITION_FOLLOWING":4,"DOCUMENT_POSITION_CONTAINS":8,"DOCUMENT_POSITION_CONTAINED_BY":16,"DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC":32}},
+  NodeFilter: {"consts":{"FILTER_ACCEPT":1,"FILTER_REJECT":2,"FILTER_SKIP":3,"SHOW_ALL":4294967295,"SHOW_ELEMENT":1,"SHOW_ATTRIBUTE":2,"SHOW_TEXT":4,"SHOW_CDATA_SECTION":8,"SHOW_ENTITY_REFERENCE":16,"SHOW_ENTITY":32,"SHOW_PROCESSING_INSTRUCTION":64,"SHOW_COMMENT":128,"SHOW_DOCUMENT":256,"SHOW_DOCUMENT_TYPE":512,"SHOW_DOCUMENT_FRAGMENT":1024,"SHOW_NOTATION":2048}},
+  NodeIterator: {"ops":{"nextNode":0,"previousNode":0,"detach":0},"attrs":{"root":0,"referenceNode":0,"pointerBeforeReferenceNode":0,"whatToShow":0,"filter":0}},
+  NodeList: {"ops":{"item":1,"entries":0,"keys":0,"values":0,"forEach":1},"attrs":{"length":0}},
+  NodeRange: {"attrs":{"startContainer":0,"endContainer":0}},
+  ProcessingInstruction: {"ops":{"hasAttributes":0,"getAttributeNames":0,"getAttribute":1,"setAttribute":2,"removeAttribute":1,"toggleAttribute":1,"hasAttribute":1},"attrs":{"target":0},"length":1},
+  Range: {"ops":{"setStart":2,"setEnd":2,"setStartBefore":1,"setStartAfter":1,"setEndBefore":1,"setEndAfter":1,"collapse":0,"selectNode":1,"selectNodeContents":1,"compareBoundaryPoints":2,"deleteContents":0,"extractContents":0,"cloneContents":0,"insertNode":1,"surroundContents":1,"cloneRange":0,"detach":0,"isPointInRange":2,"comparePoint":2,"intersectsNode":1,"toString":0},"attrs":{"commonAncestorContainer":0},"consts":{"START_TO_START":0,"START_TO_END":1,"END_TO_END":2,"END_TO_START":3}},
+  ShadowRoot: {"attrs":{"mode":0,"delegatesFocus":0,"serializable":0,"slotAssignment":0,"clonable":0,"host":0,"onslotchange":0,"customElementRegistry":0}},
+  StaticRange: {"length":1},
+  Text: {"ops":{"splitText":1},"attrs":{"wholeText":0,"assignedSlot":0}},
+  TreeWalker: {"ops":{"parentNode":0,"firstChild":0,"lastChild":0,"previousSibling":0,"nextSibling":0,"previousNode":0,"nextNode":0},"attrs":{"root":0,"whatToShow":0,"filter":0,"currentNode":0}},
+  XMLDocument: {},
+  XPathEvaluator: {"ops":{"createExpression":1,"createNSResolver":1,"evaluate":2}},
+  XPathExpression: {"ops":{"evaluate":1}},
+  XPathNSResolver: {},
+  XPathResult: {"ops":{"iterateNext":0,"snapshotItem":1},"attrs":{"resultType":0,"numberValue":0,"stringValue":0,"booleanValue":0,"singleNodeValue":0,"invalidIteratorState":0,"snapshotLength":0},"consts":{"ANY_TYPE":0,"NUMBER_TYPE":1,"STRING_TYPE":2,"BOOLEAN_TYPE":3,"UNORDERED_NODE_ITERATOR_TYPE":4,"ORDERED_NODE_ITERATOR_TYPE":5,"UNORDERED_NODE_SNAPSHOT_TYPE":6,"ORDERED_NODE_SNAPSHOT_TYPE":7,"ANY_UNORDERED_NODE_TYPE":8,"FIRST_ORDERED_NODE_TYPE":9}},
+  XSLTProcessor: {"ops":{"importStylesheet":1,"transformToFragment":2,"transformToDocument":1,"setParameter":3,"getParameter":2,"removeParameter":2,"clearParameters":0,"reset":0}},
+};

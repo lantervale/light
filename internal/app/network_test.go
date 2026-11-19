@@ -129,7 +129,7 @@ func TestStopEndsALoadThatIsBeingRedirected(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(held) })
 	s := show(t)
-	s.enter(srv.URL + "/")
+	s.OpenInNewTab(srv.URL + "/")
 	s.until("the redirect was followed", func() bool { return len(s.session().log.Rows()) == 2 })
 	s.click("reload")
 	if page := s.session().pages[srv.URL+"/"]; page == nil || !errors.Is(page.Err, errStopped) {

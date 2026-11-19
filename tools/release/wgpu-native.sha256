@@ -1,0 +1,8 @@
+# The SHA-256 of the wgpu-native library ember's fetch.sh takes out of each release asset of gfx-rs/wgpu-native, by
+# version and target; tools/release/bundle.sh refuses a library that is not listed here. When ember moves to another
+# wgpu-native (ember/internal/wgpu/include/VERSION), add its lines: fetch each target, check it, and list its sum.
+v29.0.0.0 darwin-amd64 a324d2406c3aaf0ad67bc962d796a911ae770b17aa4c07540795e86f41d6a9a5
+v29.0.0.0 darwin-arm64 db82d285ec0317cb44d23981c1a42c038fcafd9b0b56c8a1e502e28fb0bf9f71
+v29.0.0.0 linux-amd64 9637b9dca87f44e7df5fae922c8173a4c9456d508caaebc0b8e2c7fe327918e8
+v29.0.0.0 linux-arm64 fd70bee7ab7fc422cae358d984abece2364206f6bd6868a7486597a92098386d
+v29.0.0.0 windows-amd64 96d59982a6e04fa5c3c073a161c13d63b73c214184d3ed58b6b0a19ead1e7261

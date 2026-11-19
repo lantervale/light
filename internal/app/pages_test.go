@@ -6,6 +6,8 @@ import (
 
 	"github.com/lantervale/ember/ui/align"
 
+	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -36,8 +38,8 @@ func TestEveryPageOfLightsOwnIsOpenedListedAndFound(t *testing.T) {
 		}
 		s.Open(tabs.Home)
 		s.frame()
-		if tile := s.doc.ByID("go-" + page.name); (tile != nil) != (page.name != tabs.HomeName) {
-			t.Errorf("the start page has a tile for %s: %v", page.name, tile != nil)
+		if s.doc.ByID("go-"+page.name) != nil || s.doc.ByID("own-links") != nil || s.doc.ByID("home-note") != nil {
+			t.Errorf("the start page has a footer, or a link to %s in it", address)
 		}
 	}
 	if warns := s.doc.Warnings(); len(warns) > 0 {
@@ -71,6 +73,7 @@ func TestTheSchemeLightHadIsNoAddressOfItsPages(t *testing.T) {
 		!strings.Contains(text, "light opens light://, http:// and https:// addresses") {
 		t.Fatalf("the page reads %q", text)
 	}
+	s.configure(func(c *config.Config) { c.SearchEngine = search.Own })
 	s.enter("history")
 	s.at(tabs.Search("history"))
 	if text := s.node("page").Text(); !strings.Contains(text, historyPage) {

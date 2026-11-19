@@ -1,0 +1,11 @@
+#picked { max-height: calc(100% - 16px); }
+#picked.shown { display: flex; flex-direction: column; }
+#picked .head, #picked .part, #picked .foot { flex: none; }
+#picked-text { flex: 0 1 auto; min-height: 40px; overflow-y: auto; white-space: normal; user-select: text; }
+#picked-text p, #picked-text h4, #picked-text .item { margin: 0 0 8px; }
+#picked-text > :last-child { margin-bottom: 0; }
+#picked-text h4 { color: #ffffff; font-size: 13.5px; line-height: 19px; }
+#picked-text strong { color: #ffffff; }
+#picked-text code { padding: 0 3px; border-radius: 3px; background: #34323f; font-size: 12px; }
+#picked-text .item { display: flex; gap: 8px; }
+#picked-text .bullet { flex: none; min-width: 12px; color: #a9a6b8; }

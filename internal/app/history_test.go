@@ -143,9 +143,10 @@ func TestAVisitOpensAndIsRemovedAndTheHistoryIsFilteredAndCleared(t *testing.T) 
 	s.clean()
 }
 
-func TestTheHistoryIsReachedByItsTileAndItsKeys(t *testing.T) {
+func TestTheHistoryIsReachedByTheMenuAndItsKeys(t *testing.T) {
 	s := show(t)
-	s.click("go-history")
+	s.click("menu")
+	s.click("menu-history")
 	s.at(historyPage)
 	if got := s.title(historyPage); got != "History" {
 		t.Fatalf("the tab is named %q", got)
