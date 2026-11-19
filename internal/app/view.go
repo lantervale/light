@@ -1,6 +1,9 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/lantervale/ember/geom"
@@ -85,6 +88,8 @@ func (s *Screen) webPage(address string) shownPage {
 	switch {
 	case page == nil:
 		return shownPage{body: []*ui.Node{ui.P(ui.ID("loading"))}}
+	case errors.Is(page.Err, context.DeadlineExceeded):
+		return s.unreachable(address, s.late(address))
 	case page.Err != nil:
 		return s.unreachable(address, page.Err.Error())
 	case page.Empty:
@@ -120,6 +125,16 @@ func (s *Screen) onPage() (geom.Vec2, bool) {
 		return geom.Vec2{}, false
 	}
 	return s.doc.FramePoint(s.host, at)
+}
+
+// late says a page was not sent within the time the settings give it.
+func (s *Screen) late(address string) string {
+	given := fmt.Sprintf("%d seconds", s.config.Timeout)
+	if s.config.Timeout == 1 {
+		given = "1 second"
+	}
+	return hostOf(address) + " did not send it within the " + given +
+		" a page is given (Request timeout, in the settings)"
 }
 
 // unknown says light has no page of that name, and lists those it has.
