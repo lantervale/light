@@ -89,30 +89,38 @@
 .week .share { display: block; height: 4px; border-radius: 2px; }
 .week .count { flex: none; width: 80px; color: var(--dim); font-size: 12px; text-align: right; }
 
-.category-setting { padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; line-height: 28px; }
+.category-setting { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px 14px;
+	border: 1px solid var(--line); border-radius: 10px; font-size: 14px; line-height: 30px; }
 .category-setting .line { display: flex; align-items: center; gap: 8px; }
-.category-setting .line.more { margin-top: 6px; padding-left: 36px; }
-.category-setting input { flex: 0 0 150px; box-sizing: border-box; min-width: 0; height: 28px; padding: 0 8px;
-	border: 1px solid var(--line); border-radius: 6px; font-size: 14px; line-height: 26px; }
-.category-setting .what { flex: 1 1 0; min-width: 0; }
-.category-setting.adding input { flex: 1 1 0; }
-.category-setting .more .tag { flex: 0 0 110px; }
-.category-setting select { flex: none; box-sizing: border-box; height: 28px; padding: 0 8px;
-	border: 1px solid var(--line); border-radius: 6px; font-size: 14px; line-height: 26px; }
+.category-setting input, .category-setting select { box-sizing: border-box; min-width: 0; height: 30px;
+	padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; line-height: 28px; }
+.category-setting input { flex: 1 1 0; }
+.category-setting select { flex: none; }
+.category-setting input:focus, .category-setting select:focus { border-color: var(--link); outline: none; }
+.category-setting input[id$="-name"] { margin-right: 8px; border-color: transparent; background: transparent;
+	font-weight: bold; }
+.category-setting input[id$="-name"]:hover { border-color: var(--line); }
+.category-setting input[id$="-name"]:focus { border-color: var(--link); }
+.category-setting .more { padding-top: 8px; border-top: 1px solid var(--rule); }
+.category-setting .more .tag { flex: 0 0 140px; }
+.category-setting .caption { flex: none; color: var(--dim); }
+.category-setting .caption.banner { margin-left: 12px; }
 .category-setting .swatch { display: flex; flex: none; align-items: center; justify-content: center;
-	box-sizing: border-box; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; }
+	box-sizing: border-box; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 6px; }
+.category-setting button.swatch:hover { background: var(--rule); }
 .category-setting span.swatch { border-color: transparent; }
-.category-setting .fixed { flex: 0 0 150px; color: var(--dim); }
-.category-setting .fixed.what { flex: 1 1 0; }
-.category-setting .more .fixed { flex: none; }
-.category-setting .more .banner { margin-left: 8px; }
-.category-setting .move { display: flex; flex: none; align-items: center; justify-content: center; width: 28px;
-	height: 28px; border-radius: 14px; color: var(--dim); }
+.category-setting .fixed { flex: none; color: var(--dim); }
+.category-setting .fixed.name { padding: 0 11px; color: var(--ink); font-weight: bold; }
+.category-setting .fixed.what { flex: 1 1 0; min-width: 0; }
+.category-setting .move { display: flex; flex: none; align-items: center; justify-content: center; width: 30px;
+	height: 30px; border-radius: 15px; color: var(--dim); }
 .category-setting .move svg { display: block; width: 12px; height: 12px; }
-.category-setting .move:hover { background: var(--rule); color: var(--alert); }
+.category-setting .move:hover { background: var(--rule); color: var(--ink); }
+.category-setting .move[id$="-remove"]:hover { color: var(--alert); }
 .category-setting .move:disabled { background: transparent; opacity: 0.3; cursor: default; }
-#category-set-add { flex: none; box-sizing: border-box; height: 28px; padding: 0 12px; border: 1px dashed var(--line);
-	border-radius: 14px; color: var(--dim); font-size: 14px; line-height: 26px; }
+.category-setting.adding { border-style: dashed; }
+#category-set-add { flex: none; box-sizing: border-box; height: 30px; padding: 0 16px; border-radius: 15px;
+	background: var(--brand); color: var(--on-brand); font-size: 14px; line-height: 30px; }
 #page #category-settings h3 { margin: 16px 0 4px; font-size: 14px; }
 .category-choice .chose { flex: none; color: var(--dim); }
 #categories-problem { color: var(--problem); }

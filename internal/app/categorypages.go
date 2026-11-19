@@ -90,7 +90,7 @@ func (s *Screen) sortingRows() []*ui.Node {
 	}
 	last := all[len(all)-1]
 	rows = append(rows, ui.Div(ui.ID("category-set-default"), ui.Class("category-setting"), ui.Div(ui.Class("line"),
-		ui.Span(ui.Class("swatch"), markOf(last.Mark)), ui.Span(ui.Class("fixed"), ui.Text(last.Name)),
+		ui.Span(ui.Class("swatch"), markOf(last.Mark)), ui.Span(ui.Class("fixed", "name"), ui.Text(last.Name)),
 		ui.Span(ui.Class("fixed", "what"), ui.Text(last.Description)),
 		ui.Span(ui.Class("fixed"), ui.Text(last.Action.String()+", always last")))))
 	field := ui.Input(ui.ID("category-set-new"), ui.Placeholder("recipes without a life story first"),
@@ -119,10 +119,10 @@ func (s *Screen) sortingRows() []*ui.Node {
 	return rows
 }
 
-// sortingSetting is one category of the page: a line of its mark, its
-// name, what belongs in it, what light does with its pages and what
-// moves and removes it, then one of the tag its label shows and, for
-// one that warns, of its banner and the message it says.
+// sortingSetting is one category of the page, a card: a line of its
+// mark, its name, what light does with its pages and what moves and
+// removes it, then what belongs in it, then the tag its label shows
+// and, for one that warns, its banner and the message it says.
 func (s *Screen) sortingSetting(i int, c categories.Category, of int) *ui.Node {
 	id := "category-set-" + strconv.Itoa(i)
 	edit := func(change func(c *categories.Category)) {
@@ -151,7 +151,7 @@ func (s *Screen) sortingSetting(i int, c categories.Category, of int) *ui.Node {
 	retagged := func() { edit(func(c *categories.Category) { c.Tag = s.doc.Value(tagged) }) }
 	ui.On(tagged, ui.EventChange, retagged)
 	ui.On(tagged, ui.EventSubmit, retagged)
-	more := ui.Div(ui.Class("line", "more"), ui.Span(ui.Class("fixed"), ui.Text("Label")), tagged)
+	more := ui.Div(ui.Class("line", "more"), ui.Span(ui.Class("caption"), ui.Text("Label")), tagged)
 	if c.Action == categories.Warn {
 		more.Append(s.bannerSetting(id, c, edit)...)
 	}
@@ -174,12 +174,12 @@ func (s *Screen) sortingSetting(i int, c categories.Category, of int) *ui.Node {
 		enable(b, i+by >= 0 && i+by < of)
 		return b
 	}
-	return ui.Div(ui.ID(id), ui.Class("category-setting"), ui.Div(ui.Class("line"), swatch, name, what, does,
+	return ui.Div(ui.ID(id), ui.Class("category-setting"), ui.Div(ui.Class("line"), swatch, name, does,
 		move(-1, "up", arrowUp), move(1, "down", arrowDown),
 		ui.Button(ui.ID(id+"-remove"), ui.Class("move"), ui.Attr("aria-label", "Remove "+c.Name),
 			ui.Svg(cross, ui.Attr("viewBox", "0 0 12 12"), ui.Attr("aria-hidden", "true")), ui.OnClick(func() {
 				s.changeSorted(func(l *categories.List) { l.Remove(c.Name) })
-			}))), more)
+			}))), ui.Div(ui.Class("line"), what), more)
 }
 
 // bannerSetting is the banner of a category that warns: its kind, and
@@ -203,7 +203,7 @@ func (s *Screen) bannerSetting(id string, c categories.Category,
 	said := func() { edit(func(c *categories.Category) { c.Message = s.doc.Value(message) }) }
 	ui.On(message, ui.EventChange, said)
 	ui.On(message, ui.EventSubmit, said)
-	return []*ui.Node{ui.Span(ui.Class("fixed", "banner"), ui.Text("Banner")), kind, message}
+	return []*ui.Node{ui.Span(ui.Class("caption", "banner"), ui.Text("Banner")), kind, message}
 }
 
 // homeSorted is the start page's count of the pages read this week in

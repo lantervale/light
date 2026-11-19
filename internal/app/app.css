@@ -58,7 +58,8 @@ button img, .tab img, #lock { display: block; }
 #view.dark { --page: #000000; --ink: #f1f3f4; --text: #c4c7cc; --dim: #9aa0a6; --faint: #70757b; --line: #3a3d42;
 	--field: #3a3d42; --rule: #1d1f23; --link: #8ab4f8; --alert: #f28b82; --problem: #f28b82; --good: #81c995;
 	--brand: #ffffff; --on-brand: #0e2a3f; --warm: #24150f; }
-.dark input { background: #121316; color: var(--ink); }
+.dark input, .dark select { background-color: #121316; color: var(--ink); }
+.dark select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23c4c7cc' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 #page { width: 640px; margin: 0 auto; padding: 24px 0 48px; font-size: 15px; line-height: 1.6; }
 #page h1 { font-size: 28px; margin: 12px 0 8px; }
 #page h2 { font-size: 19px; margin: 24px 0 4px; }
