@@ -282,7 +282,6 @@ button img, .tab img, #lock { display: block; }
 #bar #robot #robot-dot { position: absolute; right: 3px; bottom: 4px; width: 9px; height: 9px; margin: 0; }
 #model { display: none; right: 47px; width: 368px; }
 #model.shown { display: block; }
-@media (max-height: 600px) { #model { width: 560px; } }
 #model .notch { right: 10px; }
 #model .head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px; }
 #model .site.robot { background: #7ab0ff; }
@@ -360,3 +359,27 @@ button img, .tab img, #lock { display: block; }
 #find-marks.shown { display: block; }
 #find-marks div { position: absolute; border-radius: 2px; background: rgba(255, 202, 62, 0.45); }
 #find-marks .current { background: rgba(255, 154, 1, 0.55); }
+
+#model-embed { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; color: #dcd9e6; font-size: 12.5px;
+	line-height: 18px; text-align: left; }
+#model-embed .box { flex: none; display: flex; width: 14px; height: 14px; margin-top: 2px; border: 1px solid #5a5770;
+	border-radius: 4px; }
+#model-embed .box img { width: 10px; height: 10px; margin: 2px; opacity: 0; }
+#model-embed[aria-checked="true"] .box { border-color: #7ab0ff; background: #2a3a55; }
+#model-embed[aria-checked="true"] .box img { opacity: 1; }
+#model-total { margin-top: 6px; color: #ffffff; }
+#model-embed-need { margin: 0 16px 12px; padding: 10px 12px; border-radius: 8px; background: #26242f; color: #c9c6d6;
+	font-size: 12.5px; line-height: 18px; }
+#model-embed-need p { margin: 0 0 8px; overflow-wrap: anywhere; }
+#model-embed-need strong { color: #ffffff; }
+#model-embed-get { height: 26px; padding: 0 10px; border: 1px solid #34323f; border-radius: 13px; color: #e8e6ef;
+	font-size: 12.5px; }
+#model-embed-need .asked { display: flex; align-items: center; justify-content: space-between; }
+#model-embed-later { height: 28px; color: #a9a6b8; font-size: 13px; }
+@media (max-height: 600px) {
+	#model { width: 700px; }
+	#model-note { display: none; }
+	#model-embed-need { display: flex; align-items: center; gap: 12px; }
+	#model-embed-need p { flex: 1; margin: 0; }
+	#model-embed-need .asked { gap: 12px; }
+}

@@ -99,7 +99,7 @@ func (p *Profile) recollect() {
 
 // remembers reports whether what pages say is remembered and asked:
 // the model is on and its user turned the feature on.
-func (p *Profile) remembers() bool { return p.helps(recallFeature) }
+func (p *Profile) remembers() bool { return p.helps(recallFeature) && p.embeds() }
 
 // lastVisit is the last visit to address the history holds.
 func lastVisit(log *history.Log, address string) (history.Visit, bool) {

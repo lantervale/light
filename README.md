@@ -245,10 +245,11 @@ With the model on, it helps with these, each of which can be turned off alone:
   pages are never remembered, and the page forgets what it holds on request.
 
 Find by meaning and the questions asked of the history need a second, small model that embeds text (Nomic Embed
-Text v1.5, 146 MB, Apache-2.0). This version does not download it when you turn the model on, and has no button
-that does: until it is on the device (a development build can name one with `LIGHT_MODEL_DEV`, see below), these
-two do not work: Find in page finds words only, and a question asked of the history gets no answer from what
-pages said.
+Text v1.5, 146 MB, Apache-2.0, from `huggingface.co`). The card that proposes the model has a ticked line for it,
+"Also download…", with the total to download: untick it and it is not downloaded. A model that is on without it
+says so under "It helps with" and offers "Download Nomic Embed Text v1.5 (146 MB)", which asks before it downloads.
+Until it is on the device, Find in page finds words only and the history page filters by title and address, with
+no question card. "Turn off and delete the model" deletes it too.
 <!-- /model-features -->
 
 [The model in detail](#the-model-in-detail) has the settings, the files and the developer options.

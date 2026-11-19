@@ -409,12 +409,13 @@ func TestTheFeatureTurnedOffWhileTheHistoryShowsTakesItAllAway(t *testing.T) {
 func TestAModelThatCannotEmbedSearchesTheTitles(t *testing.T) {
 	s, fake, _ := harboured(t)
 	fake.SetCapabilities(model.Capabilities{Chat: true})
-	s.questions("ferry")
-	if got := s.node("history-ask-sub").Text(); !strings.Contains(got, "could not search by meaning") {
-		t.Fatalf("the card says %q", got)
-	}
-	if s.doc.ByID("history-robot") != nil || len(s.visits()) != 1 || len(s.recalledRows()) != 0 {
-		t.Fatalf("the page shows a robot or lists %v", s.visits())
+	s.frame()
+	s.frame()
+	s.click("history-filter")
+	s.types("ferry")
+	s.press(input.KeyEnter)
+	if s.doc.ByID("history-ask-sub") != nil || s.doc.ByID("history-robot") != nil || len(s.visits()) != 1 {
+		t.Fatalf("the page shows a question card or a robot, or lists %v", s.visits())
 	}
 	s.clean()
 }

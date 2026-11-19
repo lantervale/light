@@ -56,6 +56,10 @@ type modelCard struct {
 	reading, revert bool
 	read            chan inspection
 	typing          bool
+	// unembedded is whether the proposal's line for the model that
+	// embeds text was unticked, and embedAsked whether the card asks
+	// before downloading it for a model that is on.
+	unembedded, embedAsked bool
 }
 
 // inspection is what the model found in a file of the user's.
@@ -191,12 +195,99 @@ func (s *Screen) there(e model.Entry) bool {
 // coming are the entries being downloaded for the model id.
 func (s *Screen) coming(id string) []model.Entry {
 	var out []model.Entry
-	for _, of := range []string{id, model.RuntimeID} {
-		if e, ok := s.entry(of); ok && e.Install.State == model.Installing {
+	embeds, _ := s.embedder()
+	for _, of := range []string{id, model.RuntimeID, embeds.ID} {
+		if e, ok := s.entry(of); ok && e.Install.State == model.Installing && !slices.ContainsFunc(out,
+			func(o model.Entry) bool { return o.ID == e.ID }) {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+// embedder is the model that embeds text, which finding by meaning and
+// asking the history need, and whether it is still to download.
+func (s *Screen) embedder() (model.Entry, bool) {
+	for _, e := range s.opts.Library.Catalogue() {
+		if e.Kind == model.KindEmbedding {
+			return e, e.Install.State != model.Installed
+		}
+	}
+	return model.Entry{}, false
+}
+
+// embeds reports whether the model embeds text.
+func (p *Profile) embeds() bool {
+	return p.modelOn() && p.opts.Model.Status().Capabilities.Embeddings
+}
+
+// alsoEmbedder is the proposal's line for the model that embeds text:
+// ticked unless its reader unticks it, downloaded only once the
+// proposal is agreed to, and then the total to download.
+func (s *Screen) alsoEmbedder(block *ui.Node, e model.Entry) {
+	embeds, missing := s.embedder()
+	if !missing {
+		return
+	}
+	c := &s.card
+	var total int64
+	library, _ := s.entry(model.RuntimeID)
+	for _, part := range []model.Entry{e, library} {
+		if part.Install.State != model.Installed {
+			total += part.Size
+		}
+	}
+	if !c.unembedded {
+		total += embeds.Size
+	}
+	block.Append(
+		ui.Button(ui.ID("model-embed"), ui.Attr("role", "checkbox"), ui.Attr("aria-checked", onOff(!c.unembedded)),
+			ui.Span(ui.Class("box"), glyph("check")), ui.Span(ui.Text("Also download "+embeds.Name+" ("+
+				sized(embeds.Size)+", "+embeds.Licence+", from "+host(embeds.Source)+
+				"): needed to find by meaning and to ask your history")),
+			ui.OnClick(func() {
+				c.unembedded = !c.unembedded
+				s.fillCard()
+			})),
+		ui.P(ui.ID("model-total"), ui.Text("To download: "+sized(total))))
+}
+
+// embedderOffer is what a model that is on says of the model that
+// embeds text while it is not on the device: what needs it, the one
+// action that downloads it, and the question asked before it does.
+func (s *Screen) embedderOffer() *ui.Node {
+	embeds, missing := s.embedder()
+	if !missing || embeds.Install.State == model.Installing {
+		return nil
+	}
+	c := &s.card
+	offer := ui.Div(ui.ID("model-embed-need"))
+	if !c.embedAsked {
+		offer.Append(ui.P(ui.Text("Find by meaning and asking your history need "+embeds.Name+
+			", which is not on this device.")), ui.Button(ui.ID("model-embed-get"),
+			ui.Text("Download "+embeds.Name+" ("+sized(embeds.Size)+")"), ui.OnClick(func() {
+				c.embedAsked = true
+				s.fillCard()
+			})))
+		return offer
+	}
+	offer.Append(
+		ui.P(ui.ID("model-embed-ask"), ui.Strong(ui.Text(embeds.Name)), ui.Text(" · "+sized(embeds.Size)+" · "+
+			embeds.Licence+". Downloaded from "+host(embeds.Source)+" once you agree.")),
+		ui.Div(ui.Class("asked"),
+			ui.Button(ui.ID("model-embed-later"), ui.Text("Not now"), ui.OnClick(func() {
+				c.embedAsked = false
+				s.fillCard()
+			})),
+			ui.Button(ui.ID("model-embed-confirm"), ui.Class("agree"), ui.Text("Download"), ui.OnClick(func() {
+				c.embedAsked = false
+				if err := s.opts.Library.Install(embeds.ID); err != nil {
+					c.problem = err.Error()
+				}
+				s.redrawModel()
+				s.fillCard()
+			}))))
+	return offer
 }
 
 // standing is what the model does, as a class of the robot and as a
@@ -337,6 +428,9 @@ func (s *Screen) fillCard() {
 	}
 	if on && settled && len(s.features) > 0 {
 		c.root.Append(ui.Div(ui.Class("part"), ui.Span(ui.Text("It helps with")), s.helpChips()))
+		if offer := s.embedderOffer(); offer != nil {
+			c.root.Append(offer)
+		}
 		if offer := s.forgetOffer("model-recall"); offer != nil {
 			c.root.Append(offer)
 		}
@@ -537,6 +631,7 @@ func (s *Screen) proposal(e model.Entry) *ui.Node {
 	if e.Why != "" {
 		block.Append(ui.P(ui.Text(e.Why)))
 	}
+	s.alsoEmbedder(block, e)
 	return block
 }
 
@@ -568,7 +663,13 @@ func (s *Screen) helpChips() *ui.Node {
 	chips := ui.Div(ui.ID("model-helps"))
 	for _, f := range s.features {
 		on := s.assists.On(f.id)
-		chips.Append(s.pill("model-helps-"+f.id, f.label, f.label, on, func() {
+		said := f.label
+		embeds, missing := s.embedder()
+		if missing = missing && (f.id == findFeature || f.id == recallFeature); missing {
+			said += ": needs " + embeds.Name
+		}
+		chips.Append(s.pill("model-helps-"+f.id, f.label, said, on, func() {
+			s.card.embedAsked = s.card.embedAsked || missing && !on
 			s.assists.Set(f.id, !on)
 			s.assisted.touch()
 			s.assistChanged(f.id)
@@ -645,9 +746,23 @@ func (s *Screen) agree() {
 				c.problem = err.Error()
 			}
 		}
+		s.fetchEmbedder()
 	}
 	s.redrawModel()
 	s.watchModel()
+}
+
+// fetchEmbedder downloads the model that embeds text with a model
+// agreed to, unless its line was unticked.
+func (s *Screen) fetchEmbedder() {
+	c := &s.card
+	embeds, missing := s.embedder()
+	if !missing || c.unembedded || c.problem != "" {
+		return
+	}
+	if err := s.opts.Library.Install(embeds.ID); err != nil {
+		c.problem = err.Error()
+	}
 }
 
 // readFile turns the model on, which looking into a file needs, and
@@ -746,6 +861,8 @@ func (s *Screen) modelSettings() *ui.Node {
 		s.checkSetting("set-model-cpu", "Leave the graphics card out of it",
 			func(c *config.Config) *bool { return &c.ModelCPU }),
 		ui.P(ui.Class("hint"), ui.Text("What pages say stays on this device.")))
+	embedded := ui.P(ui.ID("set-model-embed"), ui.Class("hint"))
+	on.Append(embedded)
 	off := ui.Div(
 		ui.P(ui.Class("hint"), ui.Text("Off: nothing of it is downloaded or started until you turn it on and agree "+
 			"to what it proposes.")),
@@ -756,6 +873,18 @@ func (s *Screen) modelSettings() *ui.Node {
 		if s.modelOn() {
 			shown = on
 			s.doc.SetChecked(running, true)
+			embeds, missing := s.embedder()
+			said := embeds.Name + ", which finding by meaning and asking your history need, is on this device."
+			if missing {
+				said = embeds.Name + ", which finding by meaning and asking your history need, is not on this " +
+					"device: the model's card downloads it."
+			}
+			if embeds.ID == "" {
+				said = ""
+			}
+			if embedded.Text() != said {
+				embedded.SetText(said)
+			}
 		}
 		if len(held.Children()) == 0 || held.Children()[0] != shown {
 			empty(held)

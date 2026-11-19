@@ -84,8 +84,11 @@ func TestWithoutAModelNothingOfWhatItHelpsWithShowsAnywhere(t *testing.T) {
 }
 
 func TestTheCardOfAModelFitsTheWindowWithAllItHelpsWith(t *testing.T) {
-	for _, size := range []geom.Vec2{geom.V2(1200, 760), geom.V2(760, 480)} {
-		s, _ := modelOn(t)
+	for i, size := range []geom.Vec2{geom.V2(1200, 760), geom.V2(760, 480), geom.V2(1200, 760), geom.V2(760, 480)} {
+		s, fake := modelOn(t)
+		if i > 1 {
+			unembedded(t, fake)
+		}
 		s.win.SetSize(size)
 		s.frame()
 		s.frame()

@@ -221,6 +221,7 @@ func TestAModelAgreedToIsDownloadedShownComingAndCancelled(t *testing.T) {
 	proposed, _ := fake.Recommended()
 	other := others(fake)[0]
 	s.pick("menu-model-on")
+	s.click("model-embed")
 	s.click("model-confirm")
 	if !s.config.Model || s.config.ModelID != "" || !fake.Settings().On {
 		t.Fatalf("agreed to, the settings are on %v with %q", s.config.Model, s.config.ModelID)
@@ -278,6 +279,7 @@ func TestAnInstallThatFailsSaysWhyAndIsTriedAgain(t *testing.T) {
 	fake.Manual = true
 	proposed, _ := fake.Recommended()
 	s.pick("menu-model-on")
+	s.click("model-embed")
 	s.click("model-confirm")
 	fake.Advance(proposed.ID, 0, errors.New("the network went away"))
 	s.frame()
