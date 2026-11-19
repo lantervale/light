@@ -9,9 +9,9 @@ No WebKit. No Chromium. No Gecko. No system web view.
 [![MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 [![Made with ember](https://img.shields.io/badge/made%20with-ember-orange)](https://github.com/lantervale/ember)
 
-<img src=".github/readme/zen-garden.png" width="720" alt="light showing CSS Zen Garden: tabs in the title bar, a navigation row, the page below">
+<img src=".github/readme/tour.gif" width="720" alt="light in use: a search from the start page, a Wikipedia article, a card on selected text that explains, sums up and translates it, and the translation page">
 
-<sub>[CSS Zen Garden](https://csszengarden.com/001/), fetched from the web and drawn by light.</sub>
+<sub>A search, Wikipedia, and the model on the device explaining and translating a selection. Sped up 2.5 times.</sub>
 
 **[Download](https://github.com/lantervale/light/releases)** · [Reference](docs/reference.md) ·
 [The model](docs/model.md) · [Build it](docs/development.md)
@@ -44,7 +44,7 @@ Everything borrowed is listed in the [reference](docs/reference.md#under-the-hoo
 | | |
 |---|---|
 | <img src=".github/readme/home.png" width="400" alt="light's start page: its logo, a search field and tiles"> | <img src=".github/readme/developer-tools.png" width="400" alt="The developer tools under CSS Zen Garden: the requests of the tab and the details of one"> |
-| <img src=".github/readme/settings.png" width="400" alt="The settings page"> | <img src=".github/readme/context-menu.png" width="400" alt="The menu of a right click on a link"> |
+| <img src=".github/readme/zen-garden.png" width="400" alt="light showing CSS Zen Garden: tabs in the title bar, a navigation row, the page below"> | <img src=".github/readme/context-menu.png" width="400" alt="The menu of a right click on a link"> |
 
 ## What you get
 
