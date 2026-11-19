@@ -1,9 +1,22 @@
-## light v0.1.0
+## light v0.2.0
 
-The first release of light, a small web browser written from scratch in Go on the
-[ember](https://github.com/lantervale/ember) engine. It fetches a page, builds it, lays it out and draws it with its
-own HTML and CSS code: there is no WebKit, Blink or Gecko in it. Scripts run in V8 on macOS and Linux; the Windows
-build runs no script. It is a demo of how far ember's UI goes on real pages, not a browser to live in.
+light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
+It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
+Gecko in it. Scripts run in V8 on macOS and Linux; the Windows build runs no script. It is a demo of how far
+ember's UI goes on real pages, not a browser to live in.
+
+## What is new
+
+- **An optional model on your device**, experimental and off by default, turned on in the settings: questions
+  about the page from the address bar, translation of a page or of a text, a card on a selection made with the
+  right button (Explain, Summarise, Translate), find by meaning, bookmark suggestions, page summaries and page
+  categories of your own.
+- **light follows your system**: dark mode and languages, which the settings override; a click on the start
+  page's logo switches the dark mode. The wheel has its direction and its speed in the settings.
+- **A warning at the first start of each release** that light is an early preview.
+- A new start page, a list under the address field, ICO and BMP icons, `min()`, `max()`, `clamp()` and the units
+  of the font and the viewport in CSS, and fixes (a page that crashed light on an empty CSS variable, the zoom
+  that never came back to 100 %).
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
@@ -48,11 +61,11 @@ build runs no script. It is a demo of how far ember's UI goes on real pages, not
 ## The model on this device
 
 light can run a small language model on your machine, through `light-model`, a separate program in the archive. It
-is **off by default**. Until you turn it on from the menu and accept a model, nothing of it is downloaded, started
+is **off by default**. Until you turn it on in the settings, under Experimental, and accept a model, nothing of it is downloaded, started
 or written. Once you do, light downloads the llama.cpp libraries from `github.com/ggml-org/llama.cpp` and the model
 from `huggingface.co` (1.1 or 2.5 GB), checks both against the sizes and SHA-256 this version was built with, and
-runs them on your machine only. The README's
-[A model on this device](https://github.com/lantervale/light#a-model-on-this-device) says the rest.
+runs them on your machine only.
+[A model on this device](https://github.com/lantervale/light/blob/main/docs/model.md) says the rest.
 
 ## Known limits
 
@@ -64,7 +77,7 @@ runs them on your machine only. The README's
 - Only the macOS app (Apple silicon) was started by hand before this release; the other archives were built and
   packed by the release workflow and not run.
 
-The README lists [what it does not do](https://github.com/lantervale/light#what-it-does-not-do) in full.
+The reference lists [what it does not do](https://github.com/lantervale/light/blob/main/docs/reference.md#what-it-does-not-do) in full.
 
 ## Checking a download
 
