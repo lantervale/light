@@ -94,6 +94,12 @@ td b { color: var(--orange); }
 ul.plain { margin: 0; padding: 0; list-style: none; columns: 2 320px; column-gap: 40px; color: var(--dim); }
 ul.plain li { padding: 7px 0 7px 22px; position: relative; break-inside: avoid; }
 ul.plain li::before { content: "–"; position: absolute; left: 0; color: var(--orange); }
+.score { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; margin: 0 0 30px; padding: 22px 24px;
+	border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
+.score div { display: flex; flex-direction: column; }
+.score strong { font-size: 40px; letter-spacing: -1.4px; line-height: 1.1; }
+.score span { font-size: 14px; color: var(--dim); }
+.score p { flex: 1 1 320px; margin: 0; font-size: 15px; color: var(--dim); }
 .get { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .get .card { display: flex; flex-direction: column; gap: 8px; }
 .get .button { align-self: flex-start; margin-top: 8px; padding: 9px 18px; font-size: 15px; }
@@ -228,6 +234,14 @@ footer a:first-child { margin-left: 0; }
 <section id="not-yet">
 	<h2>What does not work yet.</h2>
 	<p class="sub">Plenty. Many pages show well, many do not. We would rather tell you here.</p>
+	<div class="score">
+		<div><strong>461 / 625</strong><span>web-platform-tests passed, 19 November 2026</span></div>
+		<p>That is the subset light runs, not all of the web-platform-tests: the whole of <code>dom/</code> and
+			<code>domxpath/</code> but the tests needing what light lacks, and a few of <code>html</code>,
+			<code>css</code>, <code>url</code> and <code>domparsing</code>.
+			<a href="https://github.com/lantervale/light/blob/main/docs/reference.md#web-platform-tests">Per
+			directory, and how to run it</a>.</p>
+	</div>
 	<ul class="plain">
 		<li>No JavaScript on Windows</li>
 		<li>No canvas, audio or video</li>
