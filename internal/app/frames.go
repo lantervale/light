@@ -437,7 +437,7 @@ func (s *Screen) navigate(f *frame, q wanted) {
 	loader, links := s.frameLoader(f), s.frameLinks(f)
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
 	ctx, trail := netlog.Trailed(s.frameAsks(ctx, f, q, loader.Frame))
-	l := &load{cancel}
+	l := &load{cancel: cancel}
 	f.load = l
 	go func() {
 		defer cancel()
@@ -584,6 +584,11 @@ func (s *Screen) landFrame(f *frame, l *load, page *web.Page, row int) {
 		if f.loads = s.runs(f); !f.loads {
 			s.tellFrame(f, "load")
 		}
+	case page.Kind == content.Text && page.Tree != nil:
+		page.Doc = web.Text(page.Source)
+		s.showIn(f, page)
+		f.origin = f.originOf(page)
+		s.tellFrame(f, "load")
 	case page.Kind == content.Text:
 		page.Doc, page.Base = web.Text(page.Source), f.in.Base
 		s.showIn(f, page)

@@ -106,7 +106,7 @@ func lit(t *testing.T) *client {
 	address := l.Addr().String()
 	_ = l.Close()
 	cmd := exec.CommandContext(context.Background(), os.Args[0])
-	cmd.Env = append(os.Environ(), asLight+"=--webdriver "+address, "EMBER_HIDDEN=1", "EMBER_CRASH_DIR="+t.TempDir(),
+	cmd.Env = append(os.Environ(), asLight+"=drive --address "+address, "EMBER_HIDDEN=1", "EMBER_CRASH_DIR="+t.TempDir(),
 		"LIGHT_DOWNLOADS="+t.TempDir())
 	var said bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &said, &said

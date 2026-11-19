@@ -514,3 +514,32 @@ func TestAnXMLHttpRequestGivesTheDocumentOfItsAnswer(t *testing.T) {
 		}
 	}
 }
+
+func TestADocumentSaysTheEncodingItsPageCameIn(t *testing.T) {
+	s := run(t, `<!DOCTYPE html><meta charset="cp1251"><body>`)
+	const script = `[document.characterSet, document.charset, document.inputEncoding,
+		document.implementation.createHTMLDocument("").characterSet, new Document().charset].join()`
+	if got, want := s.eval(script), "windows-1251,windows-1251,windows-1251,UTF-8,UTF-8"; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	s.quiet()
+}
+
+func TestTheRootOfThePageIsTakenOutAndPutBackAsAnyNode(t *testing.T) {
+	s := run(t, `<!doctype html><html><head><title>t</title></head><body><p id="p">text</p></body></html>`)
+	got := s.eval(`(() => { const root = document.documentElement, seen = [];
+		seen.push(document.removeChild(root) === root, document.documentElement, document.body, document.head,
+			document.childNodes.length, root.parentNode, document.getElementById("p"), document.querySelector("p"),
+			root.querySelector("p").id);
+		const next = document.createElement("html"); next.innerHTML = "<head></head><body><i id=i>new</i></body>";
+		document.appendChild(next);
+		seen.push(document.documentElement === next, document.body.firstChild.id, document.getElementById("i").textContent,
+			document.querySelectorAll("p").length);
+		next.remove(); document.append(root);
+		seen.push(document.documentElement === root, document.getElementById("p").textContent, document.title);
+		return seen.join() })()`)
+	if want := "true,,,,1,,,,p,true,i,new,0,true,text,t"; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	s.quiet()
+}

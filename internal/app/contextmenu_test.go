@@ -120,7 +120,7 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 	words := doc.ByID("words").Children()[0]
 	doc.Select(ui.Position{Node: words, Offset: 4}, ui.Position{Node: words, Offset: 16})
 	s.rightClickAt(s.inPage("words"))
-	if got := labels(s.entries()); got != "[Copy - Inspect element]" {
+	if got := labels(s.entries()); got != "[Copy Search DuckDuckGo for “lower vaults” - Inspect element]" {
 		t.Fatalf("selected text offers %s", got)
 	}
 	s.choose("Copy")
@@ -129,8 +129,8 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 	}
 	s.rightClickAt(s.inPage("vault"))
 	if got, want := labels(s.entries()),
-		"[Open link in new tab Open link in new window Save link as… Copy link address - Copy - "+
-			"Inspect element]"; got != want {
+		"[Open link in new tab Open link in new window Save link as… Copy link address - Copy "+
+			"Search DuckDuckGo for “lower vaults” - Inspect element]"; got != want {
 		t.Fatalf("a link with text selected offers %s, want %s", got, want)
 	}
 }

@@ -63,10 +63,16 @@ func (s *Screen) showTabs() {
 		title := s.title(tab.Current())
 		t.name.SetText(title)
 		t.listed.SetText(title)
-		if name := s.icon(tab.Current()); name != t.pictured {
+		name, loads := s.icon(tab.Current()), s.waited(tab) != ""
+		if loads {
+			name = spinner
+		}
+		if name != t.pictured {
 			t.pictured = name
 			depict(t.icon, name)
+			t.icon.SetStyle("")
 		}
+		toggle(t.tab, "loading", loads)
 		toggle(t.tab, "shown", i == s.browser.Active)
 		toggle(t.listed, "shown", i == s.browser.Active)
 	}

@@ -22,6 +22,7 @@ import (
 
 	"github.com/lantervale/light/internal/devtools"
 	"github.com/lantervale/light/internal/devtools/inspector"
+	"github.com/lantervale/light/internal/dom"
 	"github.com/lantervale/light/internal/menu"
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/downloads"
@@ -44,8 +45,8 @@ type Options struct {
 	// Space is the space of an address, for tests whose servers are all
 	// of this machine; nil for each address's own (localnet.Of).
 	Space func(netip.AddrPort) localnet.Space
-	// Dir is the folder the history is kept in between runs; with none,
-	// it is kept in memory only.
+	// Dir is the folder the history and the bookmarks are kept in between
+	// runs; with none, they are kept in memory only.
 	Dir string
 	// Downloads is the folder downloads are saved to whatever the
 	// settings say, and DefaultDownloads the one they are saved to when
@@ -59,6 +60,12 @@ type Options struct {
 	// ScriptBudget is how long one script of a page may run, the
 	// engine's own limit when 0.
 	ScriptBudget time.Duration
+	// Patient has a script that runs long go on while the window does,
+	// its user told and asked whether to stop it, in place of being
+	// stopped at ScriptBudget: for a light with somebody at its window.
+	// Patience is how long it waits, the browser's own times when zero.
+	Patient  bool
+	Patience dom.Patience
 	// Version is light's, which the HAR files it saves name, and its
 	// User-Agent when a build was given one ("" and "dev" are a build
 	// made by hand).
@@ -69,6 +76,10 @@ type Options struct {
 	// (identity.go).
 	Languages []string
 	Driven    bool
+	// ExactText draws the pages' text at its exact coverage, without
+	// stem darkening, unless a page says how its own is smoothed: for a
+	// light a test runner compares the pictures of.
+	ExactText bool
 }
 
 // Screen is a window's screen, redrawn from the browser after each
@@ -89,6 +100,21 @@ type Screen struct {
 	fields     []func()
 	relist     func()
 	visitsSeen uint64
+	// relistMarks lists the bookmarks again on the page that shows them,
+	// and marksSeen is how many times they had changed when the star and
+	// that page were last shown.
+	relistMarks func()
+	marksSeen   uint64
+	// star is the address field's star and panel the card it opens; more
+	// is the navigation row's last button and choices the menu it opens,
+	// whose zoom reads zoomed and whose entry that saves the page is
+	// keeps. again is the entry the menu opens on again once chosen.
+	star, more, choices, zoomed, keeps, again *ui.Node
+	panel                                     bookmarkPanel
+
+	// sought shows the search engine's mark in the address field while
+	// words are typed there.
+	sought *ui.Node
 
 	tabs, back, forward, reload, lock, field, address, view, status, list *ui.Node
 	strip                                                                 []stripTab
@@ -127,6 +153,14 @@ type Screen struct {
 	downloads, progress, recent, listed *ui.Node
 	recentShown, listedShown            listing
 
+	// line is the line that says how far the shown tab's load is, lineAt
+	// the share of it filled, turn what the spinners of the tabs that
+	// load are turned by, and dimAfter how long a page is held as it is.
+	line     *ui.Node
+	lineAt   float32
+	turn     int
+	dimAfter time.Duration
+
 	// host is the canvas the shown web page draws in, nil for a page of
 	// light's own.
 	host *ui.Node
@@ -154,7 +188,7 @@ func New(win *platform.Window, opts Options) *Screen { return NewProfile(opts).S
 // screen is the screen of win, a window of light's, on address.
 func (p *Profile) screen(win *platform.Window, address string) *Screen {
 	s := &Screen{Profile: p, win: win, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64),
-		announced: map[int]downloads.State{}, archived: map[int]bool{}}
+		announced: map[int]downloads.State{}, archived: map[int]bool{}, dimAfter: dimAfter}
 	s.browser = tabs.NewBrowser(address)
 	for _, item := range p.saves.Items() {
 		s.announced[item.ID] = item.State
@@ -214,24 +248,30 @@ func (s *Screen) build() {
 		Export:  func() { s.saveHAR(0, false) },
 		Title:   s.titled,
 		Version: s.opts.Version,
+		Timing:  s.timingOf,
 	})
 	s.tools.SetHeight(s.config.ToolsHeight)
 	s.doc.Body().Append(
 		s.tabs,
 		s.navigation(),
-		ui.Div(ui.ID("split"), ui.Div(ui.ID("stage"), s.view, s.inspect.Overlay(), s.status, s.list, s.recent),
+		ui.Div(ui.ID("split"), ui.Div(ui.ID("stage"), s.view, s.loadline(), s.inspect.Overlay(), s.status, s.list,
+			s.recent, s.buildPanel(), s.choices),
 			s.tools.Node()),
 		s.shortcuts(),
 		s.menu.Node())
 	ui.OnContextMenu(s.contextMenu).Apply(s.doc.Body())
 }
 
-// Open shows address in the shown tab.
+// Open shows address in the shown tab: at once for a page light has,
+// and once it is ready for one that is fetched, the tab holding the
+// page it shows till then (loading.go).
 func (s *Screen) Open(address string) {
+	tab := s.browser.Tab()
 	s.session().note = ""
-	s.browser.Tab().Visit(address)
-	s.visit(address)
-	s.show()
+	s.depart(address, false, func() {
+		tab.Visit(address)
+		s.visit(address)
+	})
 }
 
 // OpenInNewTab shows address in a tab of its own.
@@ -245,15 +285,15 @@ func (s *Screen) OpenInNewTab(address string) {
 // steps of frames its page has no more.
 func (s *Screen) move(step func(*tabs.Tab)) {
 	tab := s.browser.Tab()
-	from := tab.At()
+	ahead := *tab
 	for {
-		before := tab.At()
-		step(tab)
-		if tab.At() == before || tab.Since(before, s.framed).Moved() {
+		before := ahead.At()
+		step(&ahead)
+		if ahead.At() == before || ahead.Since(before, s.framed).Moved() {
 			break
 		}
 	}
-	s.arrive(tab.Since(from, s.framed))
+	s.cross(ahead.Since(tab.At(), s.framed))
 }
 
 // tick runs what ended off the frame since the last one, and follows
@@ -269,7 +309,12 @@ func (s *Screen) tick() {
 	s.tools.Update()
 	s.watchDownloads()
 	s.watchHistory()
+	s.watchBookmarks()
+	s.followChoices()
 	s.measure()
+	s.drew()
+	s.stopByKey()
+	s.followPanel()
 	s.runScripts()
 	if s.host != nil {
 		page := s.session().pages[s.browser.Tab().Current()]
@@ -285,6 +330,8 @@ func (s *Screen) tick() {
 		case land := <-s.landed:
 			land()
 		default:
+			s.progressing()
+			s.tellRequests()
 			return
 		}
 	}
@@ -293,7 +340,8 @@ func (s *Screen) tick() {
 // overlaid reports whether a menu or a list of light's is open over the
 // page: a press or a key is then not the page's scripts' to hear.
 func (s *Screen) overlaid() bool {
-	return s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking()
+	return s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
+		s.panelOpen() || s.choosing()
 }
 
 // show redraws the screen from the browser: the tabs, the shown tab's
@@ -302,11 +350,13 @@ func (s *Screen) show() {
 	s.forget()
 	s.menu.Close()
 	s.recent.RemoveClass("shown")
-	s.showTabs()
+	s.closePanel(false)
+	s.closeChoices()
 	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
-	s.host, s.alone, s.listed, s.fields, s.relist = nil, nil, nil, nil, nil
+	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks = nil, nil, nil, nil, nil, nil
 	s.view.Append(s.page(tab.Current()))
+	s.showTabs()
 	s.leave(tab, session)
 	s.quitFrames(tab, session)
 	s.showNavigation()

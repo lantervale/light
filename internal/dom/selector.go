@@ -3,9 +3,11 @@ package dom
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 
@@ -18,6 +20,15 @@ var errSelector = errors.New("is not a valid selector")
 // matcher is what matching asks of the page beside its tree.
 type matcher struct {
 	checked, focused func(*html.Node) bool
+	// value is what a control holds now.
+	value func(*html.Node) string
+	// said is what the page's rules said of its controls' values.
+	said validity
+	// target reports whether an element is the one the page's address
+	// names.
+	target func(*html.Node) bool
+	// document reports whether a node is a document, not a fragment.
+	document func(*html.Node) bool
 	// scope is the element :scope stands for.
 	scope *html.Node
 }
@@ -148,7 +159,8 @@ type reader struct {
 
 // parseSelectors reads a selector list such as "nav > .item, #main".
 func parseSelectors(src string) (selectors, error) {
-	r := &reader{src: strings.TrimSpace(src)}
+	r := &reader{src: strings.ReplaceAll(strings.Trim(src, " \t\n\f\r"),
+		"\x00", string(utf8.RuneError))}
 	list, err := r.list()
 	if err == nil && r.at < len(r.src) {
 		err = errSelector
@@ -168,7 +180,7 @@ func (r *reader) peek() byte {
 
 func (r *reader) space() bool {
 	start := r.at
-	for r.at < len(r.src) && unicode.IsSpace(rune(r.src[r.at])) {
+	for r.at < len(r.src) && space(r.src[r.at]) {
 		r.at++
 	}
 	return r.at > start
@@ -217,15 +229,30 @@ func (r *reader) complex() (complexSelector, error) {
 func (r *reader) compound() (compound, error) {
 	var c compound
 	start := r.at
-	if r.peek() == '*' {
+	star := r.peek() == '*'
+	if star {
 		r.at++
 	} else {
-		c.tag = strings.ToLower(r.name())
+		c.tag = strings.ToLower(r.ident())
+	}
+	every, none, err := r.spaced(c.tag, star)
+	if err != nil {
+		return c, err
+	}
+	if every || none {
+		if c.tag = ""; r.peek() == '*' {
+			r.at++
+		} else if c.tag = strings.ToLower(r.ident()); c.tag == "" {
+			return c, errSelector
+		}
+	}
+	if none {
+		c.tests = append(c.tests, unspaced)
 	}
 	for {
-		test, err := r.simple()
-		if err != nil {
-			return c, err
+		test, bad := r.simple()
+		if bad != nil {
+			return c, bad
 		}
 		if test == nil {
 			break
@@ -244,9 +271,12 @@ func (r *reader) name() string {
 	for r.at < len(r.src) {
 		c := r.src[r.at]
 		switch {
-		case c == '\\' && r.at+1 < len(r.src):
-			b.WriteByte(r.src[r.at+1])
-			r.at += 2
+		case c == '\\' && r.at+1 == len(r.src):
+			r.at++
+			b.WriteRune(utf8.RuneError)
+		case c == '\\' && r.src[r.at+1] != '\n':
+			r.at++
+			b.WriteString(r.escape())
 		case c == '-' || c == '_' || c >= 0x80 || unicode.IsLetter(rune(c)) || unicode.IsDigit(rune(c)):
 			b.WriteByte(c)
 			r.at++
@@ -262,14 +292,14 @@ func (r *reader) simple() (func(*html.Node, matcher) bool, error) {
 	switch r.peek() {
 	case '#':
 		r.at++
-		id := r.name()
+		id := r.ident()
 		if id == "" {
 			return nil, errSelector
 		}
 		return func(n *html.Node, _ matcher) bool { return idOf(n) == id }, nil
 	case '.':
 		r.at++
-		class := r.name()
+		class := r.ident()
 		if class == "" {
 			return nil, errSelector
 		}
@@ -279,6 +309,10 @@ func (r *reader) simple() (func(*html.Node, matcher) bool, error) {
 		return r.attribute()
 	case ':':
 		r.at++
+		if r.peek() == ':' {
+			r.at++
+			return r.pseudoElement()
+		}
 		return r.pseudo()
 	}
 	return nil, nil //nolint:nilnil // no test left to read is no error
@@ -287,7 +321,18 @@ func (r *reader) simple() (func(*html.Node, matcher) bool, error) {
 // attribute reads what follows "[" up to its "]".
 func (r *reader) attribute() (func(*html.Node, matcher) bool, error) {
 	r.space()
-	name := strings.ToLower(r.name())
+	star := r.peek() == '*'
+	if star {
+		r.at++
+	}
+	name := strings.ToLower(r.ident())
+	every, _, err := r.spaced(name, star)
+	if err != nil || star && !every {
+		return nil, errSelector
+	}
+	if every || name == "" {
+		name = strings.ToLower(r.ident())
+	}
 	r.space()
 	op := ""
 	for strings.IndexByte("~|^$*=", r.peek()) >= 0 && r.peek() != 0 {
@@ -297,7 +342,10 @@ func (r *reader) attribute() (func(*html.Node, matcher) bool, error) {
 	value, fold := "", false
 	if op != "" {
 		r.space()
-		value = r.value()
+		quoted := r.peek() == '"' || r.peek() == '\''
+		if value = r.value(); value == "" && !quoted {
+			return nil, errSelector
+		}
 		r.space()
 		if c := r.peek(); c == 'i' || c == 'I' {
 			fold = true
@@ -305,16 +353,15 @@ func (r *reader) attribute() (func(*html.Node, matcher) bool, error) {
 			r.space()
 		}
 	}
-	if name == "" || r.peek() != ']' {
-		return nil, errSelector
-	}
-	r.at++
 	compare, known := comparisons()[op]
-	if !known {
+	if name == "" || !known || !r.ended(']') {
 		return nil, errSelector
 	}
 	return func(n *html.Node, _ matcher) bool {
 		got, has := attribute(n, name)
+		if every {
+			got, has = anyAttribute(n, name)
+		}
 		if fold {
 			got, value = strings.ToLower(got), strings.ToLower(value)
 		}
@@ -346,16 +393,21 @@ func comparisons() map[string]func(got, want string) bool {
 func (r *reader) value() string {
 	quote := r.peek()
 	if quote != '"' && quote != '\'' {
-		return r.name()
+		return r.ident()
 	}
 	r.at++
 	var b strings.Builder
 	for r.at < len(r.src) && r.src[r.at] != quote {
-		if r.src[r.at] == '\\' && r.at+1 < len(r.src) {
+		if r.src[r.at] != '\\' || r.at+1 == len(r.src) {
+			b.WriteByte(r.src[r.at])
 			r.at++
+			continue
 		}
-		b.WriteByte(r.src[r.at])
-		r.at++
+		if r.at++; r.src[r.at] == '\n' {
+			r.at++
+			continue
+		}
+		b.WriteString(r.escape())
 	}
 	r.at++
 	return b.String()
@@ -363,10 +415,13 @@ func (r *reader) value() string {
 
 // pseudo reads a pseudo-class after its colon.
 func (r *reader) pseudo() (func(*html.Node, matcher) bool, error) {
-	name := strings.ToLower(r.name())
+	name := strings.ToLower(r.ident())
 	if r.peek() != '(' {
 		if test, known := states()[name]; known {
 			return test, nil
+		}
+		if pseudoElements()[name] {
+			return func(*html.Node, matcher) bool { return false }, nil
 		}
 		return nil, errSelector
 	}
@@ -374,20 +429,22 @@ func (r *reader) pseudo() (func(*html.Node, matcher) bool, error) {
 	var test func(*html.Node, matcher) bool
 	var err error
 	switch name {
-	case "not", "is", "where", "matches":
-		test, err = r.nested(name == "not")
+	case "is", "where", "matches":
+		test = r.forgiving()
+	case "not":
+		test, err = r.nested(true)
 	case "has":
 		test, err = r.has()
 	case "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type":
 		test, err = r.nth(strings.Contains(name, "last"), strings.Contains(name, "type"))
+	case "lang":
+		test, err = r.lang()
 	default:
 		err = errSelector
 	}
-	r.space()
-	if err != nil || r.peek() != ')' {
+	if err != nil || !r.ended(')') {
 		return nil, errSelector
 	}
-	r.at++
 	return test, nil
 }
 
@@ -429,7 +486,7 @@ func (r *reader) has() (func(*html.Node, matcher) bool, error) {
 func (r *reader) nth(last, typed bool) (func(*html.Node, matcher) bool, error) {
 	end := strings.IndexByte(r.src[r.at:], ')')
 	if end < 0 {
-		return nil, errSelector
+		end = len(r.src) - r.at
 	}
 	a, b, ok := step(strings.ToLower(strings.Join(strings.Fields(r.src[r.at:r.at+end]), "")))
 	if !ok {
@@ -495,8 +552,6 @@ func position(n *html.Node, last, typed bool) int {
 // states are the pseudo-classes without arguments.
 func states() map[string]func(*html.Node, matcher) bool {
 	never := func(*html.Node, matcher) bool { return false }
-	disabled := func(n *html.Node, _ matcher) bool { _, on := attribute(n, "disabled"); return on }
-	link := func(n *html.Node, _ matcher) bool { _, has := attribute(n, "href"); return has && n.Data == "a" }
 	nth := func(last, typed bool) func(*html.Node, matcher) bool {
 		return func(n *html.Node, _ matcher) bool { return position(n, last, typed) == 1 }
 	}
@@ -513,27 +568,19 @@ func states() map[string]func(*html.Node, matcher) bool {
 		}
 		return true
 	}
-	return map[string]func(*html.Node, matcher) bool{
+	all := map[string]func(*html.Node, matcher) bool{
 		"first-child": nth(false, false), "last-child": nth(true, false), "only-child": only(false),
 		"first-of-type": nth(false, true), "last-of-type": nth(true, true), "only-of-type": only(true),
-		"empty":    empty,
-		"root":     func(n *html.Node, _ matcher) bool { return n.Parent == nil || n.Parent.Type != html.ElementNode },
-		"scope":    func(n *html.Node, m matcher) bool { return n == m.scope },
-		checked:    func(n *html.Node, m matcher) bool { return m.checked != nil && m.checked(n) },
-		"focus":    func(n *html.Node, m matcher) bool { return m.focused != nil && m.focused(n) },
-		"disabled": disabled,
-		"enabled":  func(n *html.Node, m matcher) bool { return control(n.Data) && !disabled(n, m) },
-		"link":     link, "any-link": link,
-		"hover": never, "active": never, "visited": never, "target": never, "focus-visible": never,
+		"empty": empty,
+		"root": func(n *html.Node, m matcher) bool {
+			return n.Parent != nil && n.Parent.Type == html.DocumentNode && (m.document == nil || m.document(n.Parent))
+		},
+		"scope":  func(n *html.Node, m matcher) bool { return n == m.scope },
+		"focus":  func(n *html.Node, m matcher) bool { return m.focused != nil && m.focused(n) },
+		"target": func(n *html.Node, m matcher) bool { return m.target != nil && m.target(n) },
+		"hover":  never, "active": never, "visited": never, "focus-visible": never,
 		"focus-within": never,
 	}
-}
-
-// control reports whether tag is a form control's.
-func control(tag string) bool {
-	switch tag {
-	case input, button, selects, "textarea", "option", "fieldset":
-		return true
-	}
-	return false
+	maps.Copy(all, controlStates())
+	return all
 }

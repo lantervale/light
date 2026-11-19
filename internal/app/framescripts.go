@@ -74,6 +74,18 @@ func (f *frame) quit() {
 	}
 }
 
+// placed reports whether f's element and those of the frames above it
+// are in their documents: one that left is emptied at the end of the
+// frame, and nothing under it runs till then.
+func (f *frame) placed() bool {
+	for ; f != nil; f = f.parent {
+		if !rooted(f.node, f.in.Doc) || (f.parent != nil && f.parent.page != f.in) {
+			return false
+		}
+	}
+	return true
+}
+
 // windowed reports whether f's element has a window: it is in its
 // document, and the tab had room for it.
 func (f *frame) windowed() bool {
@@ -142,7 +154,7 @@ func (set *framed) within(parent *frame) []*frame {
 	}
 	var out []*frame
 	if len(held) > 0 {
-		in.Doc.Body().Walk(func(n *ui.Node) bool {
+		in.Doc.HTML().Walk(func(n *ui.Node) bool {
 			if f := held[n]; f != nil {
 				out = append(out, f)
 			}
@@ -489,14 +501,15 @@ func (w *windows) label() string {
 }
 
 // runFrames starts the scripts of the frames of the page that have
-// some and none running, and runs a frame of each: one whose scripts
-// fail, or never end, stops alone.
+// some and none running, and runs a frame of each whose element is
+// still in its document: one whose scripts fail, or never end, stops
+// alone.
 func (s *Screen) runFrames(set *framed) {
 	if set == nil {
 		return
 	}
 	for _, f := range slices.Clone(set.all) {
-		if f.gone || f.page == nil {
+		if f.gone || f.page == nil || !f.placed() {
 			continue
 		}
 		if f.run == nil && s.runs(f) {
@@ -554,6 +567,7 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 				Stack: m.Stack, Depth: m.Depth, At: m.At, Frame: label})
 		},
 		Ask: s.frameDialogs(f, live), Hold: &s.modalOf(f.set.tab).hold,
+		Slow: s.frameSlowed(f, live), Patience: s.patience(),
 		Navigate: func(address string, replace bool) {
 			if !onTheWeb(address) {
 				return

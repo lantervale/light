@@ -64,7 +64,7 @@ type Keys struct{ Ctrl, Shift, Alt, Meta bool }
 // it, so Click comes after Frame in the frame of the click.
 func (r *Runtime) Click(n *ui.Node, x, y float32, held Keys) bool {
 	prevented := false
-	r.free(func() { prevented = r.clicked(n, x, y, held) })
+	r.whenFree(func() { prevented = r.clicked(n, x, y, held) })
 	return prevented
 }
 

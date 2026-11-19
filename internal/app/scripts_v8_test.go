@@ -162,7 +162,10 @@ func TestLeavingAPageEndsItsScripts(t *testing.T) {
 		t.Fatal("the page left is kept")
 	}
 	s.click("back")
-	s.until("the page left is fetched again", func() bool { return seen.count("/") == 2 && s.session().scripts != nil })
+	s.until("the page left is fetched again and shown", func() bool {
+		return seen.count("/") == 2 && s.browser.Tab().Current() == srv.URL+"/" && s.session().scripts != nil &&
+			s.session().scripts != first
+	})
 	s.until("its scripts ran again", func() bool { return s.pageText("count") == "0 clicks" })
 	again := s.session().scripts
 	s.OpenInNewTab(tabs.Home)

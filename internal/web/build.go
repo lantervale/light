@@ -21,8 +21,11 @@ import (
 	"github.com/lantervale/light/pkg/netlog"
 )
 
-// fetchers is how many of a page's sheets are fetched at once.
-const fetchers = 8
+// fetchers is how many of a page's sheets and scripts are fetched at
+// once: more than a host is asked at once over HTTP/1.1, which is the
+// transport's to hold, so that those HTTP/2 carries together go
+// together.
+const fetchers = 32
 
 // pictureTimeout is how long one picture of a page may take.
 const pictureTimeout = 15 * time.Second
@@ -279,8 +282,15 @@ func countStyles(n *html.Node) int {
 	return count
 }
 
+// exactText is the sheet under a page's own in a light that draws
+// text exact: of no weight, so any rule of the page wins.
+const exactText = `:where(html) { -webkit-font-smoothing: antialiased; }`
+
 func (b *builder) document(ctx context.Context, root *html.Node) *ui.Document {
 	opts := options()
+	if b.loader.Exact {
+		opts = append(opts, ui.CSS(exactText))
+	}
 	for _, sheet := range b.sheets {
 		if b.tree == nil {
 			opts = append(opts, ui.CSS(sheet.text, ui.From(sheet.from.String())))

@@ -55,6 +55,13 @@ type isolate struct {
 	// due (Pause).
 	watchdog *time.Timer
 	due      time.Time
+	// late is told of a run that outlasts its budget in place of
+	// stopping it (Options.Late), ran how long it was told the run has
+	// taken, wait how long the watchdog was last set for, and paused
+	// whether the run's clock is stopped: all under watch.
+	late      func(time.Duration) time.Duration
+	ran, wait time.Duration
+	paused    bool
 	// watch guards expired, which the watchdog sets as it interrupts,
 	// and gone, set once the isolate is disposed of.
 	watch         sync.Mutex
@@ -322,13 +329,19 @@ func (c *context) within(enter func() error) error {
 	outermost := c.depth == 1
 	var watchdog *time.Timer
 	if outermost {
-		watchdog = time.AfterFunc(c.opts.budget(), c.expire)
-		c.watchdog, c.due = watchdog, time.Now().Add(c.opts.budget())
+		c.watch.Lock()
+		c.late, c.ran, c.wait, c.paused = c.opts.Late, 0, c.opts.budget(), false
+		watchdog = time.AfterFunc(c.wait, c.expire)
+		c.watchdog, c.due = watchdog, time.Now().Add(c.wait)
+		c.watch.Unlock()
 	}
 	err := enter()
 	c.depth--
 	if outermost {
+		c.watch.Lock()
 		watchdog.Stop()
+		c.late = nil
+		c.watch.Unlock()
 		for _, of := range c.contexts {
 			of.forget()
 		}
@@ -344,23 +357,40 @@ func (c *context) within(enter func() error) error {
 }
 
 func (c *context) Pause() func() {
-	if c.depth == 0 || c.watchdog == nil || !c.watchdog.Stop() {
+	c.watch.Lock()
+	defer c.watch.Unlock()
+	if c.depth == 0 || c.watchdog == nil || c.paused {
 		return func() {}
 	}
+	c.watchdog.Stop()
+	c.paused = true
 	left := time.Until(c.due)
 	return func() {
+		c.watch.Lock()
+		defer c.watch.Unlock()
+		c.paused = false
 		c.due = time.Now().Add(left)
 		c.watchdog.Reset(left)
 	}
 }
 
-// expire is the watchdog: the budget is spent.
+// expire is the watchdog: the budget is spent. The run is stopped,
+// unless its lateness is told of instead; a clock that fired as it was
+// being paused fires again once it goes on.
 func (c *context) expire() {
 	c.watch.Lock()
 	defer c.watch.Unlock()
-	if !c.gone {
+	switch {
+	case c.gone || c.paused:
+	case c.late == nil:
 		c.expired = true
 		c.iso.TerminateExecution()
+	default:
+		c.ran += c.wait
+		if c.wait = c.late(c.ran); c.wait > 0 {
+			c.due = time.Now().Add(c.wait)
+			c.watchdog.Reset(c.wait)
+		}
 	}
 }
 

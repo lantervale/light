@@ -27,7 +27,7 @@ const (
 // command is the key shortcuts are made with: Command on macOS, Control
 // elsewhere.
 func command(system string) input.Key {
-	if system == "darwin" {
+	if system == macOS {
 		return input.KeySuper
 	}
 	return input.KeyControl

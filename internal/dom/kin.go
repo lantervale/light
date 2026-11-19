@@ -21,10 +21,22 @@ type Kin struct {
 	key     string
 	turn    *handover
 	members []*Runtime
+	// known are the numbers the kin know nodes by: one for all, so a
+	// node that moves from one's document to another's keeps its own.
+	known *numbers
 }
 
 // NewKin makes the kin of that key, with no document yet.
-func NewKin(key string) *Kin { return &Kin{key: key, turn: &handover{}} }
+func NewKin(key string) *Kin { return &Kin{key: key, turn: &handover{}, known: newNumbers()} }
+
+// numbers are the numbers the kin share, nil for a document with no
+// kin, which has its own.
+func (k *Kin) numbers() *numbers {
+	if k == nil {
+		return nil
+	}
+	return k.known
+}
 
 // Key is what the kin was made for.
 func (k *Kin) Key() string { return k.key }
@@ -39,7 +51,7 @@ func (k *Kin) Members() int {
 
 // Held reports whether a script of the kin waits for an answer: it
 // holds their engine, so no document joins them meanwhile.
-func (k *Kin) Held() bool { return k != nil && k.turn.parked }
+func (k *Kin) Held() bool { return k != nil && (k.turn.parked || k.turn.late) }
 
 // handover is the turn the documents of the kin share, one of its own
 // for a document that has no kin.
@@ -74,30 +86,31 @@ func (k *Kin) has(window int) bool {
 	return slices.ContainsFunc(k.members, func(r *Runtime) bool { return r.host.Self == window })
 }
 
-// join makes r one of the kin: its own script is given the registry
-// the others hold, or makes it, and tells it of r's window.
+// shared is what the kin share in their engine, for the own script of
+// a document that joins them to be made with: nil for the first, which
+// makes it.
+func (k *Kin) shared() (script.Function, error) {
+	if k == nil || len(k.members) == 0 {
+		return nil, nil //nolint:nilnil // the first of the kin is given nothing
+	}
+	held, err := k.members[0].lights("kin")
+	if err != nil {
+		return nil, err
+	}
+	kept, is := held.(script.Function)
+	if !is {
+		return nil, errors.New("light: the documents of a page lost what they share")
+	}
+	return kept, nil
+}
+
+// join makes r one of the kin: its own script, made with what they
+// share, tells the others of r's window.
 func (k *Kin) join(r *Runtime) error {
 	if k == nil {
 		return nil
 	}
-	var registry script.Function
-	if len(k.members) > 0 {
-		held, err := k.members[0].lights("kin")
-		if err != nil {
-			return err
-		}
-		kept, is := held.(script.Function)
-		if !is {
-			return errors.New("light: the documents of a page lost what they share")
-		}
-		registry = kept
-		defer registry.Release()
-	}
-	var given any
-	if registry != nil {
-		given = registry
-	}
-	if _, err := r.lights("join", given, float64(r.host.Self)); err != nil {
+	if _, err := r.lights("join", float64(r.host.Self)); err != nil {
 		return err
 	}
 	k.members = append(k.members, r)
@@ -110,7 +123,8 @@ func (k *Kin) leave(r *Runtime) {
 		return
 	}
 	k.members = slices.DeleteFunc(k.members, func(of *Runtime) bool { return of == r })
-	_, _ = r.lights("leave")
+	gone, _ := r.lights("leave")
+	r.unkept(gone)
 }
 
 // lights calls light's own script in r's document for what runs nothing

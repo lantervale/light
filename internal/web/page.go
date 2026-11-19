@@ -30,6 +30,9 @@ type Page struct {
 	Kind  content.Kind
 	// Media is the media type the answer is taken for.
 	Media string
+	// Encoding is the name of the encoding an HTML page came in, as the
+	// DOM spells it, "" where none was read.
+	Encoding string
 	// Doc is an HTML page built, nil for the other kinds.
 	Doc *ui.Document
 	// Source is the text the server sent, decoded: of an HTML page and of
@@ -53,6 +56,9 @@ type Page struct {
 	Frames *Frames
 	// Icon is the site's icon as a picture ui draws, nil for none.
 	Icon []byte
+	// Timing is when each step of the load ended, nil for a load that
+	// was given none.
+	Timing *Timing
 	// Empty is an answer with nothing to show (204, 205, no body).
 	Empty bool
 	// Err is why there is no page; the other fields but Address are then

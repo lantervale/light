@@ -14,6 +14,7 @@ import (
 	"github.com/lantervale/light/pkg/fetch"
 	"github.com/lantervale/light/pkg/identity"
 	"github.com/lantervale/light/pkg/script"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -87,7 +88,7 @@ func (s *Screen) apply() {
 	s.loader.Store(&web.Loader{
 		Client:     s.client.Load(),
 		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100, Scripts: s.scripting(),
-		Viewport: s.viewport,
+		Viewport: s.viewport, Exact: s.opts.ExactText,
 	})
 	s.browser.Start = c.StartPage
 	for _, session := range s.sessions {
@@ -175,7 +176,9 @@ func configBody(s *Screen) []*ui.Node {
 	return append(body,
 		ui.H2(ui.Text("Start")),
 		s.textSetting("set-start-page", "Start page", "What a new tab and the home button show: "+tabs.Home+
-			" or an address.", func(c *config.Config) *string { return &c.StartPage }, tabs.Resolve),
+			" or an address.", func(c *config.Config) *string { return &c.StartPage }, address),
+		ui.H2(ui.Text("Search")),
+		s.engineSetting(),
 		ui.H2(ui.Text("Appearance")),
 		s.checkSetting("set-dark-mode", "Dark mode (light's own pages; the start page's logo switches it too)",
 			func(c *config.Config) *bool { return &c.DarkMode }),
@@ -231,6 +234,32 @@ func configBody(s *Screen) []*ui.Node {
 }
 
 func same(text string) string { return text }
+
+// address is what was typed as an address, words as a search of
+// light's own pages.
+func address(typed string) string { return tabs.Resolve(typed, nil) }
+
+// engineSetting is the choice of the search engine.
+func (s *Screen) engineSetting() *ui.Node {
+	const id = "set-search-engine"
+	field := ui.Select(ui.ID(id))
+	for _, e := range search.Engines() {
+		field.Append(ui.Option(ui.Value(e.ID), ui.Text(e.Name)))
+	}
+	ui.On(field, ui.EventChange, func() {
+		chosen := s.doc.Value(field)
+		s.configure(func(c *config.Config) { c.SearchEngine = chosen })
+	})
+	mark := ui.Img(ui.ID("engine-mark"), ui.Attr("alt", ""))
+	show := func() {
+		s.doc.SetValue(field, s.config.SearchEngine)
+		mark.SetAttr("src", s.mark())
+	}
+	s.fields = append(s.fields, show)
+	show()
+	return setting(id, "Search engine", "What is typed in the address bar and is not an address is sent to it, "+
+		"on Enter.", ui.Div(ui.Class("choice"), mark, field))
+}
 
 // engine says what runs a page's scripts in this build.
 func engine() string {

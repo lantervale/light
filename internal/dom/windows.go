@@ -194,8 +194,9 @@ func (r *Runtime) window(a arguments) (any, error) {
 		return w.Closed(of), nil
 	case "of":
 		if n, err := r.node(a, 1); err == nil && n != nil {
-			if shown := r.shown(n); shown != nil {
-				return w.Of(shown), nil
+			kept := r.keeper(n)
+			if shown := kept.shown(n); shown != nil {
+				return r.named(kept, kept.windows().Of(shown)), nil
 			}
 		}
 		return NoWindow, nil

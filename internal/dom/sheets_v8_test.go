@@ -232,6 +232,9 @@ func TestComputedStylesAreThoseUIComputed(t *testing.T) {
 		{"a sheet a script adds is read at once", `(e => { e.textContent = "#in { position: absolute }";
 			document.head.appendChild(e); return getComputedStyle(document.getElementById("in")).position })(
 			document.createElement("style"))`, "absolute"},
+		{"an element a script made is read at once", `(made => made.map(e => getComputedStyle(e).display).join(" "))(
+			["div", "span", "p"].map(tag => document.body.appendChild(document.createElement(tag))).map((e, i) => {
+				if (i === 2) e.className = "hidden"; return e }))`, "block inline none"},
 		{"the properties are listed", `(cs => cs.length > 50 && cs.item(0) !== "" && Object.keys(cs).includes("display"))(
 			getComputedStyle(box))`, "true"},
 		{"an unknown property", `getComputedStyle(box).getPropertyValue("no-such-thing")`, ""},

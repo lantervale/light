@@ -190,7 +190,7 @@ func (l *Log) traced(row *Row) *httptrace.ClientTrace {
 	return &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
 			remote := info.Conn.RemoteAddr().String()
-			l.change(row, func(r *Row) { r.Remote = remote })
+			l.change(row, func(r *Row) { r.Remote, r.Reused, r.Idle = remote, info.Reused, info.WasIdle })
 			mark(func(m *marks) *time.Time { return &m.conn })
 		},
 		DNSStart: func(httptrace.DNSStartInfo) { mark(func(m *marks) *time.Time { return &m.dns }) },

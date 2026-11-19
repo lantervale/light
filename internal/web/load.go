@@ -16,6 +16,8 @@ import (
 	_ "golang.org/x/image/webp" // and WebP
 	"golang.org/x/net/html"
 
+	"github.com/lantervale/ember/ui"
+
 	"github.com/lantervale/light/pkg/content"
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/fetch"
@@ -64,6 +66,10 @@ type Loader struct {
 	Viewport func() (width, height float32)
 	// Frame is the frame the pages are loaded for, nil for a tab's own.
 	Frame *Frame
+	// Exact draws the pages' text at its exact coverage, without stem
+	// darkening, unless a page says how its own is smoothed: for a light
+	// a test runner compares the pictures of.
+	Exact bool
 }
 
 // Inline is the document of a frame's srcdoc, built as a page of the
@@ -147,12 +153,16 @@ func (l *Loader) load(ctx context.Context, address string, form *fetch.Form, lin
 		if r := recover(); r != nil {
 			page = &Page{Address: address, Err: fmt.Errorf("the page broke light: %v", r)}
 		}
+		page.Timing = timingOf(ctx)
 	}()
+	timing := timingOf(ctx)
 	for hops := 0; ; hops++ {
+		timing.Mark(Asked)
 		stream, err := l.open(fetch.After(ctx, hops), address, form)
 		if err != nil {
 			return &Page{Address: address, Err: err}
 		}
+		timing.settle()
 		form = nil
 		if l.Frame != nil && l.Frame.Admit != nil {
 			if err = l.Frame.Admit(stream.Header, stream.URL); err != nil {
@@ -167,6 +177,7 @@ func (l *Loader) load(ctx context.Context, address string, form *fetch.Form, lin
 		if err != nil {
 			return &Page{Address: address, Err: err}
 		}
+		timing.Mark(Received)
 		hops += answer.Hops
 		to, refreshed := refresh(answer, l.Scripts)
 		if !refreshed || l.NoRefresh {
@@ -256,9 +267,29 @@ func (l *Loader) read(ctx context.Context, answer *fetch.Answer, links Links) *P
 		}
 	case content.Text:
 		page.Source = answer.Text()
+		l.plain(page, answer, links)
 	case content.Download:
 	}
 	return page
+}
+
+// plain gives a document sent as XML that is no page (a feed, a
+// sitemap, any vocabulary of its own) the tree scripts read it by,
+// when it is well-formed and loaded for scripts: light shows its text
+// as it was sent, and nothing a script changes in the tree.
+func (l *Loader) plain(page *Page, answer *fetch.Answer, links Links) {
+	if !l.Scripts || !IsXML(page.Media) {
+		return
+	}
+	root, prefixes, err := ParseXML(cut(DecodeXML(answer.Body, answer.Header.Get("Content-Type"))))
+	if err != nil {
+		return
+	}
+	b := newBuilder(l, answer.URL, links)
+	b.doc = ui.NewDocument(options()...)
+	b.tree.xml, b.tree.prefixes, b.tree.unshown = true, prefixes, true
+	b.tree.root, b.tree.doc = root, b.doc
+	page.Tree, page.Frames, page.Base = b.tree, b.frames, answer.URL
 }
 
 // build reads an HTML answer and builds its Document, its sheets and its
@@ -269,11 +300,16 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 		page.Err = err
 		return
 	}
+	timing := timingOf(ctx)
+	timing.Mark(Parsed)
 	b := newBuilder(l, answer.URL, links)
 	if b.tree != nil {
 		b.tree.xml, b.tree.prefixes = IsXML(page.Media), prefixes
 	}
 	b.encode = encoderOf(answer.Body, answer.Header.Get("Content-Type"))
+	if !IsXML(page.Media) {
+		page.Encoding = EncodingOf(answer.Body, answer.Header.Get("Content-Type"))
+	}
 	ctx = fetch.By(l.within(netlog.As(ctx, l.by(), netlog.Other), answer.URL), answer.URL)
 	ctx = localnet.From(ctx, answer.Space)
 	icon := make(chan []byte, 1)
@@ -284,7 +320,10 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 		go func() { icon <- b.icon(ctx, at) }()
 	}
 	b.load(ctx, root)
-	page.Title, page.Doc, page.Icon = titleOf(root), b.document(ctx, root), <-icon
+	timing.Mark(Gathered)
+	page.Title, page.Doc = titleOf(root), b.document(ctx, root)
+	timing.Mark(Built)
+	page.Icon = <-icon
 	page.Scripts, page.Tree, page.Frames, page.Base = b.ordered(), b.tree, b.frames, b.base
 	if err = ctx.Err(); err != nil {
 		page.Err = err

@@ -2,8 +2,8 @@
 
 // A list of nodes is no array: it answers by index, an HTMLCollection
 // by the ids and names of its elements too, and a live one is read
-// again from the tree once the tree has changed. treeVersion counts
-// those changes (10-core.js): every question to light that is not a
+// again from the tree once the tree has changed. bag.version counts
+// those changes (10-core.js), for all the documents of a kin: every question to light that is not a
 // plain read is one, and so is the end of the task a list was read in,
 // since light changes the tree between tasks without a word.
 
@@ -18,7 +18,7 @@ const treeRead = () => {
   treeWatched = true;
   afterTask(() => {
     treeWatched = false;
-    treeVersion++;
+    bag.version++;
   });
 };
 
@@ -32,10 +32,10 @@ const listState = (list) => {
 // reads and never changes.
 const itemsOf = (list) => {
   const state = listState(list);
-  if (state.read && state.seen !== treeVersion) {
+  if (state.read && state.seen !== bag.version) {
     state.nodes = state.read();
     state.names = null;
-    state.seen = treeVersion;
+    state.seen = bag.version;
     treeRead();
   }
   return state.nodes;
@@ -107,6 +107,11 @@ const listHandler = {
   set(target, key, value, receiver) {
     const state = nodeLists.get(target);
     const i = listIndex(key);
+    // An object that only inherits from the list sets its own
+    // property, but for an index the list has.
+    if (receiver !== state.list) {
+      return !(i >= 0 && i < itemsOf(target).length) && Reflect.set(target, key, value, receiver);
+    }
     if (i >= 0) {
       if (!state.kind.put) return false;
       state.kind.put(state, i, value);
@@ -150,7 +155,12 @@ const keptList = (node, name, make) => {
   return kept[name] || (kept[name] = make());
 };
 
-const listWalk = (list, values) => Array.prototype[values].call(itemsOf(list));
+// A list is walked as it is at each step, so one that grows meanwhile
+// is walked to its new end.
+const listWalk = (list, values) => {
+  listState(list);
+  return Array.prototype[values].call(list);
+};
 class NodeList {
   constructor() { illegal(); }
   get length() { return itemsOf(this).length; }

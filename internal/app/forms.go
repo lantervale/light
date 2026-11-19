@@ -11,14 +11,14 @@ import (
 // when it is reloaded or come back to.
 func (s *Screen) posted(sent web.Submission) {
 	s.byPage(func() {
-		session := s.session()
+		tab, session := s.browser.Tab(), s.session()
 		if l := session.loads[sent.Address]; l != nil {
 			l.cancel()
 			delete(session.loads, sent.Address)
 		}
-		delete(session.pages, sent.Address)
 		session.posts[sent.Address] = sent
-		s.Open(sent.Address)
+		session.note = ""
+		s.depart(sent.Address, true, func() { tab.Visit(sent.Address) })
 	})
 }
 

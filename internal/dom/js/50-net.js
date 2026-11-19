@@ -162,6 +162,7 @@ const body = (prototype) => define(prototype, {
   },
 });
 
+const requestSignals = new WeakMap();
 class Request {
   constructor(input, init = {}) {
     const from = input instanceof Request ? input : null;
@@ -174,7 +175,9 @@ class Request {
     }
     this.method = init.method === undefined ? (from ? from.method : "GET") : sentAs(init.method, (why) => new TypeError(why));
     this.headers = new Headers(init.headers || (from ? from.headers : undefined));
-    this.signal = init.signal || (from ? from.signal : null);
+    const given = init.signal === undefined || init.signal === null ? from && from.signal : init.signal;
+    if (given && !signals.has(given)) throw new TypeError("The signal of a request is an AbortSignal.");
+    requestSignals.set(this, given ? AbortSignal.any([given]) : newSignal());
     this.mode = oneOf(init.mode || (from ? from.mode : "cors"), ["cors", "no-cors", "same-origin"], "mode");
     this.credentials = oneOf(init.credentials || (from ? from.credentials : "same-origin"), ["omit", "same-origin", "include"], "credentials");
     this.cache = init.cache || (from ? from.cache : "default");
@@ -189,6 +192,10 @@ class Request {
     define(this, { _bytes: sent.bytes });
     if (sent.type && !this.headers.has("content-type")) this.headers.set("content-type", sent.type);
   }
+  // signal is the request's own, which follows the one it was given:
+  // a page finds it on the prototype when it asks whether fetch can be
+  // called off.
+  get signal() { return requestSignals.get(this); }
   clone() {
     if (this.bodyUsed) throw new TypeError("The body was already read.");
     return new Request(this);

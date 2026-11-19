@@ -4,7 +4,9 @@ byName(Document.prototype, (page, name) => {
   const as = `[name="${CSS.escape(name)}"]`;
   return page.querySelector(["form", "img", "embed", "object", "iframe"].map((tag) => tag + as).join());
 });
-const document = new Document(token);
+// A page of XML that is no page of XHTML is an XMLDocument, as the
+// one createDocument makes.
+const document = pageInfo[1] && pageInfo[0] !== "application/xhtml+xml" ? new XMLDocument(token) : new Document(token);
 
 // framed is the window of the frame of the page at that index, or of
 // that name, undefined for none.
@@ -126,7 +128,7 @@ define(window, {
   CompositionEvent, BeforeUnloadEvent, PageTransitionEvent,
   Node, Element, HTMLElement, HTMLUnknownElement, SVGElement, Text, Comment, CharacterData, DocumentType, DocumentFragment, Document,
   HTMLDocument: Document, NodeList, HTMLCollection, HTMLAllCollection, HTMLFormControlsCollection, HTMLOptionsCollection, RadioNodeList, DOMTokenList, NamedNodeMap, Attr, DOMRect, DOMRectReadOnly,
-  Range, NodeFilter, TreeWalker, Image, Option, Audio: undefined,
+  Range, AbstractRange, NodeRange, StaticRange, MutationRecord, NodeFilter, TreeWalker, NodeIterator, Image, Option, Audio: undefined,
   HTMLAnchorElement, HTMLImageElement, HTMLInputElement, HTMLTextAreaElement, HTMLButtonElement, HTMLSelectElement,
   HTMLOptionElement, HTMLFormElement, HTMLLabelElement, HTMLTemplateElement, HTMLScriptElement, HTMLStyleElement,
   HTMLLinkElement, HTMLMetaElement, HTMLTitleElement, HTMLBaseElement, HTMLDetailsElement, HTMLDialogElement,
@@ -139,6 +141,11 @@ define(window, {
   HTMLOptGroupElement, HTMLOutputElement, HTMLMenuElement, HTMLFontElement,
 });
 for (const name of ["setImmediate", "visualViewport", "event", "Audio"]) delete window[name];
+Object.defineProperty(window, "event", {
+  get() { return currentEvent; },
+  set(value) { Object.defineProperty(window, "event", { value, writable: true, enumerable: true, configurable: true }); },
+  enumerable: true, configurable: true,
+});
 delete window.SharedArrayBuffer;
 accessors(window, {
   location: { get() { return location; }, set(address) { go(address, false); } },
@@ -177,8 +184,7 @@ const eventOf = (type, init) => {
   else if (type === "submit") event = new SubmitEvent(type, { ...full, submitter: wrap(full.submitter || 0) });
   else if (/^(scroll|resize|load|error)$/.test(type)) event = new Event(type, { ...full, bubbles: false, cancelable: false });
   else event = new Event(type, full);
-  event.isTrusted = true;
-  return event;
+  return trusted(event);
 };
 const targetOf = (ref) => (ref === "window" ? window : ref === "document" ? document : wrap(ref));
 
@@ -293,4 +299,5 @@ const calls = {
   // console: $0, null for none.
   inspect(ref) { define(window, { $0: wrap(ref) }); },
 };
+finishInterfaces();
 return entered(function light(call, ...args) { return calls[call](...args); });

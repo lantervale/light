@@ -132,6 +132,10 @@ func (s *Screen) runScripts() {
 			live.rt.Arrived(live.at)
 		}
 		live.rt.Frame()
+		if page.Timing != nil && page.Timing.At(web.Loaded).IsZero() && live.rt.Loaded() {
+			page.Timing.Mark(web.Loaded)
+			s.tellTiming(page)
+		}
 	}
 	s.runFrames(set)
 	if set != nil {
@@ -304,17 +308,15 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 			session.said.Add(console.Line{Level: console.Level(m.Level), Text: m.Text, Source: m.Source, Line: m.Line,
 				Stack: m.Stack, Depth: m.Depth, At: m.At})
 		},
-		Ask:     s.pageDialogs(tab, session, live),
-		Hold:    &s.modalOf(tab).hold,
+		Ask:  s.pageDialogs(tab, session, live),
+		Hold: &s.modalOf(tab).hold,
+		Slow: s.pageSlowed(tab, live), Patience: s.patience(),
 		Cleared: session.said.Clear,
 		Navigate: func(address string, replace bool) {
 			by := live.by(s)
 			later(func() {
 				if replace {
-					by(func() {
-						tab.Redirect(tab.Current(), address)
-						s.show()
-					})
+					by(func() { s.depart(address, false, func() { tab.Redirect(tab.Current(), address) }) })
 					return
 				}
 				by(func() { s.Open(address) })
@@ -554,8 +556,8 @@ func (s *Screen) unscripted() string {
 func (s *Screen) evaluate(source string) (string, error) {
 	tab, session := s.browser.Tab(), s.session()
 	live := session.scripts
-	if page := session.pages[tab.Current()]; live == nil && s.host != nil && page != nil && page.Err == nil &&
-		page.Tree != nil {
+	if page := session.pages[tab.Current()]; live == nil && page != nil && page.Err == nil && page.Tree != nil &&
+		(s.host != nil || page.Tree.Unshown()) {
 		live = s.start(tab, session, page)
 	}
 	if live == nil {

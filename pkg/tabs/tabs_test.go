@@ -59,7 +59,49 @@ func TestResolve(t *testing.T) {
 		"guide":            "light://search?q=guide",
 		"what is 1.5 zoom": "light://search?q=what+is+1.5+zoom",
 	} {
-		if got := tabs.Resolve(typed); got != want {
+		if got := tabs.Resolve(typed, nil); got != want {
+			t.Errorf("Resolve(%q) = %q, want %q", typed, got, want)
+		}
+	}
+}
+
+func TestWhatIsTypedIsAnAddressOrWordsForTheSearchItIsGiven(t *testing.T) {
+	engine := func(query string) string { return "search:" + query }
+	for typed, want := range map[string]string{
+		"light://search?q=tile+maps":       "light://search?q=tile+maps",
+		"light://config":                   "light://config",
+		"https://example.com/a b":          "https://example.com/a b",
+		"HTTP://example.com":               "HTTP://example.com",
+		"ftp://example.test":               "ftp://example.test",
+		"about:blank":                      "about:blank",
+		"example.com/path?q=1#top":         "https://example.com/path?q=1#top",
+		"example.com:8080":                 "https://example.com:8080",
+		"example.com.":                     "https://example.com.",
+		"example.com./path":                "https://example.com./path",
+		"example.com/?to=http://other.com": "https://example.com/?to=http://other.com",
+		"localhost":                        "http://localhost",
+		"LocalHost:8080":                   "http://LocalHost:8080",
+		"localhost/path":                   "http://localhost/path",
+		"app.localhost:3000":               "http://app.localhost:3000",
+		"127.0.0.1":                        "http://127.0.0.1",
+		"192.168.1.1:8080/admin":           "http://192.168.1.1:8080/admin",
+		"[::1]":                            "http://[::1]",
+		"[::1]:8080/x":                     "http://[::1]:8080/x",
+		"foo.bar baz":                      "search:foo.bar baz",
+		"guide":                            "search:guide",
+		"localhost rocks":                  "search:localhost rocks",
+		"what does :// mean":               "search:what does :// mean",
+		"go: the language":                 "search:go: the language",
+		"about":                            "search:about",
+		".hidden":                          "search:.hidden",
+		"...":                              "search:...",
+		"a..b":                             "search:a..b",
+		"wait.\twhat":                      "search:wait.\twhat",
+		"[::1":                             "search:[::1",
+		"view-source:localhost:8080":       "view-source:http://localhost:8080",
+		"view-source:tile maps":            "view-source:search:tile maps",
+	} {
+		if got := tabs.Resolve(typed, engine); got != want {
 			t.Errorf("Resolve(%q) = %q, want %q", typed, got, want)
 		}
 	}
@@ -146,7 +188,7 @@ func TestResolveKeepsAViewSourcePrefix(t *testing.T) {
 		"view-source:example.com":         "view-source:https://example.com",
 		"view-source:https://example.com": "view-source:https://example.com",
 	} {
-		if got := tabs.Resolve(typed); got != want {
+		if got := tabs.Resolve(typed, nil); got != want {
 			t.Errorf("Resolve(%q) = %q, want %q", typed, got, want)
 		}
 	}

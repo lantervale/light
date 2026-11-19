@@ -4,9 +4,12 @@ package tabs
 
 import (
 	"maps"
+	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -360,20 +363,77 @@ func Source(address string) (string, bool) {
 func SourceOf(address string) string { return sourcePrefix + address }
 
 // Resolve turns what was typed in the address bar into an address: an
-// address as it is, a host name as https, anything else as a search, and
-// the same after view-source: for the source of a page.
-func Resolve(typed string) string {
+// address as it is, a host name as https, this machine and a numbered
+// host as http, anything else as what search makes of the words (Search
+// when nil), and the same after view-source: for the source of a page.
+func Resolve(typed string, search func(query string) string) string {
 	typed = strings.TrimSpace(typed)
 	if of, ok := Source(typed); ok {
-		return SourceOf(Resolve(of))
+		return SourceOf(Resolve(of, search))
 	}
 	switch {
 	case typed == "":
 		return Home
-	case strings.Contains(typed, "://"):
+	case schemed(typed):
 		return typed
-	case strings.Contains(typed, ".") && !strings.Contains(typed, " "):
+	case strings.ContainsFunc(typed, unicode.IsSpace):
+	case local(hostOf(typed)):
+		return "http://" + typed
+	case named(hostOf(typed)):
 		return "https://" + typed
 	}
-	return Search(typed)
+	if search == nil {
+		search = Search
+	}
+	return search(typed)
+}
+
+// schemed reports whether typed begins as an address does: a scheme
+// and ://, or about:.
+func schemed(typed string) bool {
+	scheme, _, ok := strings.Cut(typed, ":")
+	if !ok || scheme == "" || !strings.HasPrefix(typed[len(scheme):], "://") && scheme != "about" {
+		return false
+	}
+	return !strings.ContainsFunc(scheme, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && !strings.ContainsRune("+-.", r)
+	})
+}
+
+// hostOf is the host what was typed without a scheme begins with: up to
+// its path, without its port.
+func hostOf(typed string) string {
+	host := typed
+	if end := strings.IndexAny(host, "/?#"); end >= 0 {
+		host = host[:end]
+	}
+	if at := strings.LastIndex(host, ":"); at >= 0 && !strings.HasSuffix(host, "]") {
+		if _, err := strconv.ParseUint(host[at+1:], 10, 16); err == nil {
+			host = host[:at]
+		}
+	}
+	return host
+}
+
+// local reports whether host is this machine by its name, or a host by
+// its number: what is asked over http.
+func local(host string) bool {
+	if inner, ok := strings.CutPrefix(host, "["); ok {
+		inner, ok = strings.CutSuffix(inner, "]")
+		addr, err := netip.ParseAddr(inner)
+		return ok && err == nil && addr.Is6()
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.Is4()
+	}
+	const name = "localhost"
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	return host == name || strings.HasSuffix(host, "."+name)
+}
+
+// named reports whether host reads as a name of the Internet: labels
+// between dots, none empty but after a last dot.
+func named(host string) bool {
+	host = strings.TrimSuffix(host, ".")
+	return strings.Contains(host, ".") && !slices.Contains(strings.Split(host, "."), "")
 }

@@ -149,6 +149,24 @@ func (s *Screen) renamed(f *frame, how, address string) {
 	f.at = address
 }
 
+// cross makes a move through the shown tab's history: at once where it
+// changes the page's frames or comes to a page the tab has, and once
+// the page is ready for one that is fetched again (loading.go).
+func (s *Screen) cross(change tabs.Change) {
+	tab, session := s.browser.Tab(), s.session()
+	if !change.Top {
+		tab.Take(change)
+		s.arrive(change)
+		return
+	}
+	ahead := *tab
+	ahead.Take(change)
+	s.depart(ahead.Current(), false, func() {
+		tab.Take(change)
+		session.note, session.returned = "", true
+	})
+}
+
 // arrive shows where a move through the tab's history left it: its
 // page when it is another, and its frames where the step has them.
 func (s *Screen) arrive(change tabs.Change) {
@@ -181,6 +199,5 @@ func (s *Screen) travel(f *frame, user bool, delta int) {
 			return
 		}
 	}
-	tab.Take(change)
-	s.arrive(change)
+	s.cross(change)
 }

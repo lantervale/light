@@ -134,15 +134,18 @@ func (r *Runtime) documents(a arguments) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.asked(what, n, a)
+	if kept := r.keeper(n); kept != r {
+		return kept.askedByKin(r.asked, a)
+	}
+	return r.answers(what, n, a)
 }
 
 // asked answers what scripts ask of a document, or of a node about
 // its document.
-func (r *Runtime) asked(what string, n *html.Node, a arguments) (any, error) {
+func (r *Runtime) answers(what string, n *html.Node, a arguments) (any, error) {
 	switch what {
 	case "owner":
-		return r.ref(r.owners[n]), nil
+		return r.pageOr(r.owners[n], 0), nil
 	case "xml":
 		return r.xmlOf(n), nil
 	case "prefix":
@@ -151,7 +154,7 @@ func (r *Runtime) asked(what string, n *html.Node, a arguments) (any, error) {
 		if d := r.docs[n]; d != nil {
 			return []any{d.media, d.xml, d.address}, nil
 		}
-		return []any{r.page.Media, r.tree.XML(), r.page.Address}, nil
+		return []any{r.page.Media, r.tree.XML(), r.page.Address, r.page.Encoding}, nil
 	case "parts":
 		top := element(n, 0)
 		return []int{r.ref(firstElement(n)), r.ref(element(top, atom.Head)), r.ref(element(top, atom.Body))}, nil
@@ -168,8 +171,15 @@ func (r *Runtime) asked(what string, n *html.Node, a arguments) (any, error) {
 		if r.docs[n] == nil {
 			to = nil
 		}
+		r.receive(child)
 		r.adopt(child, to)
 		return nothing()
+	case "import":
+		child, missing := r.node(a, 2)
+		if missing != nil {
+			return nil, missing
+		}
+		return r.copiedFor(n, child, a.flag(3))
 	case "clone":
 		return r.cloned(n, a.flag(2))
 	case "markup":

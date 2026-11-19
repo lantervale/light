@@ -192,8 +192,9 @@ func TestReloadIsStopWhileThePageLoadsAndStopCancelsIt(t *testing.T) {
 	if label, _ := s.reload.Attr("aria-label"); label != "Reload" || src(s.reload.Children()[0]) != "reload.svg" {
 		t.Fatalf("an idle tab's button is %q", label)
 	}
+	s.OpenInNewTab(srv.URL + "/")
+	s.frame()
 	before := s.box("view")
-	s.Open(srv.URL + "/")
 	<-asked
 	s.frame()
 	if label, _ := s.reload.Attr("aria-label"); label != "Stop" || src(s.reload.Children()[0]) != "stop.svg" {
@@ -327,7 +328,7 @@ func TestTheStatusBubbleTakesNoPointerAndMovesAwayFromIt(t *testing.T) {
 	s.in.SetMouseButton(input.MouseLeft, false)
 	s.frame()
 	s.frame()
-	if got := s.browser.Tab().Current(); got != srv.URL+long {
+	if got := s.waited(s.browser.Tab()); got != srv.URL+long {
 		t.Fatalf("a click where the bubble stood opened %q, want the link under it", got)
 	}
 }

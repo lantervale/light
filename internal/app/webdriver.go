@@ -339,13 +339,7 @@ func (d *Driver) Navigate(ctx context.Context, address string, wait webdriver.Lo
 		return webdriver.Errorf(webdriver.UnsupportedOperation, address+" is not opened: light opens "+own+
 			", http://, https:// and about:blank addresses")
 	}
-	return d.moving(ctx, wait, func(s *Screen) {
-		session := s.session()
-		if session.loads[address] == nil {
-			delete(session.pages, address)
-		}
-		s.Open(address)
-	})
+	return d.moving(ctx, wait, func(s *Screen) { s.openFresh(address) })
 }
 
 func (d *Driver) Back(ctx context.Context, wait webdriver.Load) error {
@@ -415,7 +409,7 @@ func (d *Driver) landing(s *Screen, tab *tabs.Tab, wait webdriver.Load) step {
 // failed is an error.
 func (s *Screen) arrived(tab *tabs.Tab, strategy string) (bool, error) {
 	session, address := s.sessionOf(tab), shownBy(tab.Current())
-	if session.loads[address] != nil {
+	if session.loads[address] != nil || session.pending != nil {
 		return false, nil
 	}
 	page := session.pages[address]
@@ -440,11 +434,22 @@ func (d *Driver) CurrentURL(ctx context.Context) (string, error) {
 	err := d.once(ctx, func() error {
 		s, err := d.window()
 		if err == nil {
-			address = s.browser.Tab().Current()
+			address = s.active()
 		}
 		return err
 	})
 	return address, err
+}
+
+// active is the address of the document the shown tab shows: the page
+// it holds while the next one loads, and about:blank while the first
+// page of a tab has not come.
+func (s *Screen) active() string {
+	address := s.browser.Tab().Current()
+	if at := shownBy(address); onTheWeb(at) && s.session().pages[at] == nil {
+		return blankAddress
+	}
+	return address
 }
 
 func (d *Driver) WindowHandle(ctx context.Context) (string, error) {

@@ -329,12 +329,16 @@ func TestAPageThatFailsOrNeverEndsIsAnErrorAndLightGoesOn(t *testing.T) {
 	if took := time.Since(began); took < 150*time.Millisecond || took > 5*time.Second {
 		t.Fatalf("the page load timeout fired after %s: %s", took, a.message)
 	}
-	if got := d.text("/{s}/url"); got != srv.URL+"/never" {
-		t.Fatalf("while the page loads the session is at %q", got)
+	if got := d.text("/{s}/url"); got != blankAddress {
+		t.Fatalf("while the page loads the session is at %q, want the page it shows", got)
 	}
 	d.open(srv.URL + "/")
 	if got := d.text("/{s}/title"); got != "Here" {
 		t.Fatalf("after a page that never ended the title is %q", got)
+	}
+	d.fails(webdriver.Timeout, "POST", "/{s}/url", `{"url":"`+srv.URL+`/never"}`)
+	if got := d.text("/{s}/url"); got != srv.URL+"/" {
+		t.Fatalf("while the next page loads the session is at %q, want the page it shows", got)
 	}
 	closed := httptest.NewServer(http.NotFoundHandler())
 	gone := closed.URL
@@ -342,6 +346,15 @@ func TestAPageThatFailsOrNeverEndsIsAnErrorAndLightGoesOn(t *testing.T) {
 	if a = d.fails(webdriver.UnknownError, "POST", "/{s}/url", `{"url":"`+gone+`/"}`); !strings.Contains(a.message,
 		"was not reached") {
 		t.Fatalf("a page that is not reached says %q", a.message)
+	}
+	d.OpenInNewTab(srv.URL + "/never")
+	var all []string
+	if err := json.Unmarshal([]byte(d.ok("GET", "/{s}/window/handles", "")), &all); err != nil || len(all) != 2 {
+		t.Fatalf("the windows are %v, %v", all, err)
+	}
+	d.ok("POST", "/{s}/window", `{"handle":"`+all[1]+`"}`)
+	if got := d.text("/{s}/url"); got != blankAddress {
+		t.Fatalf("a tab that has shown nothing yet is at %q", got)
 	}
 	d.ok("DELETE", "/{s}", "")
 	d.begin(`{"alwaysMatch":{"pageLoadStrategy":"none"}}`)

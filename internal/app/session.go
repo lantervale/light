@@ -20,7 +20,11 @@ var errStopped = errors.New("its loading was stopped")
 
 // load is a page on its way: cancel stops what of it can be, the page
 // and its sheets.
-type load struct{ cancel context.CancelFunc }
+type load struct {
+	cancel context.CancelFunc
+	// timing is when each of its steps ended.
+	timing *web.Timing
+}
 
 // session is what a tab holds beside its addresses: the pages of the web
 // it fetched, by the address asked and by the one that answered, those on
@@ -30,10 +34,15 @@ type load struct{ cancel context.CancelFunc }
 type session struct {
 	pages map[string]*web.Page
 	loads map[string]*load
+	// pending is the move the tab waits for on the page it shows, nil
+	// for none (loading.go).
+	pending *pending
 	// posts are the forms on their way to an address with a POST, each
 	// sent by the load of its address that follows, once.
-	posts   map[string]web.Submission
-	log     *netlog.Log
+	posts map[string]web.Submission
+	log   *netlog.Log
+	// told is the last request LIGHT_TIMING was told of.
+	told    int
 	said    *console.Lines
 	scripts *running
 	kept    map[string]dom.Storage
@@ -79,6 +88,7 @@ func (s *Screen) forget() {
 		for _, l := range session.loads {
 			l.cancel()
 		}
+		session.pending = nil
 		s.end(session)
 		for _, set := range session.frames {
 			set.release()
@@ -98,12 +108,24 @@ func (s *Screen) fetch(tab *tabs.Tab, address string) *web.Page {
 	if page != nil || session.loads[address] != nil {
 		return page
 	}
+	s.begin(tab, address)
+	return nil
+}
+
+// begin starts the load of the page a tab is to show at address.
+func (s *Screen) begin(tab *tabs.Tab, address string) {
+	session := s.sessionOf(tab)
+	if session.loads[address] != nil {
+		return
+	}
 	if !session.tools.Preserve {
 		session.log.Clear()
 		session.said.Clear()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
-	l := &load{cancel}
+	l := &load{cancel: cancel, timing: &web.Timing{}}
+	l.timing.Mark(web.Started)
+	ctx = web.Timed(ctx, l.timing)
 	session.loads[address] = l
 	links := web.Links{Open: s.followed, Over: s.point, Save: s.download, Unsent: session.unsent,
 		Aimed: func(address, target string) bool { return s.targeted(tab, address, target, nil) },
@@ -125,35 +147,52 @@ func (s *Screen) fetch(tab *tabs.Tab, address string) *web.Page {
 		}
 		s.landed <- func() { s.land(tab, address, l, loaded) }
 	}()
-	return nil
 }
 
 // land takes the page a load ended with, unless it was stopped meanwhile:
-// the tab is at the address that answered. An answer with nothing to
-// show, and one that is downloaded, leave the tab where it was.
+// the tab is at the address that answered, which it moves to now when
+// it waited for the page on the one it showed. An answer with nothing
+// to show, and one that is downloaded, leave the tab where it was.
 func (s *Screen) land(tab *tabs.Tab, address string, l *load, page *web.Page) {
 	session := s.sessions[tab]
 	if session == nil || session.loads[address] != l {
 		return
 	}
 	delete(session.loads, address)
-	if page.Empty && tab.Current() == address && tab.CanBack() {
-		tab.Drop()
+	waited := session.pending
+	if waited != nil && waited.address != address {
+		waited = nil
+	}
+	stays := func() bool {
+		switch {
+		case waited != nil:
+			session.pending = nil
+		case tab.Current() == address && tab.CanBack():
+			tab.Drop()
+		default:
+			return false
+		}
+		s.show()
+		return true
+	}
+	if page.Empty && stays() {
 		session.note = fmt.Sprintf("%s answered %d %s: nothing to show", hostOf(address), page.Status,
 			http.StatusText(page.Status))
-		s.show()
+		s.say()
 		return
 	}
 	if page.Kind == content.Download && page.Err == nil {
-		s.save(page.Address, "", "")
-		if tab.Current() == address && tab.CanBack() {
-			tab.Drop()
-			s.show()
+		if s.save(page.Address, "", ""); stays() {
 			return
 		}
 	}
 	session.pages[address], session.pages[page.Address] = page, page
 	s.zoomPages(session)
+	if waited != nil {
+		session.pending = nil
+		waited.arrive()
+	}
+	page.Timing.Mark(web.Shown)
 	tab.Redirect(address, page.Address)
 	if page.Icon != nil {
 		s.pictures.Store(faviconOf(page.Address), page.Icon)
@@ -169,24 +208,27 @@ func (s *Screen) land(tab *tabs.Tab, address string, l *load, page *web.Page) {
 		return
 	}
 	s.show()
+	s.dismiss(tab)
 }
 
-func (s *Screen) loading() bool {
-	return s.session().loads[shownBy(s.browser.Tab().Current())] != nil
-}
+func (s *Screen) loading() bool { return s.waited(s.browser.Tab()) != "" }
 
-// reloadOrStop is the one button: it stops the shown page while it loads,
-// and fetches it again once it has.
+// reloadOrStop is the one button: it stops what the shown tab waits
+// for, the move to another page, which leaves it on the one it shows,
+// or the load of its first, and fetches the page again once it has it.
 func (s *Screen) reloadOrStop() {
 	address, session := shownBy(s.browser.Tab().Current()), s.session()
+	if s.stop() {
+		return
+	}
 	if l := session.loads[address]; l != nil {
 		l.cancel()
 		delete(session.loads, address)
 		session.pages[address] = &web.Page{Address: address, Err: errStopped}
-	} else {
-		delete(session.pages, address)
+		s.show()
+		return
 	}
-	s.show()
+	s.depart(s.browser.Tab().Current(), true, func() {})
 }
 
 // shownBy is the address whose page address shows: its own, or the one a

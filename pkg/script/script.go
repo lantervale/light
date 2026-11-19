@@ -94,6 +94,13 @@ type Options struct {
 	// Memory is the heap a context may grow to in bytes, DefaultMemory
 	// when 0.
 	Memory uint64
+	// Late, when set, has a Run or a Call that outlasts Budget go on
+	// instead of being stopped: it is told how long the run has taken,
+	// the time it was paused left out, and says how long from now to
+	// tell again, 0 for never. It is called from a goroutine of the
+	// Context's own while the script runs, so it must not wait, nor
+	// call the Context but to Interrupt it, which stops the run.
+	Late func(ran time.Duration) (again time.Duration)
 	// Rejected is told each promise rejected with nobody to handle it,
 	// once the script that left it so has returned.
 	Rejected func(*Error)

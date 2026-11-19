@@ -12,6 +12,7 @@ import (
 
 	"github.com/lantervale/ember/input"
 
+	"github.com/lantervale/light/pkg/console"
 	"github.com/lantervale/light/pkg/script"
 )
 
@@ -375,5 +376,140 @@ func TestAFrameThatAsksWhileItsKinAreUnderWayGoesOnOrEndsWhole(t *testing.T) {
 	if left() {
 		t.Fatalf("after fifty pages whose frame asked %d of their scripts still wait, and %d engines and %d documents "+
 			"are left of %d and %d", waiting(), script.Live(), script.Contexts(), g.engines, g.documents)
+	}
+}
+
+// slowBusyPage is busyPage with a script that runs long in place of its
+// question: for ever, for a while, or until it asks, as its address
+// says.
+func slowBusyPage() string {
+	return strings.Replace(busyPage, `document.getElementById("out").textContent = "asking";
+		document.getElementById("out").textContent = "answered " + confirm("busy?");`,
+		`const out = document.getElementById("out"), how = location.search.slice(1).split("-")[0];
+		const end = Date.now() + (how === "ends" ? 250 : how === "asks" ? 120 : 1e9);
+		for (let n = 0; Date.now() < end; n++) out.textContent = "spinning " + n + " of " + innerWidth;
+		if (how === "asks") out.textContent = "answered " + confirm("busy?");
+		else out.textContent = "ended";`, 1)
+}
+
+func TestAPageThatIsSlowWhileAllOfItIsUnderWayGoesOnOrEndsWhole(t *testing.T) {
+	if slowBusyPage() == busyPage {
+		t.Fatal("the busy page has no question to replace")
+	}
+	srv, _ := answers(t, map[string]answer{
+		"/":       typed("text/html", slowBusyPage()),
+		"/data":   typed("text/plain", "data"),
+		"/mod.js": typed("text/javascript", `export const made = 1;`),
+		"/inner": typed("text/html", `<script>parent.postMessage("ping", "*");
+			addEventListener("message", () => parent.postMessage("ping", "*"));</script>`),
+		"/other": typed("text/html", `<title>Other</title><p>other</p>`),
+	})
+	s := showWith(t, Options{Downloads: t.TempDir(), Patient: true, Patience: hasty()})
+	s.visit(srv.URL + "/other")
+	for range 5 {
+		s.frame()
+	}
+	engines := script.Live()
+	slow := func(of *shown, what string) {
+		t.Helper()
+		of.until(what+" is told slow", func() bool {
+			late, told := of.session().scripts.rt.Slow()
+			return of.doc.ByID("slow") != nil && late && told && strings.HasPrefix(of.pageText("out"), "spinning ")
+		})
+		if waiting() == 0 {
+			t.Fatalf("%s shows a bar no script runs behind", what)
+		}
+	}
+	wentOn := func(what string) {
+		t.Helper()
+		var before []int
+		s.until(what+": everything went on", func() bool {
+			got, err := s.session().scripts.rt.Evaluate(`Object.values(seen).join()`)
+			if err != nil {
+				return false
+			}
+			var counts []int
+			for _, n := range strings.Split(strings.Trim(got, `"`), ",") {
+				count, _ := strconv.Atoi(n)
+				counts = append(counts, count)
+			}
+			if before == nil {
+				before = counts
+			}
+			for k, count := range counts {
+				if count <= before[k]+1 {
+					return false
+				}
+			}
+			return true
+		})
+	}
+	for i := range 50 {
+		what := fmt.Sprintf("round %d", i)
+		at := func(how string) string { return srv.URL + "/?" + how + "-" + strconv.Itoa(i) }
+		switch i % 7 {
+		case 0:
+			s.visit(at("ends"))
+			slow(s, what)
+			s.click("slow-wait")
+			s.until(what+": the script ended", func() bool { return s.pageText("out") == "ended" })
+			wentOn(what)
+		case 1:
+			s.visit(at("spins"))
+			slow(s, what)
+			s.click("slow-stop")
+			wentOn(what)
+			if !s.consoleSays(console.Error, script.ErrInterrupted.Error()) {
+				t.Fatalf("%s: the console says nothing of the stopped script\n%s", what, s.said())
+			}
+		case 2:
+			s.visit(at("spins"))
+			slow(s, what)
+			s.Open(srv.URL + "/other")
+		case 3:
+			s.browser.Open(at("spins"))
+			s.show()
+			s.until(what+": the tab's page runs", func() bool { return s.session().scripts != nil })
+			slow(s, what)
+			s.closeTab(1)
+		case 4:
+			s.newWindow(at("spins"))
+			s.frame()
+			other := s.window(1)
+			other.until(what+": the window's page runs", func() bool { return other.session().scripts != nil })
+			slow(other, what)
+			other.closeWindow()
+		case 5:
+			s.visit(at("spins"))
+			slow(s, what)
+			s.reloadOrStop()
+			s.until(what+": the page was loaded again", func() bool { return s.doc.ByID("slow") == nil })
+			slow(s, what)
+			s.press(input.KeyTab)
+			s.press(input.KeyEnter)
+			wentOn(what)
+		case 6:
+			s.visit(at("asks"))
+			s.until(what+" asked", func() bool { return s.doc.ByID("asking") != nil })
+			if late, _ := s.session().scripts.rt.Slow(); late || s.doc.ByID("slow") != nil {
+				t.Fatalf("%s: a script that waits for an answer is told slow", what)
+			}
+			s.click("asking-ok")
+			s.until(what+": the script went on", func() bool { return s.pageText("out") == "answered true" })
+			wentOn(what)
+		}
+		s.visit(srv.URL + "/other")
+		if s.doc.ByID("slow") != nil || s.doc.ByID("asking") != nil {
+			t.Fatalf("%s leaves a bar or a dialog", what)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for (waiting() > 0 || script.Live() > engines) && time.Now().Before(deadline) {
+		s.frame()
+		time.Sleep(5 * time.Millisecond)
+	}
+	if waiting() > 0 || script.Live() > engines {
+		t.Fatalf("after fifty pages that were slow %d of their scripts still run and %d engines are left of %d",
+			waiting(), script.Live(), engines)
 	}
 }

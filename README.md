@@ -26,6 +26,8 @@ It is a demo, not a browser to live in: see [what it does not do](#what-it-does-
 - 🪟 **Windows**: Shift+click on a link or Cmd+N opens another window, with its own tabs; they share the settings,
   the history, the cookies and the downloads, and light ends with the last one.
 - 🧭 **Navigation**: back, forward, reload and stop, an address field, a list of the open tabs, favicons.
+- 🔎 **Search**: words typed in the address field go to DuckDuckGo, on Enter and not before
+  ([below](#the-address-field-and-search)).
 - 🌐 **Real pages**: an `http` or `https` address is fetched with its stylesheets, pictures and fonts, through its redirects.
 - 🪟 **Frames**: an `iframe` shows its document, another site's included, in the page: its `src` or its `srcdoc`,
   its own sheets, pictures, links and forms. A document that refuses to be framed is not shown, and a frame gets
@@ -36,7 +38,7 @@ It is a demo, not a browser to live in: see [what it does not do](#what-it-does-
 - ⬇️ **Downloads**: a button in the navigation row with the progress and the latest files, and `light://downloads`
   with all of them: open, show in folder, cancel, retry, remove. A link with `download`, "Save link as…",
   "Save image as…" and "Save page as…" go the same way.
-- ⚙️ **Settings**: `light://config` sets the start page, the dark mode, the downloads folder, the history, the zoom,
+- ⚙️ **Settings**: `light://config` sets the start page, the search engine, the dark mode, the downloads folder, the history, the zoom,
   pictures, timeouts, redirects and the User-Agent. They apply at once and are kept between runs.
 - 🌙 **Dark mode**: light's own pages on black, the logo's navy and white swapped, and "light" struck through. A
   click on the start page's logo switches it; pages of the web stay as their sites made them.
@@ -64,6 +66,34 @@ It is a demo, not a browser to live in: see [what it does not do](#what-it-does-
 | <img src=".github/readme/settings.png" width="400" alt="The settings page: the start page, the downloads folder, the history, the zoom"> | <img src=".github/readme/downloads.png" width="400" alt="The downloads page: one file failed, one done, one in progress"> |
 | <img src=".github/readme/history.png" width="400" alt="The history page: visits of a day, newest first"> | <img src=".github/readme/context-menu.png" width="400" alt="The menu of a right click on a link"> |
 | <img src=".github/readme/view-source.png" width="400" alt="The source of a page, its lines numbered"> | <img src=".github/readme/picture.png" width="400" alt="A JPEG shown alone on a dark page"> |
+
+## Install
+
+Each [release](https://github.com/lantervale/light/releases) has one archive per system, holding light, the
+wgpu-native library it draws with and their licences:
+
+| System | Archive | JavaScript |
+|---|---|---|
+| macOS 13 or later, Apple silicon | `light_<version>_darwin_arm64.zip` | yes |
+| macOS 13 or later, Intel | `light_<version>_darwin_amd64.zip` | yes |
+| Linux, x86-64 (glibc 2.35 or later) | `light_<version>_linux_amd64.tar.gz` | yes |
+| Linux, arm64 (glibc 2.35 or later) | `light_<version>_linux_arm64.tar.gz` | yes |
+| Windows 10 or later, x86-64 | `light_<version>_windows_amd64.zip` | no |
+
+- **macOS**: unzip and move `light.app` to Applications. The app is signed ad hoc and not notarized by Apple, so
+  macOS refuses its first launch ("Apple could not verify…"): open System Settings → Privacy & Security and choose
+  **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/light.app` once. From a terminal, light is
+  `/Applications/light.app/Contents/MacOS/light`.
+- **Linux**: unpack and run `./light` from its folder, where `libwgpu_native.so` must stay beside it. It needs a
+  Vulkan driver with the Vulkan loader, X11 (or XWayland) and ALSA; on Debian and Ubuntu:
+  `sudo apt install libvulkan1 libx11-6 libxrandr2 libxinerama1 libxcursor1 libxi6 libxxf86vm1 libasound2`.
+- **Windows**: unzip and run `light.exe`, which must stay beside `wgpu_native.dll`. This build has no JavaScript
+  engine: pages show without their scripts, and `light://config` says so. It opens no console, so `light --version`
+  prints nothing there.
+
+`light_<version>-checksums.txt` lists the SHA-256 of every file of the release; it is signed with
+[cosign](https://github.com/sigstore/cosign) (`.sigstore.json` beside it), and each archive has its SBOM
+(`.sbom.json`).
 
 ## Get started
 
@@ -110,6 +140,88 @@ Without the tag, or on Windows, light builds as before and `light://config` says
 
 > ⚠️ light does not build against ember's `main` yet: it uses parts of ember's ui that have not landed there
 > so far. Until they do, `go.mod` pins an older commit and the steps above fail at the build.
+
+## The address field and search
+
+What is typed in the address field, in the start page's field or after `light` on the command line is read the
+same way (`pkg/tabs`):
+
+| Typed | Opened |
+|-------|--------|
+| An address with its scheme (`https://…`, `light://…`), `about:blank` | As it is |
+| `view-source:` and any of the rest | The source of what the rest opens |
+| `localhost`, a name ending in `.localhost`, an IP address (`127.0.0.1`, `[::1]`), with a port and a path or not | `http://` and what was typed |
+| A host name with a dot and no space (`example.com`, `example.com:8080/path`, `example.com.`) | `https://` and what was typed |
+| Anything else: a word, several, a name with a space after it (`foo.bar baz`) | A search for it |
+
+A search goes to the engine the [settings](#settings) name. **DuckDuckGo** is the default; the other choice is
+light's own pages (`light://search?q=…`, which stays an address whatever the engine). The table of engines is
+`pkg/search`, a row each.
+
+- Nothing leaves light while you type: no suggestions, no page fetched ahead. The words are sent on Enter.
+- The request is a navigation like any address typed, with the headers of [any other](#what-light-tells-a-site):
+  `https://duckduckgo.com/?q=` and the words, with no other parameter and no identifier of light's.
+- Where no script runs (a build without the `v8` tag, or JavaScript off in the settings), DuckDuckGo is asked for
+  the page it has for such browsers, `https://html.duckduckgo.com/html/?q=`, which light shows with its results.
+- The engine's mark stands in the address field while words are typed, in the start page's field and beside the
+  choice in the settings: the icon of the engine's site, kept from a page of it shown in this run, and a magnifier
+  until then. Nothing is fetched for it, and light ships no logo of DuckDuckGo's. light's own pages show light's.
+- With text selected, the right click's menu has "Search DuckDuckGo for “…”", which opens the results in a tab of
+  their own.
+- A word alone is a search, so a host of your network without a dot wants its scheme: `http://nas/`.
+
+## Loading a page
+
+A tab that shows a page keeps showing it while the next one loads: no empty page comes between the two.
+
+- **What is held.** A link, the address field, a form, a script's move, Back and Forward to a page light
+  fetches again, and Reload leave the page shown as it is, alive: it scrolls, its links and its scripts work, its
+  timers run. The next page takes its place in one frame, with its own background, once light has it ready:
+  fetched, parsed, its sheets and scripts fetched and its document built. That moment is when the tab *moves*:
+  its history, its title, its icon, the visit in light's history and what `history.length` says change then, not
+  before. A page of light's own and a page the tab already has show at once, as before.
+- **What a browser does that light does not.** A browser moves at the answer's first bytes and draws the page
+  as it comes. light moves when the whole document is built, so the page held is held for the whole load.
+- **What you see.** At once: a line across the top of the page that fills as the load goes (asked, sent,
+  answered, received, parsed, sheets and scripts fetched, built), a spinner in the tab in place of its icon, Stop
+  in place of Reload, and "Waiting for *host*…" in the status bubble. After 4 seconds the page held is dimmed,
+  and is still the page: it scrolls and its links work. When the load fails, the page that says why takes the
+  tab, at the address that failed. Stop, or Escape, gives the move up: the tab stays on the page it shows, at
+  its address, and nothing is added to its history. A second move while the first is waited for takes its place,
+  and the first's requests are cancelled. An answer with nothing to show (204) and a download leave the tab
+  where it is.
+- **The address field while a page is waited for.** A move *you* asked for (the address field, a page of
+  light's, Back, Forward, Reload) is named there at once, in italics, with the neutral mark in place of the
+  lock: the address is where the tab is going, and the page under it is not that address's page. A move *the
+  page* asked for (a link, a form, a script) is not named until its page shows: a page cannot have its own
+  content read under an address it sent the tab to. Once a page shows, the address and the lock are its own,
+  always.
+- **Where there is no page to hold** (a new tab opened on an address, a tab's first load): the page area is
+  light's own surface, light or dark as the settings say, with the same line and spinner; Stop then leaves the
+  page that says the load was stopped.
+- **Frames** hold too: an `iframe` shows its document until the next one is ready.
+- **WebDriver** waits for the move as before; while it is waited for, the session's address and title are
+  those of the page shown.
+- **Timing.** light keeps when each step of a page's load ended, since the page was asked for: `asked` (the
+  request given to the client), `connected`, `sent`, `answered` (the first byte), `received`, `parsed`,
+  `gathered` (its sheets and scripts fetched), `built` (its document built), `shown` (the tab took it), `drawn`
+  (the start of the frame after the one that first drew it) and `loaded` (its scripts told of `load`). The
+  developer tools list them under the request of the page, in the Network tab's details, and
+  `LIGHT_TIMING=1` prints them on the standard error once the page is drawn. Scripts are not told:
+  `performance.getEntriesByType("navigation")` is empty.
+- **Each request** is timed too. The details of a request, in the Network tab, say under "Connection" whether
+  it went through a new connection or one used before, by which protocol (HTTP/1.1, HTTP/2.0), how long after
+  the page's own request it was asked, and how long it waited for a connection, looked the name up, connected
+  (and of that, the TLS handshake), sent, waited for the first byte and received. `LIGHT_TIMING=1` prints a
+  `light: request:` line for each as it ends, with when it was asked against the end of the page's parse.
+- **Connections.** A page's sheets, scripts, pictures and fonts go through the connection its document came
+  through when the server keeps it, and HTTP/2 is spoken wherever the server offers it, every request of a
+  host in one connection. Over HTTP/1.1 light opens six connections to a host at most and keeps them for the
+  next requests, as browsers do. The sheets and scripts of a page are asked for together, 32 at once at most,
+  as soon as the page is parsed; sheets apply and scripts run in the page's order whatever order they arrive
+  in. Connections are not kept apart by the site of the tab: a host two sites both ask is asked through one
+  connection (a third party still gets no cookie unless the settings allow it). light has no HTTP cache: every load asks
+  for everything again.
 
 ## Shortcuts
 
@@ -266,6 +378,7 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 | Setting | Default | Overridden by |
 |---------|---------|---------------|
 | Start page (a new tab, the home button) | `light://home` | The address argument, at launch only |
+| Search engine (where words typed in the address field go: DuckDuckGo, or light's own pages) | DuckDuckGo | |
 | Dark mode (light's own pages; a click on the start page's logo switches it too) | Off | |
 | Downloads folder | The system's (`~/Downloads`) | `--downloads`, `LIGHT_DOWNLOADS` |
 | Keep the pages visited | On | |
@@ -286,7 +399,7 @@ bounds, or a file that does not read, falls back to the default, setting by sett
 | Requests kept in each tab's Network panel (100 to 10,000) | 1,000 | |
 
 Pictures, JavaScript and refreshes apply to pages loaded afterwards; frames are loaded, or emptied, at once. The page also clears the history, clears the cookies and resets every setting.
-`--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line.
+`--dir` (or `LIGHT_DIR`) names the folder the settings are kept in (see [below](#where-things-are-kept)); `light --help` lists the command line: `light [address]` (or `light browse [address]`) is the browser, `light drive` the one a test runner drives over [WebDriver](#webdriver).
 
 ## What light tells a site
 
@@ -316,7 +429,7 @@ Scripts read the same: `navigator.userAgent`, `appVersion` (the User-Agent after
 `pdfViewerEnabled` and `javaEnabled()` false, `maxTouchPoints` 0, `doNotTrack` null, `onLine` always true. There is no
 `deviceMemory`. `navigator.webdriver` is true when light is driven by something else than a person at its window:
 ember's automation server (`EMBER_AUTOMATION`), a capture with its scripted input (`EMBER_CAPTURE…`), a hidden
-window (`EMBER_HIDDEN`) or WebDriver (`--webdriver`).
+window (`EMBER_HIDDEN`) or WebDriver (`light drive`).
 
 light is not told its monitor's size, so `screen.width`, `height`, `availWidth` and `availHeight` are the window's,
 as `outerWidth` and `outerHeight`; `screenX` and `screenY` are where the window is, `innerWidth` and `innerHeight`
@@ -416,10 +529,27 @@ of different origins share no object: what one knows of the other goes through l
   `document.domain`. A window is the same object whatever its frame shows: it reaches the document while that is
   kin, and is the window above from the moment it is not.
 - **What differs from a browser between kin** (deviations):
-  - A node belongs to its document: `appendChild`, `insertBefore`, `adoptNode`, `importNode` and the like throw a
-    `TypeError` for a node of another document (in a browser the node moves, or is copied).
+  - A node goes from one kin's document to another's as in a browser: `appendChild`, `insertBefore`,
+    `replaceChild`, `append` and their like and `adoptNode` move it, `importNode` and `cloneNode` copy it. The
+    node is the same object in both, of the document that made it (its prototype, listeners and own properties
+    stay), `ownerDocument` is the new document, and the new document shows it, styles it, runs a script in it
+    that never ran, loads an `iframe` in it again and finds a control's form. Mutation observers of both
+    documents hear of it. What does not follow a node across:
+    - what ui held of it and no attribute says (a value typed, a scroll position, focus, the selection);
+    - a `Range`, a `NodeIterator` or a live selection, which stay with the document they were made in;
+    - custom element reactions of the document it left; an element parsed into a node that crossed is not
+      upgraded by the registry of the document that now has it;
+    - an `iframe` element that crossed gives a `contentWindow` that is not `===` the `frames[n]` of its new
+      document, though both reach the same window;
+    - an event sent on a node that crossed bubbles to the window of the document that has it, but
+      `event.view`, `baseURI` and what else a node reads from "its" window are of the document that made it.
+  - `instanceof` is true for a node or an event of a kin against the interface of the same name (`node
+    instanceof Node` for a node of a frame), once one document has reached into another: a browser answers
+    false across windows. `Object.getPrototypeOf` tells them apart as in a browser.
   - What a script still holds of a document its frame left (the document, its nodes, its functions) throws when
-    it is used, or answers what it last knew; a browser keeps such a document alive.
+    it is used, or answers what it last knew; a browser keeps such a document alive. A node that document made
+    and another keeps is a new object the next time the keeper reaches it (its listeners are gone); a node
+    another document made and put in it is still that document's to read and change, out of any page.
   - `frame.contentWindow.eval(…)` answers `undefined` and `new frame.contentWindow.Function(…)` makes nothing:
     V8 lets no document compile code in another's globals. A function the other document defined is called as
     any.
@@ -444,15 +574,20 @@ of different origins share no object: what one knows of the other goes through l
     `submit()`, a function of its own that navigates) is checked against the document whose script was entered
     as well as the one that navigates, and refused if either may not: a sibling is never sent anywhere from a
     sandbox, the tab only with `allow-top-navigation` (or `-by-user-activation` on a click), a form only with
-    `allow-forms`. V8 does not tell light the incumbent, so this is the entered document: a function a sandboxed
-    frame hands its kin to call later (`w.setTimeout(fn)`) navigates as the kin, which a browser would refuse,
-    and a kin's own function that navigates itself when a sandboxed frame calls it is refused, which a browser
-    would allow.
+    `allow-forms`. V8 does not tell light the incumbent, so this is the entered document. What a sandboxed frame
+    has its kin run later is therefore run as the kin's: a function it hands `w.setTimeout` is still refused
+    what it sends through its own view of the windows (`w.location = …`), but what it sends through the kin's
+    document (`w.document.location.href = …`) goes where the kin may, and so does source it hands the kin to
+    compile (`w.setTimeout("location = …")`). A browser refuses those. A kin's own function that navigates
+    itself when a sandboxed frame calls it is refused, which a browser would allow.
+  - **`w.eval(source)` and `new w.Function(source)` between kin run nothing**: V8 compiles no source of one
+    context for a script of another unless they share a security token, which the binding does not set.
+    `eval` gives `undefined`, `Function` throws. A timer's source (`w.setTimeout("…")`) runs.
   - **Dialogs**: `w.alert()` called by a script of a sandboxed frame without `allow-modals` on its kin's window
     is refused (stricter than the standard, which asks the window's own document only).
   - Downloads, popups and pointer lock are asked of the document that holds the link or the form, as the
     standard has it. `window.open` opens nothing in light, for anyone.
-  - Kin share their engine's memory limit and its two seconds: see the failures below.
+  - Kin share their engine's memory limit and its clock for a script that runs long: see the failures below.
 - **`postMessage`** between frames copies the message in the sender (light's structured clone), carries it as
   text through Go and builds it again from the receiver's own objects. `event.origin` and `event.source` are set
   by light. `targetOrigin` (`*`, `/`, or an origin) is checked when the message comes, against the origin of the
@@ -496,10 +631,11 @@ of different origins share no object: what one knows of the other goes through l
   and takes nothing, `localStorage` throws a `SecurityError`. IndexedDB databases are kept apart the same way,
   by the same keys: `indexedDB.open` throws a `SecurityError` in a sandboxed frame with no origin.
 - **Failures stay in their frame**: an error a frame's script does not catch is a line of the Console, and the
-  other documents go on. A script that never ends is stopped after its two seconds, as a page's is; the window
-  waits meanwhile, since the documents of a window run one after the other, and the others then go on. Between
-  kin the two seconds are those of the script that was started, whichever document's function spins: the Console
-  line ("ran too long") names the document whose script it was, and the timers of them all go on after. Kin
+  other documents go on. A script that never ends is a [slow script](#a-page-that-is-slow) as a page's is: a
+  person's light asks whether to wait for it or stop it, a hidden or a driven one stops it at its budget. The
+  other documents of its tab wait meanwhile, since they run one after the other, and then go on. Between kin
+  the time counted is that of the script that was started, whichever document's function spins: the bar and the
+  Console line ("ran too long") name the document whose script it was, and the timers of them all go on after. Kin
   share their engine's memory limit, one document's worth for them all. A frame whose drawing breaks light is
   emptied and its scripts closed.
 - **Dialogs** (`alert`, `confirm`, `prompt`): the script that asks holds its engine, so nothing of its kin runs
@@ -534,7 +670,7 @@ Built with the engine, `alert`, `confirm` and `prompt` show a dialog named after
 embedded page at site.test says" for a frame), with the message as plain text (its first 2,000 characters, scrolled
 past a few lines), a field holding the default for a `prompt`, OK and, but for an `alert`, Cancel. Enter is OK,
 Escape is Cancel, and the script that asked waits for the answer: `confirm` gives true or false, `prompt` the text
-or null. The time a dialog stays open is none of the script's two seconds.
+or null. The time a dialog stays open is not counted as the script's ([a page that is slow](#a-page-that-is-slow)).
 
 - The dialog is its tab's. A tab behind that asks waits, its name in italics, and shows its dialog when it is
   selected; its dialog never shows over another tab. While a tab's dialog shows, the whole window waits for it,
@@ -543,7 +679,7 @@ or null. The time a dialog stays open is none of the script's two seconds.
   its frames wait and run after the answer, in their order; a click on the page is dropped.
 - From its second question on, a page's dialog has a box "Stop this page from asking again". Once ticked, the
   page's calls return at once as if cancelled, each with a line in the Console, until another page is shown in the
-  tab; a script that loops on `alert` is then stopped by the two seconds as any other.
+  tab; a script that loops on `alert` is then a slow script as any other (below).
 - A frame of the page's own origin asks as the page does. A frame of another origin, or sandboxed, asks nothing:
   the call returns as cancelled, with a line in the Console (a sandboxed one needs `allow-modals` and the page's
   origin, which a sandbox without `allow-same-origin` takes away).
@@ -552,6 +688,44 @@ or null. The time a dialog stays open is none of the script's two seconds.
 - light fires no `beforeunload`, `unload` or `pagehide`, so there is no "Leave this page?" prompt and no call to
   ignore during them.
 - Without the engine no script runs, so nothing asks.
+
+### A page that is slow
+
+A script that runs long is not stopped behind your back. After one second the window goes on without it: the
+header, the other tabs and the other windows answer, the page is drawn as the script leaves it, and the Console
+says so once ("A script of this page has run for 1s and still runs"). After five seconds a bar under the header
+says which document is slow ("site.test is slow", "An embedded page at site.test is slow" for a frame's script)
+with two buttons, and the tab's name goes italic:
+
+- **Wait** hides the bar and leaves the script alone for ten more seconds, then asks again, as often as it takes.
+  Wait holds the focus when the bar shows, so Enter waits and Tab then Enter stops, unless a text is being typed
+  somewhere in the window (the address, a field of the page, a field of the developer tools): the bar then takes
+  no focus, and Tab reaches it from there.
+- **Stop it** ends that script, with the Console's "ran too long" line. The page stays, and its next timers,
+  events and messages run. There is no choice to stop every script of the page.
+
+While the script runs:
+
+- Nothing else of its tab runs, as while a page asks: timers, events, messages, fetches and database requests that
+  complete wait, and run after it in their order. A click or a key for the page waits too, and is heard once the
+  script ended or was stopped. An expression typed in the Console is refused ("a script of the page is still
+  running").
+- The script's own calls of the browser and of the page are served for 8 ms of each frame. A script that only
+  computes runs at full speed; one that writes to the page all the while runs at about half speed once the window
+  goes on (measured: 104,000 operations in 4 s against 170,000 with the window waiting).
+- A question it asks (`alert`…) shows as any other, and the time the dialog is open is not counted.
+- The bar is its tab's. In a tab behind, the script goes on computing but waits at its next call of the page until
+  the tab is shown again; the tab's name is italic meanwhile, and the bar shows when the tab is selected.
+- A script light has to run while it answers another script's call cannot be left to run: it is stopped at five
+  seconds.
+- Leaving the page, reloading it, closing its tab or its window ends the script, with no line in the Console.
+
+Other browsers hold the page's last picture and drop nothing of what you click meanwhile; light shows the page
+as the script writes it. The times (1 s, 5 s, 10 s) are not settings.
+
+A light nobody sits at asks nobody: hidden, capturing, driven by ember's automation or by `light drive`, it stops
+a script at its budget, 2 seconds, or what `--script-budget` gives a `light drive`, with the Console's "ran too
+long" line.
 
 ## Downloads
 
@@ -564,6 +738,51 @@ or null. The time a dialog stays open is none of the script's two seconds.
 - There is no size cap, no pause and no resume: a download that failed is fetched again from its start by "Retry".
 - A navigation that turns out to be a download is fetched twice: once to learn its kind, once to save it.
 - The list is kept between runs, 500 entries at most. A download that a quit interrupted shows as failed.
+
+## A model on this device
+
+light can run a small language model on your machine, for what later versions build on it. It is **off** unless
+you turn it on, and until then nothing of it is downloaded, started or written. No page of light uses it yet, and
+`light://config` does not show its settings: they are in `config.json`.
+
+| Setting (`config.json`) | Default | |
+|---------|---------|---|
+| `model` | `false` | Whether the model is on |
+| `model_id` | `""` | One of the models light knows, by its id; none is the one light proposes for this machine's memory |
+| `model_file` | `""` | A GGUF file of your own in its place, by its whole path (ignored when `model_id` is set) |
+| `model_threads` | `0` | The threads it computes on (up to 64); 0 is half the fast cores, at least 2, at most 8 |
+| `model_cpu` | `false` | Leave the graphics card out of it |
+
+- **What runs where.** The model runs in a program of its own, `light-model`, which light starts beside itself the
+  first time something asks, and stops after five minutes without a request, when the model is turned off or changed,
+  and when light quits. It is [llama.cpp](https://github.com/ggml-org/llama.cpp) loaded through
+  [yzma](https://github.com/hybridgroup/yzma). light speaks to it over its standard input and output only: it listens
+  on no port, opens no connection, reads the library and the model light names and nothing else, and is given none
+  of light's environment. A page's text is only ever the model's input. Nothing you ask it leaves the machine.
+- **What is downloaded, from where and when.** Only once the model is on and you accept the model light proposes
+  (or choose another of its list): the llama.cpp libraries for your system from the project's own release on
+  `github.com/ggml-org/llama.cpp` (13 to 25 MB), and the model from its publisher's repository on `huggingface.co`
+  (1.1 GB for the one proposed, Qwen2.5 1.5B Instruct, Apache-2.0). Both are asked over https with no cookie, a
+  download goes on from where it stopped, and a file is used only once its size and SHA-256 are the ones this
+  version of light was built with (`pkg/model/manifest.json`). An archive is unpacked keeping only its libraries
+  and licence. light downloads no model from an address of your own.
+- **A model of your own.** `model_file` names a GGUF file already on your machine. light reads what it is, refuses
+  one that does not load or has no chat template, saying why, notes its SHA-256 so that a changed file is read
+  again, and never copies or deletes it.
+- **What is written.** Everything is in `model/` in [light's folder](#where-things-are-kept): `runtime/` (the
+  libraries), `models/` (the models, each with a note of its digest), `downloads/` (what is still downloading),
+  `own.json` (what your own file is), `cache/` (the helper's home: one small library, libffi, that yzma unpacks
+  there to call llama.cpp) and `helper.log` (what the helper wrote on its error output, never shown to a page). A
+  hidden run not given a folder has no model.
+- **Turning it off and deleting it.** `model: false` stops the helper at once. Deleting the model removes the whole
+  `model/` folder; a model of the list can be deleted alone. A file of your own stays where it is.
+- **For developers.** light looks for `light-model` beside its own executable. `task model:build` builds it into
+  `dist/`, and `LIGHT_MODEL_HELPER=$PWD/dist/light-model` names it to a light run from the sources. `LIGHT_MODEL_DEV` has a development build use a
+  llama.cpp and a model already on the machine, downloading nothing:
+  `LIGHT_MODEL_DEV="library=/opt/homebrew/lib;backends=/opt/homebrew/opt/ggml/libexec;model=/path/to/model.gguf"`
+  (after `brew install llama.cpp`; `embedding=` names an embedding model). A released light ignores both, and a
+  released `light-model` refuses them, as it refuses a llama.cpp from a system folder or of another version than
+  the one light installs.
 
 ## Where things are kept
 
@@ -747,8 +966,8 @@ What does not:
 - **Styles**: the page's `@import` rules are not followed, and a rule ember's ui does not read applies nothing,
   whoever inserted it. A stylesheet moved among the others is read again, and what scripts inserted in it kept.
   `getComputedStyle` answers what ui computed: lengths in px, colours as `rgb()` when they were written in
-  hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element added since
-  the last frame answers little until the next. A rule's `style` is its text read again: no `CSSKeyframeRule`,
+  hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element a script
+  put in the page since then is styled and laid out at once when its style is read. A rule's `style` is its text read again: no `CSSKeyframeRule`,
   no `CSSStyleSheet` of an `@import`, no `ownerRule`.
 - **Messages**: `window.postMessage` reaches the window itself and the windows of the tab's frames
   ([Scripts in frames](#scripts-in-frames)), and a `BroadcastChannel` the other channels of the same document, not
@@ -773,8 +992,15 @@ What does not:
   else, a generated `ns1`, `ns2`… where none does, a default namespace declared again where it changes, an
   element of HTML that holds nothing as `<p></p>` and a void one as `<br />`. What is missing: a doctype's
   internal subset is skipped, so the entities it declares are not known; `xml:space` and the `xml-stylesheet` instruction do nothing; a
-  selector of a name matches no XHTML element whose name has capitals; a page sent as `application/xml` or
-  `text/xml` is still shown as text, and an SVG one as a picture.
+  selector of a name matches no XHTML element whose name has capitals; an SVG document is shown as a picture, and is no document to scripts.
+- **A document of XML that is no page** (`application/xml`, `text/xml`, a `…+xml` type other than XHTML's and
+  SVG's: a feed, a sitemap) is still shown as the text it was sent, in a tab and in a frame. When it is
+  well-formed and scripts run, it is also a document: in a frame, `contentDocument` is its `XMLDocument` for the
+  documents it is kin to (`documentElement`, `contentType`, `createElement` in no namespace, the whole DOM), in a
+  window of its own (`contentWindow`), and the frame's `load` fires as for any. In a tab, the Console's line
+  reads it. What a script changes in it shows nowhere: the text stays as sent. Its own scripts do not run (an
+  XHTML `script` element in it is a node like the others), it has no sheets, and one that is not well-formed is
+  text and no document (`contentDocument` is `null`), where a browser shows the parser's error.
 - **Documents a script makes** are whole: `document.implementation.createHTMLDocument`, `createDocument` and
   `createDocumentType`, `new Document()`, a document's `cloneNode`, `DOMParser` (`text/html` and the four XML
   types, with the `parsererror` document for XML that is not well-formed) and an `XMLHttpRequest`'s
@@ -789,8 +1015,49 @@ What does not:
   page. A document holds what the DOM lets it hold (one element, one doctype before it, no text), and
   `lookupNamespaceURI`, `lookupPrefix` and `isDefaultNamespace` answer from the elements' own namespaces and the
   attributes that declare one. What is missing: what a `template` holds stays the page's; an `iframe`'s
-  `contentDocument` is `null` ([Scripts in frames](#scripts-in-frames)); a `Range`
-  builds markup and little else; `HTMLDocument` is `Document` itself.
+  `contentDocument` is `null` ([Scripts in frames](#scripts-in-frames)); `HTMLDocument` is `Document` itself.
+  `characterSet` (`charset`, `inputEncoding`) is the encoding the page came in, named as the Encoding standard
+  names it; a document a script made is `UTF-8`.
+- **Lists of nodes** are the DOM's own objects and no arrays: a `NodeList` (`childNodes` live, `querySelectorAll`
+  not) and an `HTMLCollection` (`children`, `getElementsBy…`, `forms`, `images`, `links`, `scripts`, `embeds`,
+  `rows`, `cells`, `tBodies`) answer by index and, for a collection, by the `id` then the `name` of its elements
+  (a `name` only on HTML's), with `item`, `namedItem`, iteration, no own `length` and names that do not
+  enumerate. A select's `options` is an `HTMLOptionsCollection` (set by index, `length`, `add`, `remove`), a
+  form's `elements` an `HTMLFormControlsCollection` whose controls of one name are a `RadioNodeList`. A live list
+  is read again from the tree only once the tree has changed.
+- **Ranges and walkers**: `Range` is whole (its ends set and compared, `selectNode`, `compareBoundaryPoints`,
+  `deleteContents`, `extractContents`, `cloneContents`, `insertNode`, `surroundContents`, `isPointInRange`,
+  `comparePoint`, `intersectsNode`, its text) and live: its ends follow every change a script makes to the tree
+  and to text (`splitText`, `normalize`, `replaceData`…). `StaticRange`, `TreeWalker` and `NodeIterator` (moved
+  off a node that leaves, as the DOM says) with any `NodeFilter`. What is missing: a range's rectangles
+  (`getClientRects`, `getBoundingClientRect`) and the selection's ranges (`getRangeAt`, `addRange`): the
+  selection is ember's and is not a script's to set.
+- **Events** go down to their target and back as the DOM orders it (the capturing listeners of the target first),
+  with `composedPath`, `cancelBubble`, `returnValue`, `srcElement`, `window.event`, `once`, `passive`, a `signal`
+  that takes a listener away, `createEvent` with the names the DOM keeps, and `initEvent` and its kin. A click a
+  script sends (`click()`, `dispatchEvent`) acts as the standard says: a checkbox or a radio is set before the
+  listeners run and set back when one cancels it, then tells of its `input` and `change`; a submit button sends
+  its form; a link is followed. The handlers a `body` or a `frameset` is given for the window's events (`onload`,
+  `onresize`, `onblur`…) are the window's. `AbortSignal` has `abort()`, `timeout()`, `any()`, `reason` and
+  `throwIfAborted()`. A listener of `touchstart`, `touchmove`, `wheel` or `mousewheel` on the window, the
+  document, its element or its body is passive unless it says otherwise. What is missing: events of animations and transitions (their
+  handlers are there, prefixed ones included, and hear what a script sends).
+- **Changes told to observers**: a `MutationObserver` hears one record for a child replaced, for a fragment put
+  in and for `replaceChildren`, and follows what left a subtree it watches until it is told; `moveBefore` moves
+  a node within its tree. The root element of the page leaves its document as any node does, and another takes
+  its place.
+- **Selectors** from a script (`querySelector`, `matches`, `closest`) are read as CSS writes them: escapes,
+  namespaces (`*|a`, `|a`), `:is`, `:where`, `:not`, `:has`, the `nth-` family, `:lang()`, `:target`, `:root`,
+  `:empty`, `:scope`, `:link`, `:defined`, and what a control is: `:checked`, `:indeterminate`, `:default`,
+  `:disabled` and `:enabled` (through a `fieldset` and its first `legend`), `:required`, `:optional`,
+  `:read-only`, `:read-write`, `:placeholder-shown`, `:valid`, `:invalid`, `:in-range`, `:out-of-range`. The last
+  four follow the constraint validation API, which is there too (`validity`, `willValidate`, `checkValidity`,
+  `reportValidity`, `setCustomValidity`, `validationMessage`; `reportValidity` shows no bubble). A sheet is
+  matched by ember's ui, which knows fewer of them.
+- **Interfaces** are shaped as their IDL says: one table generated from the DOM standard's IDL
+  (`tools/wpt/idl.py` writes `internal/dom/js/88-idl.js` from `.wpt/wpt/interfaces/dom.idl`) gives each
+  interface its operations with their number of arguments (fewer is a `TypeError`), enumerable attributes that
+  refuse another object, constants, `Symbol.toStringTag` and `Symbol.unscopables`.
 - **XPath** is XPath 1.0, whole: `document.evaluate`, `createExpression` and `createNSResolver`, `XPathEvaluator`,
   `XPathExpression`, and `XPathResult` in its ten types, with the standard's errors (a `SyntaxError` for what is
   no expression, a `NamespaceError` for a prefix the resolver does not know, a `TypeError` for a result read as
@@ -863,8 +1130,9 @@ What does not:
 - **Scrolling** from a script (`scrollTo`, `scrollX`…), `blur()`, `IntersectionObserver` and `ResizeObserver`
   (each tells once, as if everything were in view), and the observers of performance.
 - **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys.
-- A script that runs longer than 2 seconds is stopped and reported in the Console. A page's timers get 8 ms a
-  frame; what is left waits for the next. A page holds 500,000 nodes at most.
+- A script that runs long is not stopped in a person's light, which [asks](#a-page-that-is-slow); in a hidden or
+  a driven run it is stopped after 2 seconds (`--script-budget` of `light drive`) and reported in the Console. A
+  page's timers get 8 ms a frame; what is left waits for the next. A page holds 500,000 nodes at most.
 - Content security policies are not read: a page's scripts run whatever its policy says.
 - A page with scripts is not kept when the tab leaves it: Back fetches it again. The scripts of a background tab
   wait until it is shown.
@@ -872,12 +1140,17 @@ What does not:
 ## WebDriver
 
 light can be driven by a test runner over [W3C WebDriver](https://www.w3.org/TR/webdriver2/), the protocol the
-web-platform-tests runner speaks. It is off unless asked for:
+web-platform-tests runner speaks. That is a command of its own, `light drive`; a light started any other way
+serves nothing:
 
 ```sh
-task run -- --webdriver 127.0.0.1:4444                  # or LIGHT_WEBDRIVER=127.0.0.1:4444
-EMBER_HIDDEN=1 go run -tags v8 ./cmd/light --webdriver 127.0.0.1:4444   # without a window on screen
+task run -- drive --address 127.0.0.1:4444              # or LIGHT_WEBDRIVER=127.0.0.1:4444 task run -- drive
+EMBER_HIDDEN=1 go run -tags v8 ./cmd/light drive --address 127.0.0.1:4444   # without a window on screen
 ```
+
+The mode is the command: `LIGHT_WEBDRIVER` only names the address of a `light drive`, and a light started without
+that command is a person's browser whatever the variable says. `light drive` takes the options of any light
+(`--dir`, `--downloads`, an address to open) and those below, which no other light takes.
 
 Whoever reaches that port drives the browser, so:
 
@@ -889,6 +1162,11 @@ Whoever reaches that port drives the browser, so:
 - A driven light keeps its settings, history, cookies and what pages store in memory, and touches none of yours,
   unless `--dir` names a folder.
 - `navigator.webdriver` is true for as long as light runs.
+- `light drive` draws the text of pages at its exact coverage, as under `-webkit-font-smoothing: antialiased`,
+  without the stem darkening a person's light draws it with: reference tests compare pictures pixel by pixel, and a
+  darkened glyph is wider than the box it is compared with. A page that sets the property itself keeps its own, and
+  light's own header and tools are drawn as ever. A hidden run or a capture of a light that browses draws its pages
+  as a person's window does.
 - A navigation asked over WebDriver is an address typed: `Sec-Fetch-Site: none`, `Sec-Fetch-User: ?1`, no `Referer`,
   and it may reach this machine and the local network as you may.
 
@@ -914,7 +1192,7 @@ actions and screenshots work.
 | Is Element Displayed | In part: false under `display: none`, `hidden`, or with `visibility: hidden`; no check of size, opacity or what covers it. |
 | Element Click | The element is scrolled into view and the window's own pointer presses its middle; a navigation the click begins is waited for. No check that something else is over it. |
 | Element Clear, Element Send Keys | Yes, through the window's keyboard, so the page hears its events. Clear selects the field's text and deletes it. No file upload. |
-| Execute Script, Execute Async Script | With the engine. Arguments and results as the standard copies them (elements as references, collections as lists, `undefined` as null), a promise returned awaited, a throw or a rejection `javascript error` with its message and stack, `script timeout` after the session's. A run without a pause is also stopped by the engine's own two seconds. An async script goes on across frames of light, not across a navigation of its own document. |
+| Execute Script, Execute Async Script | With the engine. Arguments and results as the standard copies them (elements as references, collections as lists, `undefined` as null), a promise returned awaited, a throw or a rejection `javascript error` with its message and stack, `script timeout` after the session's. A run without a pause is also stopped at the script budget (2 seconds, or `--script-budget`). An async script goes on across frames of light, not across a navigation of its own document. |
 | Get All Cookies, Get Named Cookie, Add Cookie, Delete Cookie, Delete All Cookies | Yes, over the profile's one jar, for the address of the session's page. A cookie the jar's rules refuse is `unable to set cookie`. |
 | Perform Actions, Release Actions | `key`, `pointer` (mouse; move to the view, the pointer or an element, down, up) and `pause`, tick by tick through the window's input; `wheel` scrolls by notches of 40 pixels, approximately. Touch and pen pointers act as the mouse. A move is one jump, whatever its duration. |
 | Dismiss Alert, Accept Alert, Get and Send Alert Text | Yes, with the engine, over the dialog the session's window shows (see "What a page asks"); `no such alert` with none, `element not interactable` for a text sent to an `alert` or a `confirm`. A script run by Execute Script that opens one is answered null at once and goes on when the prompt is answered. Any other command that meets an open prompt handles it as `unhandledPromptBehavior` says (`dismiss and notify` by default, `dismiss`, `accept`, `accept and notify`, `ignore`), failing with `unexpected alert open` and the prompt's text in `data.text` where it notifies; Status, the session, timeouts and window commands leave it alone. |
@@ -925,7 +1203,7 @@ actions and screenshots work.
 
 With a window on screen, your own mouse and keys reach the page too.
 
-Three more options are a test runner's, and are refused without `--webdriver`:
+Three more options are a test runner's, so they are `light drive`'s alone and unknown to a light that browses:
 
 - `--host-map "web-platform.test=127.0.0.1;not-web-platform.test=127.0.0.1"`: names, and every name under them,
   that light finds at an address of this machine, where it dials. The system's hosts file is not read for them and
@@ -933,14 +1211,17 @@ Three more options are a test runner's, and are refused without `--webdriver`:
   it looks at the address a name was dialled at, so a page of the Internet still does not reach a mapped name.
 - `--trust-ca FILE`: a certificate authority (PEM) trusted beside the system's, by this run's requests only. Every
   certificate is still checked, against its name and its dates; nothing is added to the system's trust store.
-- `--script-budget DURATION` (`10s`): how long one script of a page may run before light stops it, in place of the
-  two seconds of every page. A test is one long task more often than a page is; nothing changes for a light
-  nothing drives.
+- `--script-budget DURATION` (`10s`): how long one script of a page may run before light stops it, in place of 2
+  seconds. A test is one long task more often than a page is. A driven light always stops a script at this
+  budget, without asking; a person's light [asks instead](#a-page-that-is-slow).
 
 ## Web platform tests
 
-`task wpt` runs a small subset of the [web-platform-tests](https://web-platform-tests.org) against light, with
-their own runner (`wpt run`) driving light over WebDriver:
+`task wpt` runs a subset of the [web-platform-tests](https://web-platform-tests.org) against light, with
+their own runner (`wpt run`) driving light over WebDriver. The subset (`tools/wpt/subset.txt`) is a few tests of
+`url`, `html` and `css`, and the whole of `dom/` but the tests that need what light does not have (workers,
+shadow trees, custom elements, `Observable`, `OpaqueRange`, scrolling by script, touch and wheel input over
+WebDriver): the file names each test left out under its reason.
 
 ```sh
 task wpt                                          # the tests of tools/wpt/subset.txt
@@ -965,9 +1246,9 @@ the light it builds):
   as it was fetched.
 
 The tests' servers listen on this machine only, under the names `web-platform.test` and `not-web-platform.test`:
-the product starts light with `--host-map` for them and `--trust-ca` for the authority of the tests' certificates
-(`.wpt/wpt/tools/certs/cacert.pem`), so neither `/etc/hosts` nor the keychain is changed. `wpt run` refuses a
-product it does not know until `/etc/hosts` names its servers; the product skips that one check for light.
+the product starts `light drive` with `--host-map` for them and `--trust-ca` for the authority of the tests'
+certificates (`.wpt/wpt/tools/certs/cacert.pem`), so neither `/etc/hosts` nor the keychain is changed. `wpt run`
+refuses a product it does not know until `/etc/hosts` names its servers; the product skips that one check for light.
 
 To move to a newer commit, write it in `wpt.lock`; `rm -rf .wpt` removes everything.
 
@@ -989,11 +1270,14 @@ wrapped in another (`pkg/cookies`) that adds the cookies of the one jar and take
 hops each on their own. A request's context says which page it is for (`cookies.Within`), or which page a
 navigation began on (`cookies.From`): that is how a third party and a cross-site request are known. Under them
 all, `pkg/localnet` opens the connections of a page's requests (`localnet.From`) only to addresses the page may
-reach.
+reach: the pages that came from the Internet share one pool of connections, which open only to the Internet, and
+those of the local network another. A request of the user's own (an address typed) may reach every address, and
+goes through the most public of those pools that reaches where it goes, so that the page it brings asks through
+the connection it opened; a connection to this machine is never in a pool a page of the web asks through.
 
 | Package | What it holds |
 |---------|---------------|
-| `cmd/light` | The entry: the profile, the first window, the folders and their overrides, the World. |
+| `cmd/light` | The entry: the command line (`main.go`), the options its commands share (`globals`: the folders and their overrides) and the commands (`commands`: `browse`, the default, and `drive`), which make the profile, the first window and the World. |
 | `light` (the root) | The logo, embedded. |
 | `internal/app` | The profile the windows share (settings, history, cookies, downloads, the files kept) and each window's screen: header, navigation, status bubble, light's own pages, the pages of the other kinds, the history, downloads and settings pages, the context menu, shortcuts. |
 | `internal/web` | An address turned into a page: the answer read by its kind, HTML built as a ui Document, and every adaptation made to it. |
@@ -1005,6 +1289,7 @@ reach.
 | `pkg/history` | Plain Go: the visits, by day, filtered, capped, and their file. |
 | `pkg/downloads` | Plain Go: the downloads, each one's state and progress, free file names, partial files. |
 | `pkg/config` | Plain Go: the settings, their defaults and bounds, and their file. |
+| `pkg/search` | Plain Go: the search engines, one row each, and the address of what one finds. |
 | `pkg/content` | Plain Go: which kind of answer a media type is (one table), file names for saving. |
 | `pkg/fetch` | Plain Go: one GET with redirects, limits, charset and the Refresh header, read whole or as a stream. |
 | `pkg/netlog` | Plain Go: the record of a tab's requests, and the transport that fills it. |
@@ -1016,6 +1301,8 @@ reach.
 | `pkg/cookies` | Plain Go: the cookie jar, its rules, the transport that applies them, and its file. |
 | `pkg/localnet` | Plain Go: the space of an address (public, local, loopback), and the transport that keeps pages from more private ones. |
 | `pkg/webdriver` | Plain Go: the WebDriver server: its commands, sessions, capabilities, errors and JSON, over the `Browser` light implements. |
+| `pkg/model` | Plain Go: the language model that runs on this device, behind one interface: its states, requests in a queue, the list of models and their installation (downloads checked against a pinned manifest), the helper program it starts and watches, and a fake for tests. |
+| `helper/model` | A Go module of its own, not part of light's: `light-model`, the program that runs the model with llama.cpp through yzma. |
 | `pkg/frames` | Plain Go: the rules of frames: how many and how deep, what an `iframe` shows, its sandbox, whether a document lets itself be framed, where a target leads, which site its cookies are kept under, what the window of another frame answers, whom a message reaches and who may send a window elsewhere. |
 
 Dependencies go one way: `cmd` → `internal` → `pkg`.
@@ -1028,6 +1315,8 @@ They write nothing in your config or Downloads folders, and open no file: the sy
 ```sh
 task test             # go vet ./... and go test ./..., without and with the v8 tag
 task lint             # golangci-lint, without and with the v8 tag (after task golangci:boilerplate, once)
+task model:build      # light-model, the helper that runs the model (its own module: see "A model on this device")
+task model:test       # its vet and tests
 ```
 
 `go test -tags "v8 gpu" ./cmd/light` also drives the real program, hidden, over WebDriver and compares its
@@ -1038,6 +1327,26 @@ A screenshot without opening a window:
 ```sh
 EMBER_HIDDEN=1 EMBER_CAPTURE=shot.png EMBER_CAPTURE_FRAME=30 go run ./cmd/light
 ```
+
+## Releasing
+
+A tag `v*` pushed to GitHub runs `.github/workflows/release.yml`: each target is built on its own system (light is
+cgo, so nothing cross compiles between systems) by `goreleaser build`, whose post hook (`tools/release/bundle.sh`)
+packs the binary with the wgpu-native library ember's own script fetches, checked against
+`tools/release/wgpu-native.sha256`; the next job adds each archive's SBOM, the source archive and the checksums
+(`tools/release/assemble.sh`), and the last signs them and publishes the GitHub release, once every target built.
+Run by hand from the Actions tab, the workflow does the same as a snapshot and publishes nothing.
+
+It needs [GoReleaser](https://goreleaser.com) v2 (the open-source one), and syft for the SBOMs:
+`brew install goreleaser syft`.
+
+```sh
+task release:snapshot   # this system's archive in dist/, as the workflow builds it
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+A release builds from `go.mod` and `go.sum` alone, without the workspace: `tools/release/preflight.sh` stops it
+early, saying so, while light needs an ember later than the one pinned.
 
 ## Licence
 

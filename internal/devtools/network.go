@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lantervale/ember/ui"
 
@@ -230,6 +231,8 @@ func (n *network) detail(all []netlog.Row) {
 		shown.Append(n.response(r)...)
 	} else {
 		shown.Append(headersOf(r, netlog.Chain(all, r.ID))...)
+		shown.Append(connection(r, all)...)
+		shown.Append(n.timing(r)...)
 	}
 	fill(n.details,
 		ui.Div(ui.Class("dt-bar"), headers, response, ui.Div(ui.Class("dt-space")),
@@ -240,6 +243,64 @@ func (n *network) detail(all []netlog.Row) {
 				}))),
 		shown)
 }
+
+// timing is when each step of the load of the tab's page ended, under
+// the request that asked for it: nothing under any other.
+func (n *network) timing(r netlog.Row) []*ui.Node {
+	if n.p.host.Timing == nil || r.Type != netlog.Document {
+		return nil
+	}
+	steps := n.p.host.Timing(r.Address)
+	if len(steps) == 0 {
+		return nil
+	}
+	out := []*ui.Node{ui.H4(ui.ID("dt-timing"), ui.Text("Timing of the page, since it was asked for"))}
+	for _, step := range steps {
+		out = append(out, pair(step[0], step[1]))
+	}
+	return out
+}
+
+// connection is how the request got to its server: on a connection
+// of its own or one used before, by which protocol, how long after the
+// page's own request, and how long each step took.
+func connection(r netlog.Row, all []netlog.Row) []*ui.Node {
+	if r.Remote == "" {
+		return nil
+	}
+	how := "new"
+	switch {
+	case r.Reused && r.Idle:
+		how = "used again, idle till then"
+	case r.Reused:
+		how = "used again"
+	}
+	out := []*ui.Node{ui.H4(ui.ID("dt-connection"), ui.Text("Connection")), pair("Connection", how)}
+	if r.Proto != "" {
+		out = append(out, pair("Protocol", r.Proto))
+	}
+	for _, page := range slices.Backward(all) {
+		if page.ID < r.ID && page.Initiator == "navigation" && page.From == 0 {
+			out = append(out, pair("Asked", millis(r.Started.Sub(page.Started))+" after the page"))
+			break
+		}
+	}
+	t := r.Timing()
+	for _, step := range []struct {
+		name string
+		took time.Duration
+	}{
+		{"Waiting for a connection", t.Blocked}, {"Looking the name up", t.DNS}, {"Connecting", t.Connect},
+		{"Of which TLS", t.TLS}, {"Sending", t.Send}, {"Waiting", t.Wait}, {"Receiving", t.Receive},
+	} {
+		if step.took >= 0 {
+			out = append(out, pair(step.name, millis(step.took)))
+		}
+	}
+	return out
+}
+
+func millis(d time.Duration) string { return fmt.Sprintf("%.1f ms", float64(d.Microseconds())/1000) }
 
 func headersOf(r netlog.Row, chain []netlog.Row) []*ui.Node {
 	out := []*ui.Node{ui.H4(ui.Text("General")), pair("Address", r.Address), pair("Method", r.Method),

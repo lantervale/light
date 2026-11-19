@@ -75,6 +75,9 @@ type Tree struct {
 	// what its elements were written with.
 	xml      bool
 	prefixes Prefixes
+	// unshown is the tree of a document light shows as text: ui has
+	// nothing of any of its nodes, and doc is shown nowhere.
+	unshown bool
 }
 
 // Scripted reports whether the page has anything for a script engine to
@@ -94,6 +97,14 @@ var kept = map[atom.Atom]bool{
 // Root is the document node of the tree: its children are the page's
 // doctype, its html element and the comments around them.
 func (t *Tree) Root() *html.Node { return t.root }
+
+// Document is the Document the tree's nodes show in: the page's, or
+// one shown nowhere for a tree of XML that is no page.
+func (t *Tree) Document() *ui.Document { return t.doc }
+
+// Unshown reports whether the tree is of a document light shows as
+// the text it was sent, of which ui has no element.
+func (t *Tree) Unshown() bool { return t.unshown }
 
 // Head is the element holding what is listed out of sight.
 func (t *Tree) Head() *ui.Node { return t.head }
@@ -284,6 +295,9 @@ func (t *Tree) keep(n *html.Node, u *ui.Node) *ui.Node {
 // drawn reports whether ui has an element or a text for n among those
 // of its parent's.
 func (t *Tree) drawn(n *html.Node) bool {
+	if t.unshown {
+		return false
+	}
 	switch n.Type { //nolint:exhaustive // a comment, a doctype and a fragment show nothing
 	case html.TextNode:
 		return true
@@ -305,7 +319,7 @@ func hidden(n *html.Node) bool {
 // of n.
 func (t *Tree) holds(n *html.Node) bool {
 	return n.Type == html.ElementNode && !pictured(n) && n.DataAtom != atom.Iframe &&
-		(t.drawn(n) || t.shown[n] == t.doc.Body())
+		(t.drawn(n) || t.shown[n] == t.doc.Body() || t.shown[n] == t.doc.HTML())
 }
 
 // Make is what ui has of n, made with what n holds the first time: nil
@@ -335,6 +349,27 @@ func (t *Tree) Forget(n *html.Node) {
 		delete(t.shown, n)
 	}
 	delete(t.contents, n)
+}
+
+// Take makes n and what is under it nodes of t, out of the tree of
+// another page: from lets go of them and of what ui had of them
+// there, and what its templates hold comes along. They are out of any
+// tree until t is given them (Insert).
+func (t *Tree) Take(from *Tree, n *html.Node) {
+	from.Remove(n)
+	var each func(c *html.Node)
+	each = func(c *html.Node) {
+		content := from.contents[c]
+		from.Forget(c)
+		if content != nil {
+			t.contents[c] = content
+			each(content)
+		}
+		for k := c.FirstChild; k != nil; k = k.NextSibling {
+			each(k)
+		}
+	}
+	each(n)
 }
 
 func newText(text string) *ui.Node {

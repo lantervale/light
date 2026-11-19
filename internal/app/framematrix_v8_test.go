@@ -169,30 +169,38 @@ func denied(asker string) map[string]string {
 	out := map[string]string{
 		`Object.getPrototypeOf(W)`: "null", `Object.getPrototypeOf(W.location)`: "null",
 		`Object.getOwnPropertySymbols(W).length`: "0", `Reflect.ownKeys(W).some((k) => typeof k !== "string")`: "false",
-		`Object.getOwnPropertyDescriptor(W, "top").get`:                              "undefined",
-		`Object.getOwnPropertyDescriptor(W, "location").value === W.location`:        "true",
-		`Object.getOwnPropertyDescriptor(W.location, "href").get`:                    "undefined",
-		`typeof Object.getOwnPropertyDescriptor(W.location, "href").set`:             "function",
-		`W.postMessage.constructor === Function && W.close.constructor === Function`: "true",
-		`W.postMessage.constructor("return secret")()`:                               own,
-		`W.location.replace.constructor("return secret")()`:                          own,
-		`Object.setPrototypeOf(W, {})`:                                               "throws TypeError",
-		`Reflect.setPrototypeOf(W, Object.prototype)`:                                "false",
-		`Reflect.preventExtensions(W)`:                                               "false",
-		`structuredClone(W)`:                                                         "throws DataCloneError",
-		`W.postMessage(() => secret, "*")`:                                           "throws DataCloneError",
-		`W.postMessage({reach() { return secret; }}, "*")`:                           "throws DataCloneError",
-		`W.postMessage(document.body, "*")`:                                          "throws DataCloneError",
-		`W.postMessage(window, "*")`:                                                 "throws DataCloneError",
-		`W.postMessage(W, "*")`:                                                      "throws DataCloneError",
-		`W.postMessage(Symbol.iterator, "*")`:                                        "throws DataCloneError",
-		`W.postMessage(new MessageChannel().port1, "*")`:                             "throws DataCloneError",
-		`W.postMessage("x", "*", [{}])`:                                              "throws DataCloneError",
-		`W.postMessage(new Blob([() => secret]), "nowhere")`:                         "throws SyntaxError",
-		`W.postMessage("x", "nowhere")`:                                              "throws SyntaxError",
-		`W.postMessage.call(W).secret`:                                               "throws TypeError",
-		`Object.entries(W).length + Object.keys(W).length`:                           "0",
-		`JSON.stringify(W)`:                                                          refused,
+		`Object.getOwnPropertyDescriptor(W, "top").get`:                               "undefined",
+		`Object.getOwnPropertyDescriptor(W, "location").value === W.location`:         "true",
+		`Object.getOwnPropertyDescriptor(W.location, "href").get`:                     "undefined",
+		`typeof Object.getOwnPropertyDescriptor(W.location, "href").set`:              "function",
+		`W.postMessage.constructor === Function && W.close.constructor === Function`:  "true",
+		`W.postMessage.constructor("return secret")()`:                                own,
+		`W.location.replace.constructor("return secret")()`:                           own,
+		`Object.setPrototypeOf(W, {})`:                                                "throws TypeError",
+		`Reflect.setPrototypeOf(W, Object.prototype)`:                                 "false",
+		`Reflect.preventExtensions(W)`:                                                "false",
+		`structuredClone(W)`:                                                          "throws DataCloneError",
+		`W.postMessage(() => secret, "*")`:                                            "throws DataCloneError",
+		`W.postMessage({reach() { return secret; }}, "*")`:                            "throws DataCloneError",
+		`W.postMessage(document.body, "*")`:                                           "throws DataCloneError",
+		`W.postMessage(window, "*")`:                                                  "throws DataCloneError",
+		`W.postMessage(W, "*")`:                                                       "throws DataCloneError",
+		`W.postMessage(Symbol.iterator, "*")`:                                         "throws DataCloneError",
+		`W.postMessage(new MessageChannel().port1, "*")`:                              "throws DataCloneError",
+		`W.postMessage("x", "*", [{}])`:                                               "throws DataCloneError",
+		`W.postMessage(new Blob([() => secret]), "nowhere")`:                          "throws SyntaxError",
+		`W.postMessage("x", "nowhere")`:                                               "throws SyntaxError",
+		`W.postMessage.call(W).secret`:                                                "throws TypeError",
+		`document.body.appendChild(W)`:                                                "throws TypeError",
+		`document.adoptNode(W)`:                                                       "throws TypeError",
+		`document.importNode(W.location, true)`:                                       "throws SecurityError",
+		`document.body.append(W.postMessage) || document.body.lastChild.nodeType`:     "3",
+		`W instanceof Node || W.location instanceof Node || W instanceof EventTarget`: "false",
+		`new XMLSerializer().serializeToString(W)`:                                    "throws TypeError",
+		`document.body.contains(W) || document.body.isEqualNode(W)`:                   "false",
+		`new MutationObserver(() => 0).observe(W, {childList: true})`:                 "throws TypeError",
+		`Object.entries(W).length + Object.keys(W).length`:                            "0",
+		`JSON.stringify(W)`:                                                           refused,
 		`(() => { try { W.document; } catch (e) { return e instanceof DOMException && ` +
 			`Object.getPrototypeOf(e) === DOMException.prototype && e.constructor.constructor === Function && ` +
 			`!/secret of/.test(e.message + e.stack + Object.keys(e)); } })()`: "true",
@@ -232,6 +240,8 @@ func (m *matrix) reached(w way) map[string]string {
 	theirs := "secret of " + w.asked
 	at := map[string]string{"top": "site.test/", "mid": m.kin.first + "/mid", "sib": m.kin.second + "/sib",
 		"leaf": m.kin.far + "/leaf"}[w.asked]
+	const brought = `document.importNode(W.document.body, true)`
+	const taken = `document.adoptNode(W.document.createElement("p")).ownerDocument === document`
 	out := map[string]string{
 		`W.secret`: theirs, `W.obj.secret`: theirs, `W.fn()`: theirs, `W.document.title`: theirs,
 		`W.window.secret + W.self.secret + W.frames.secret`:                         strings.Repeat(theirs, 3),
@@ -246,7 +256,7 @@ func (m *matrix) reached(w way) map[string]string {
 		`W.location.href + "|" + W.location + (W.location === W.location)`: "https://" + at + "|https://" + at + "true",
 		`W.document.location.href`: "https://" + at,
 		`W.Object !== Object && W.Element !== Element && W.Node !== Node && W.DOMException !== DOMException`: "true",
-		`W.document instanceof W.Document && !(W.document instanceof Document)`:                              "true",
+		`W.document instanceof W.Document && Object.getPrototypeOf(W.document) !== Document.prototype`:       "true",
 		`W.document.body instanceof W.HTMLElement && !(W.obj instanceof Object)`:                             "true",
 		`W.obj instanceof W.Object && W.fn instanceof W.Function`:                                            "true",
 		`W.document.createElement("p") instanceof W.HTMLParagraphElement`:                                    "true",
@@ -255,23 +265,24 @@ func (m *matrix) reached(w way) map[string]string {
 			`(delete W.reached) + ("reached" in W))`: "secret of " + w.asker + "truetruefalse",
 		`(W.mine = window, (W.mine === window) + "" + (delete W.mine))`:        "truetrue",
 		`W.postMessage === W.postMessage && W.postMessage instanceof Function`: "true",
-		`structuredClone(W)`:                                               "throws DataCloneError",
-		`W.postMessage(W, "*")`:                                            "throws DataCloneError",
-		`W.postMessage(W.document, "*")`:                                   "throws DataCloneError",
-		`W.postMessage(W.fn, "*")`:                                         "throws DataCloneError",
-		`W.Function("return secret")()`:                                    "throws TypeError",
-		`W.eval("secret")`:                                                 "undefined",
-		`W.postMessage(new W.Date(5), "*")`:                                "throws DataCloneError",
-		`W.fn.constructor("return secret")()`:                              "throws TypeError",
-		`W.document.body.appendChild(document.createElement("p"))`:         "throws TypeError",
-		`document.body.appendChild(W.document.createElement("p"))`:         "throws TypeError",
-		`document.importNode(W.document.body, true)`:                       "throws TypeError",
-		`document.adoptNode(W.document.createElement("p"))`:                "throws TypeError",
-		`document.body.insertBefore(W.document.createElement("p"), null)`:  "throws TypeError",
+		`structuredClone(W)`:                  "throws DataCloneError",
+		`W.postMessage(W, "*")`:               "throws DataCloneError",
+		`W.postMessage(W.document, "*")`:      "throws DataCloneError",
+		`W.postMessage(W.fn, "*")`:            "throws DataCloneError",
+		`W.Function("return secret")()`:       "throws TypeError",
+		`W.eval("secret")`:                    "undefined",
+		`W.postMessage(new W.Date(5), "*")`:   "throws DataCloneError",
+		`W.fn.constructor("return secret")()`: "throws TypeError",
+		adopted(`W.document.body.appendChild(document.createElement("p"))`, `W.document`):      "true",
+		adopted(`document.body.appendChild(W.document.createElement("p"))`, `document`):        "true",
+		adopted(`document.body.insertBefore(W.document.createElement("p"), null)`, `document`): "true",
+		adopted(`document.body.appendChild(`+brought+`)`, `document`):                          "true",
+		taken: "true",
 		`document.body.contains(W.document.body)`:                          "false",
 		`typeof __light + typeof W.__light + typeof W.kin + typeof W.join`: strings.Repeat("undefined", 4),
+		`typeof handed + typeof W.handed + typeof bag + typeof W.bag`:      strings.Repeat("undefined", 4),
 		`Reflect.ownKeys(W).filter((k) => !Reflect.ownKeys(window).includes(k) && !/^(secret|obj|fn|got|aired|news|` +
-			`port|last|chan|portGot|spare|\d+)$/.test(String(k))).join()`: "",
+			`port|last|chan|portGot|spare|\$_|\d+)$/.test(String(k))).join()`: "",
 	}
 	return out
 }
@@ -735,6 +746,13 @@ func (f *framing) add(at string, a answer) {
 // boxedTop is a page with a sandboxed frame of its own origin beside
 // one that is not, each with a link, a form and a function that sends
 // its own document elsewhere.
+// adopted is whether the node an expression puts in a document is of
+// that document and in it, then out of it once removed.
+func adopted(put, in string) string {
+	return `(() => { const p = ` + put + `; const held = p.ownerDocument === ` + in + ` && p.parentNode !== null; ` +
+		`p.remove(); return held && p.parentNode === null; })()`
+}
+
 func boxedTop(sandbox string) string {
 	return `<title>Top</title><body style="margin:0"><iframe id="one"` + sandbox + ` src="/boxed"></iframe>
 		<iframe id="two" src="/second"></iframe>` + boxedHeld
@@ -802,6 +820,21 @@ func TestASandboxedKinSendsNothingItsSandboxKeepsItFrom(t *testing.T) {
 		attempt{tokens: scripts, act: `parent.alert("asked")`, says: "'allow-modals' keyword is not set"},
 		attempt{tokens: scripts, act: `parent.frames[1].confirm("asked")`, says: "'allow-modals' keyword is not set"},
 	)
+	// What a sandboxed frame has its kin run later is run by the kin, and
+	// no engine light runs on says whose the function was: only what the
+	// function sends through its own document's windows is still refused,
+	// and what it sends through the kin's document goes where the kin may.
+	// A browser refuses those too. V8 runs no eval of one context for a
+	// script of another, so w.eval between kin gives undefined.
+	later := func(of, body string) string { return of + `.setTimeout(` + body + `, 0)` }
+	attempts = append(attempts,
+		attempt{tokens: scripts, act: later(two, `() => { `+two+`.location = "/away"; }`), says: unsafe},
+		attempt{tokens: scripts, act: later(tab, `() => { `+tab+`.location = "/away"; }`), says: unsafe},
+		attempt{tokens: scripts, act: two + `.eval('location = "/away"')`},
+		attempt{act: two + `.eval('location = "/away"')`},
+		attempt{tokens: scripts, act: later(two, `() => { `+two+`.document.location.href = "/away"; }`), frame: "away"},
+		attempt{tokens: scripts, act: later(two, `'location = "/away"'`), frame: "away"},
+		attempt{tokens: scripts, act: later(tab, `'location = "/away"'`), left: "https://site.test/away"})
 	for i, a := range attempts {
 		name := fmt.Sprintf("%q with %q", a.act, a.tokens)
 		sandbox := ""

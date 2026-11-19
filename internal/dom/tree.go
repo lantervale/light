@@ -159,7 +159,7 @@ func (r *Runtime) tag(n *html.Node, _ arguments) (any, error) { return r.nameOf(
 // child of the document.
 func (r *Runtime) parent(n *html.Node, _ arguments) (any, error) {
 	if n.Parent != nil && n.Parent == r.tree.Root() {
-		return "document", nil
+		return r.pageOr(nil, "document"), nil
 	}
 	return r.ref(n.Parent), nil
 }
@@ -217,13 +217,16 @@ const (
 	following    = 4
 	containing   = 8
 	containedBy  = 16
+	// apart is what two nodes of different trees are: which is first
+	// is the engine's to say, the same way each time.
+	apart = disconnected | 32
 )
 
 // compare says where the second node is from the first.
 func (r *Runtime) compare(n *html.Node, a arguments) (any, error) {
 	other, err := r.node(a, 1)
 	if err != nil {
-		return disconnected, nil //nolint:nilerr // a node light does not know is nowhere
+		return apart | preceding, nil //nolint:nilerr // a node light does not know is nowhere
 	}
 	switch {
 	case within(other, n):
@@ -233,7 +236,10 @@ func (r *Runtime) compare(n *html.Node, a arguments) (any, error) {
 	}
 	mine, theirs := lineage(n), lineage(other)
 	if mine[0] != theirs[0] {
-		return disconnected | preceding, nil
+		if r.ids[n] < r.ids[other] {
+			return apart | following, nil
+		}
+		return apart | preceding, nil
 	}
 	at := 0
 	for mine[at] == theirs[at] {
@@ -310,6 +316,7 @@ func (r *Runtime) insert(parent *html.Node, a arguments) (any, error) {
 		//nolint:revive,staticcheck // a DOMException's message, as Chrome words it
 		return nil, errors.New("HierarchyRequestError: The new child element contains the parent.")
 	}
+	r.receive(child)
 	if to := r.home(parent); to != r.home(child) {
 		r.adopt(child, to)
 	}
@@ -354,6 +361,9 @@ func (r *Runtime) copyOf(n *html.Node, deep bool) *html.Node {
 	}
 	if prefix := r.prefixOf(n); prefix != "" {
 		r.prefixes[c] = prefix
+	}
+	if r.ran[n] {
+		r.ran[c] = true
 	}
 	if !deep {
 		return c
@@ -494,19 +504,32 @@ func (r *Runtime) matcher(scope *html.Node) matcher {
 			u := r.tree.Node(n)
 			return u != nil && r.doc.Focused(u)
 		},
-		scope: scope,
+		value: func(n *html.Node) string {
+			if u := r.tree.Node(n); u != nil && r.takesText(u) {
+				return r.doc.Value(u)
+			}
+			value, _ := r.tree.Attr(n, "value")
+			return value
+		},
+		said:     r.validity,
+		target:   r.targeted,
+		document: func(n *html.Node) bool { return n == r.tree.Root() || r.docs[n] != nil },
+		scope:    scope,
 	}
 }
 
 // query finds the elements under a node that match a selector, in the
 // whole page for no node: the first, or all of them.
 func (r *Runtime) query(a arguments) (any, error) {
-	root := r.top()
+	root := firstElement(r.tree.Root())
 	whole := a.number(0) == 0
 	if !whole {
 		var err error
 		if root, err = r.node(a, 0); err != nil {
 			return nil, err
+		}
+		if kept := r.keeper(root); kept != r {
+			return kept.askedByKin(r.asked, a)
 		}
 	}
 	parsed, err := r.read(a.text(1))
@@ -585,6 +608,9 @@ func (r *Runtime) byID(a arguments) (any, error) {
 func (r *Runtime) held(arguments) (any, error) {
 	detached, attached := []int{}, []int{}
 	for id, n := range r.nodes {
+		if r.keeper(n) != r {
+			continue
+		}
 		if r.tree.Connected(n) {
 			attached = append(attached, id)
 		} else {
@@ -598,20 +624,21 @@ func (r *Runtime) held(arguments) (any, error) {
 // trees out of the page that no script holds a node of.
 func (r *Runtime) let(a arguments) (any, error) {
 	ids, _ := a[0].([]any)
-	tops := map[*html.Node]bool{}
+	tops := map[*html.Node]*Runtime{}
 	for _, id := range ids {
 		number, ok := id.(float64)
 		n := r.nodes[int(number)]
 		if !ok || n == nil {
 			continue
 		}
+		kept := r.keeper(n)
 		r.release(int(number))
-		if top := lineage(n)[0]; top != r.tree.Root() {
-			tops[top] = true
+		if top := lineage(n)[0]; top != kept.tree.Root() {
+			tops[top] = kept
 		}
 	}
-	for top := range tops {
-		r.forget(top)
+	for top, kept := range tops {
+		kept.forget(top)
 	}
 	return nothing()
 }

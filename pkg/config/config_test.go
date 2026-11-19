@@ -7,14 +7,15 @@ import (
 	"testing"
 
 	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
 func TestTheDefaultsAreWhatLightDidBeforeItHadSettings(t *testing.T) {
 	c := config.Default()
 	want := config.Config{
-		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
-		Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
+		StartPage: tabs.Home, SearchEngine: search.DuckDuckGo, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
+		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
 		JavaScript: true, Frames: true, Cookies: true,
 	}
 	if c != want {
@@ -186,5 +187,33 @@ func TestPagesAreKeptFromTheLocalNetworkUntilSetNotToBe(t *testing.T) {
 	}
 	if got, err = config.Decode([]byte(`{"version": 1}`)); err != nil || got.LocalNetwork {
 		t.Fatalf("read %+v, %v from a file that says nothing of it", got, err)
+	}
+}
+
+func TestTheSearchEngineIsDuckDuckGoUntilSetAndOneLightDoesNotKnowIsTheDefault(t *testing.T) {
+	if got := config.Default().SearchEngine; got != search.DuckDuckGo {
+		t.Fatalf("light starts searching with %q", got)
+	}
+	got, err := config.Decode([]byte(`{"version": 1, "search_engine": "light"}`))
+	if err != nil || got.SearchEngine != search.Own {
+		t.Fatalf("read %+v, %v, want light's own pages", got, err)
+	}
+	for _, bad := range []string{`"altavista"`, `""`, `" light "`, `7`, `null`, `["light"]`} {
+		got, err = config.Decode([]byte(`{"search_engine": ` + bad + `}`))
+		if err != nil || got != config.Default() {
+			t.Errorf("a search engine of %s read as %+v, %v, want the default", bad, got, err)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	own := config.Default()
+	own.SearchEngine = search.Own
+	if err = config.Save(path, own); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); !strings.Contains(string(data), `"search_engine": "light"`) {
+		t.Fatalf("the file holds %s", data)
+	}
+	if got, err = config.Load(path); err != nil || got != own {
+		t.Fatalf("read back %+v, %v, want %+v", got, err, own)
 	}
 }

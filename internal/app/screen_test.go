@@ -13,6 +13,8 @@ import (
 	"github.com/lantervale/ember/world"
 
 	"github.com/lantervale/light/internal/web"
+	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -136,6 +138,7 @@ func TestATileOpensItsPageAndBackReturns(t *testing.T) {
 
 func TestATypedWordSearchesThePages(t *testing.T) {
 	s := show(t)
+	s.configure(func(c *config.Config) { c.SearchEngine = search.Own })
 	s.enter("tile maps")
 	s.at("light://search?q=tile+maps")
 	if text := s.doc.ByID("page").Text(); !strings.Contains(text, "Examples") || s.doc.ByID("none") != nil {
@@ -184,6 +187,7 @@ func TestTheStartPagesDemoTileOpensCSSZenGarden(t *testing.T) {
 		return nil, errors.New("no network in tests")
 	})})
 	s.click("go-demo")
+	s.until("the demo's answer landed", func() bool { return !s.loading() })
 	if got := s.browser.Tab().Current(); got != "https://csszengarden.com" {
 		t.Fatalf("the demo tile opened %q", got)
 	}

@@ -1,6 +1,6 @@
 """light as a product of wptrunner: `./wpt run light`.
 
-light is its own WebDriver server (`light --webdriver HOST:PORT`), so the
+light is its own WebDriver server (`light drive --address HOST:PORT`), so the
 binary and the WebDriver binary are one. It finds the test servers' names
 on this machine by itself (`--host-map`) and trusts their authority for
 the run (`--trust-ca`): neither /etc/hosts nor the system's trust store is
@@ -32,7 +32,7 @@ class LightBrowser(WebDriverBrowser):
         self.script_budget = script_budget
 
     def make_command(self):
-        command = [self.binary, "--webdriver", f"{self.host}:{self.port}"]
+        command = [self.binary, "drive", "--address", f"{self.host}:{self.port}"]
         if self.hosts:
             command += ["--host-map", ";".join(f"{name}=127.0.0.1" for name in self.hosts)]
         if self.ca:

@@ -162,3 +162,66 @@ func TestAScriptPutInThePageRunsOnceWhereverItGoes(t *testing.T) {
 	}
 	s.quiet()
 }
+
+func TestAChangeOfManyNodesIsToldOnce(t *testing.T) {
+	const page = `<!DOCTYPE html><body><div id="d"><i id="a"></i><i id="b"></i><i id="c"></i></div>` +
+		`<p id="p"><u id="u"></u></p>`
+	const tools = `const $ = (id) => document.getElementById(id), told = (run) => {
+		const o = new MutationObserver(() => {}); o.observe(document.body, { childList: true, subtree: true });
+		run(); return o.takeRecords().map((r) =>
+		(r.target.id || r.target.nodeName) + ":+" + [...r.addedNodes].map((n) => n.id || n.nodeName) + ":-" +
+		[...r.removedNodes].map((n) => n.id || n.nodeName) + ":" + (r.previousSibling ? r.previousSibling.id : "") +
+		"<>" + (r.nextSibling ? r.nextSibling.id : "")).join(" ") },
+		thrown = (run) => { try { run(); return "none" } catch (e) { return e.name } };`
+	for _, c := range []struct{ name, script, want string }{
+		{"a child replaced is one change, after the new one left where it was", `told(() =>
+			$("d").replaceChild($("u"), $("b")))`, "p:+:-u:<> d:+u:-b:a<>c"},
+		{"a child replaced by itself, or by the one after it", `told(() => { $("d").replaceChild($("a"), $("a"));
+			$("d").replaceChild($("c"), $("b")) })`, "d:+:-a:<>b d:+a:-:<>b d:+:-c:b<> d:+c:-b:a<>"},
+		{"children replaced by one of them are one change, and no text for none is none", `told(() => {
+			$("d").replaceChildren($("b")); $("u").textContent = ""; $("u").textContent = "t" })`,
+			"d:+b:-a,b,c:<> u:+#text:-:<>"},
+		{"a live list is walked to the end it has by then, a fragment finds by id", `(() => { const seen = [],
+			f = document.createDocumentFragment(), q = document.createElement("q"); q.id = "x y"; f.append(q);
+			for (const n of $("d").childNodes) { seen.push(n.id); if (n.id === "a") $("d").append($("u")) }
+			return [seen, f.getElementById("x y") === q, f.getElementById(""), f.getElementById("no")].join() })()`,
+			"a,b,c,u,true,,"},
+		{"a document's children are replaced as if it were empty", `(() => { const d =
+			document.implementation.createHTMLDocument(""), h = d.createElement("html");
+			d.replaceChildren(h);
+			return [d.childNodes.length, d.documentElement === h, thrown(() => d.replaceChildren(h, d.createElement("p")))]
+			.join() })()`, "1,true,HierarchyRequestError"},
+		{"a fragment's nodes come in as one change", `told(() => { const f =
+			document.createDocumentFragment(); f.append(document.createElement("s"), document.createElement("q"));
+			$("d").insertBefore(f, $("b")) })`, "d:+S,Q:-:a<>b"},
+		{"children replaced are one change", `told(() => $("p").replaceChildren($("c"), "t")) + "|" +
+			$("p").childNodes.length + told(() => $("p").replaceChildren())`,
+			"d:+:-c:b<> p:+c,#text:-u:<>|2p:+:-c,#text:<>"},
+		{"a node is moved within its tree, and only there", `(() => { $("d").moveBefore($("u"), $("a"));
+			$("d").moveBefore($("a"), null); $("d").moveBefore($("u"), $("u")); return [$("d").firstChild.id,
+			$("d").lastChild.id, document.body.lastChild.id, thrown(() => $("d").moveBefore(document.createElement("i"),
+			null)), thrown(() => $("a").moveBefore($("d"), null)), thrown(() => $("d").moveBefore($("a"), $("p"))),
+			thrown(() => $("d").moveBefore($("a"))), typeof document.moveBefore, typeof document.prepend].join() })()`,
+			"u,a,p,HierarchyRequestError,HierarchyRequestError,NotFoundError,TypeError,function,function"},
+	} {
+		s := run(t, page)
+		if got := s.eval(tools + c.script); got != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.name, got, c.want)
+		}
+		s.quiet()
+	}
+}
+
+func TestWhatLeavesAWatchedSubtreeIsFollowedUntilItsObserverIsTold(t *testing.T) {
+	s := run(t, `<!DOCTYPE html><body><div id="d"><i id="a"></i></div>`)
+	s.eval(`window.got = []; window.o = new MutationObserver((records) => got.push(records.length));
+		o.observe(document.getElementById("d"), { childList: true, subtree: true, attributes: true });
+		window.a = document.getElementById("a"); a.remove(); a.append("late"); a.id = "z";
+		window.first = o.takeRecords().map((r) => r.type + ":" + r.target.nodeName).join(); a.append("more");
+		Promise.resolve().then(() => { a.append("unseen"); })`)
+	const want = "childList:DIV,childList:I,attributes:I|1|0"
+	if got := s.eval(`[first, got, o.takeRecords().length].join("|")`); got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	s.quiet()
+}

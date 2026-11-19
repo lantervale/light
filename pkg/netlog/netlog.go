@@ -107,8 +107,11 @@ type Row struct {
 	// Done.
 	Took time.Duration
 	Done bool
-	// Remote is the address of the server's end of the connection.
+	// Remote is the address of the server's end of the connection,
+	// Reused whether another request went through it before and Idle
+	// whether it waited for one.
 	Remote            string
+	Reused, Idle      bool
 	Request, Response http.Header
 	// Preview is the first PreviewCap bytes of the body, Truncated when
 	// it went on.

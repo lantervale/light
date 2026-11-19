@@ -171,6 +171,10 @@ type Host struct {
 	Export  func()
 	Title   func(address string) string
 	Version string
+	// Timing is when each step of the load of the tab's page at address
+	// ended, a name and a time each, none for another address. It may
+	// be nil.
+	Timing func(address string) [][2]string
 }
 
 // rowID is the id of the element of a row, before its number.

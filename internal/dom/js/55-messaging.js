@@ -137,9 +137,7 @@ const handOver = (to, from) => {
   old.detached = true;
 };
 const messageOf = (init, type = "message") => {
-  const event = new MessageEvent(type, init);
-  event.isTrusted = true;
-  return event;
+  return trusted(new MessageEvent(type, init));
 };
 // arrive is the task of one message of a started port: the oldest that
 // waits in it, when the port is still there to hear it.

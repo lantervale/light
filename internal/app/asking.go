@@ -42,6 +42,9 @@ type modal struct {
 	// hold keeps the scripts of the tab's other documents from running
 	// while one waits.
 	hold dom.Hold
+	// slow is the script of the tab the user is told runs long
+	// (slow.go).
+	slow *tardy
 }
 
 // question is one question: what is asked, by the scripts of which
@@ -159,6 +162,10 @@ func (s *Screen) asked() bool {
 			s.unshow(a.open)
 			a.open = nil
 		}
+		if a.slow != nil && a.slow.live.rt.Closed() {
+			s.unslow(a)
+			a.slow = nil
+		}
 		if _, held := s.sessions[tab]; !held && a.open == nil {
 			delete(s.modals.of, tab)
 		}
@@ -166,8 +173,9 @@ func (s *Screen) asked() bool {
 	shown := s.browser.Tab()
 	for i, tab := range s.browser.Tabs {
 		a := s.modals.of[tab]
+		slow := a != nil && a.s == s && s.slowness(a, tab == shown)
 		if at := s.doc.ByID(tabID(i)); at != nil {
-			toggle(at, "asking", a != nil && a.open != nil)
+			toggle(at, "asking", a != nil && a.open != nil || slow)
 		}
 		if a != nil && a.open != nil && tab != shown {
 			s.unshow(a.open)

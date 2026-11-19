@@ -21,12 +21,14 @@ class CDATASection extends Text {
   get nodeName() { return "#cdata-section"; }
 }
 
+const targets = new WeakMap();
 class ProcessingInstruction extends CharacterData {
   constructor(key, ref, target) {
     if (key !== token) illegal();
     super(key, ref);
-    define(this, { target });
+    targets.set(this, target);
   }
+  get target() { return targets.get(this); }
   get nodeType() { return INSTRUCTION_NODE; }
   get nodeName() { return this.target; }
 }

@@ -17,3 +17,13 @@
 	color: #f1f3f4; }
 #asking.dark #asking-buttons #asking-ok { border-color: #b3a1f4; background: #b3a1f4; color: #1d1f23; }
 .tab.asking .name { font-style: italic; }
+#slow { order: -1; flex: none; display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 40px;
+	padding: 5px 12px; border-bottom: 1px solid #dadce0; background: #fff8e1; color: #202124; font-size: 13px;
+	line-height: 1.5; }
+#slow-says { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#slow button { flex: none; min-width: 72px; height: 28px; padding: 0 14px; border: 1px solid #dadce0; border-radius: 14px;
+	background: #ffffff; color: #202124; }
+#slow #slow-stop { border-color: #302b42; background: #302b42; color: #ffffff; }
+#slow.dark { border-color: #3a3d42; background: #2a2618; color: #f1f3f4; }
+#slow.dark button { border-color: #3a3d42; background: #121316; color: #f1f3f4; }
+#slow.dark #slow-stop { border-color: #b3a1f4; background: #b3a1f4; color: #1d1f23; }

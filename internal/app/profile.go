@@ -13,6 +13,7 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/world"
 
+	"github.com/lantervale/light/pkg/bookmarks"
 	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/cookies"
 	"github.com/lantervale/light/pkg/downloads"
@@ -30,7 +31,7 @@ import (
 const cascade = 28
 
 // Profile is what light's windows share: the settings, the history, the
-// cookies, what sites store, the downloads, the client that asks the
+// bookmarks, the cookies, what sites store, the downloads, the client that asks the
 // web, and the files they are kept in. It is the system that runs the
 // windows' screens.
 type Profile struct {
@@ -57,6 +58,14 @@ type Profile struct {
 	// history and saved are the files the visits and the downloads are
 	// kept in.
 	history, saved *store
+
+	// marks is the bookmarks, marked the count of their changes, for the
+	// windows that show them, unkept why their file could not be read,
+	// and markFile that file.
+	marks    *bookmarks.List
+	marked   uint64
+	unkept   error
+	markFile *store
 
 	// sites is what sites store through their scripts, and stored its
 	// file.
@@ -130,13 +139,15 @@ func Window(from *platform.Window) *platform.Window {
 	return platform.NewWindow(opts...)
 }
 
-// restore reads the settings, the history, the cookies and what sites
-// store from the folder light was given; with none, they are the
+// restore reads the settings, the history, the bookmarks, the cookies
+// and what sites store from the folder light was given; with none, they are the
 // defaults and empty.
 func (p *Profile) restore() {
 	p.config, p.visits = config.Default(), history.New(config.Default().HistoryLimit)
 	p.settings = &store{name: configFile, write: func(path string) error { return config.Save(path, p.config) }}
 	p.history = &store{name: historyFile, write: func(path string) error { return history.Save(path, p.visits) }}
+	p.marks = bookmarks.New()
+	p.markFile = &store{name: bookmarksFile, write: func(path string) error { return bookmarks.Save(path, p.marks) }}
 	p.sites = storage.New()
 	p.bases = idb.New(p.opts.Dir)
 	p.stored = &store{name: storageFile, write: func(path string) error { return p.sites.Save(path) }}
@@ -148,6 +159,7 @@ func (p *Profile) restore() {
 	}
 	p.config, p.misread = config.Load(p.settings.path(p.opts.Dir))
 	p.visits, p.unreadable = history.Load(p.history.path(p.opts.Dir), p.config.HistoryLimit)
+	p.marks, p.unkept = bookmarks.Load(p.markFile.path(p.opts.Dir))
 	var unread error
 	if p.sites, unread = storage.Load(p.stored.path(p.opts.Dir)); p.unreadable == nil {
 		p.unreadable = unread
@@ -201,7 +213,7 @@ func (p *Profile) keep() {
 	if p.jar.Changed() {
 		p.jarFile.touch()
 	}
-	for _, file := range []*store{p.settings, p.history, p.saved, p.stored, p.jarFile} {
+	for _, file := range []*store{p.settings, p.history, p.markFile, p.saved, p.stored, p.jarFile} {
 		if err := file.keep(p.opts.Dir); err != nil {
 			p.unreadable = err
 		}
@@ -263,6 +275,6 @@ func (p *Profile) Close() error {
 	if p.jar.Changed() {
 		p.jarFile.touch()
 	}
-	return errors.Join(p.settings.flush(p.opts.Dir), p.history.flush(p.opts.Dir), p.saved.flush(p.opts.Dir),
-		p.stored.flush(p.opts.Dir), p.jarFile.flush(p.opts.Dir), p.bases.Close())
+	return errors.Join(p.settings.flush(p.opts.Dir), p.history.flush(p.opts.Dir), p.markFile.flush(p.opts.Dir),
+		p.saved.flush(p.opts.Dir), p.stored.flush(p.opts.Dir), p.jarFile.flush(p.opts.Dir), p.bases.Close())
 }

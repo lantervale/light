@@ -118,7 +118,7 @@ func (s *shown) visit(address string) *ui.Document {
 	s.Open(address)
 	for range 600 {
 		s.frame()
-		if page := s.session().pages[address]; page != nil {
+		if page := s.session().pages[address]; page != nil && s.session().pending == nil {
 			s.frame()
 			s.frame()
 			return page.Doc
@@ -147,8 +147,8 @@ func TestAnExternalPageIsBuiltWithItsSheetsAndPictures(t *testing.T) {
 	s := show(t)
 	s.Open(srv.URL + "/")
 	s.frame()
-	if s.doc.ByID("loading") == nil {
-		t.Fatal("no loading page while the fetch runs")
+	if s.doc.ByID("search") == nil || !s.loading() {
+		t.Fatal("the start page is not held while the fetch runs")
 	}
 	doc := s.visit(srv.URL + "/")
 	if got := s.title(srv.URL + "/"); got != "A crypt" {
@@ -216,10 +216,10 @@ func TestALinkOfAnExternalPageOpensRelativeToIt(t *testing.T) {
 	s.in.SetMouseButton(input.MouseLeft, false)
 	s.frame()
 	s.frame()
-	s.at(srv.URL + "/vaults?x=1")
 	if text := s.visit(srv.URL + "/vaults?x=1").Body().Text(); !strings.Contains(text, "lower vaults") {
 		t.Fatalf("the linked page is %q", text)
 	}
+	s.at(srv.URL + "/vaults?x=1")
 	s.click("back")
 	s.at(srv.URL + "/")
 	s.until("back shows the page, fetched again when its scripts ran", func() bool { return s.host != nil })

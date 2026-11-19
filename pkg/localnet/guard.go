@@ -66,7 +66,9 @@ func (e *BlockedError) Blocked() string {
 // connections of their own, which open only to addresses the page may
 // reach: each address a name resolves to is checked as it is dialled,
 // so a public name that turns to this machine is refused too, at every
-// hop of a redirect. The other requests go through Base as they are.
+// hop of a redirect. The other requests may reach every address: they
+// share the connections of the pages of the space they go to, and go
+// through Base as they are to this machine.
 //
 // Through a proxy the address that answers is the proxy's, and nothing
 // can be checked but the address the request names: one that is written
@@ -130,7 +132,10 @@ func (g *Guard) RoundTrip(req *http.Request) (*http.Response, error) {
 		req = req.WithContext(ctx)
 	}
 	from, asked := ctx.Value(fromKey{}).(Space)
-	if !asked || from == Loopback || g.open.Load() {
+	if !asked {
+		return g.free(req)
+	}
+	if from == Loopback || g.open.Load() {
 		return g.base().RoundTrip(req)
 	}
 	if err := g.named(from, req); err != nil {
@@ -144,6 +149,37 @@ func (g *Guard) RoundTrip(req *http.Request) (*http.Response, error) {
 		return base.RoundTrip(req)
 	}
 	return g.of(from, base).RoundTrip(req)
+}
+
+// free makes a request that may reach every address through the
+// connections of the pages of the most public space that reach where
+// it goes, so that the pages it brings ask through the connection it
+// opened: a dial refused there sent nothing, and the next is tried.
+func (g *Guard) free(req *http.Request) (*http.Response, error) {
+	base, dials := g.base().(*http.Transport)
+	again := req.Body == nil || req.Body == http.NoBody || req.GetBody != nil
+	if !dials || !again || g.open.Load() || g.proxied(req) {
+		return g.base().RoundTrip(req)
+	}
+	for _, space := range []Space{Public, Private} {
+		if g.named(space, req) != nil {
+			continue
+		}
+		resp, err := g.of(space, base).RoundTrip(req)
+		var blocked *BlockedError
+		if !errors.As(err, &blocked) {
+			return resp, err
+		}
+		if req.GetBody != nil {
+			body, failed := req.GetBody()
+			if failed != nil {
+				return nil, failed
+			}
+			req = req.Clone(req.Context())
+			req.Body = body
+		}
+	}
+	return base.RoundTrip(req)
 }
 
 // proxied reports whether req goes through a proxy.
@@ -213,8 +249,13 @@ func (e *ended) Close() error {
 	return err
 }
 
+// PerHost is how many connections the pages of a space open to one
+// host, and keep for their next requests, as browsers do: HTTP/2 puts
+// its requests in one. A Base that sets its own keeps them.
+const PerHost = 6
+
 // of is the transport of the pages of a space: base's own settings,
-// with connections no other request shares.
+// with connections that open only where those pages may reach.
 func (g *Guard) of(from Space, base *http.Transport) *http.Transport {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -222,6 +263,12 @@ func (g *Guard) of(from Space, base *http.Transport) *http.Transport {
 		return t
 	}
 	t := base.Clone()
+	if t.MaxConnsPerHost == 0 {
+		t.MaxConnsPerHost = PerHost
+	}
+	if t.MaxIdleConnsPerHost == 0 {
+		t.MaxIdleConnsPerHost = PerHost
+	}
 	dial := base.DialContext
 	if dial == nil || g.Base == nil {
 		dial = (&net.Dialer{

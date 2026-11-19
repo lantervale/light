@@ -19,14 +19,26 @@ const (
 	submit  = "submit"
 )
 
-// handles are the numbers scripts know the nodes of the page's tree
-// by: a text node's is negative, any other's positive, a CDATA
-// section's among them.
-type handles struct {
+// numbers are the numbers scripts know nodes by: a text node's is
+// negative, any other's positive, a CDATA section's among them. The
+// documents of a kin share theirs, so a node has one number for all of
+// them, and keeps says which of them keeps each numbered node: the one
+// whose tree, or whose nodes out of any tree, it is among.
+type numbers struct {
 	nodes map[int]*html.Node
 	ids   map[*html.Node]int
 	last  int
-	made  int
+	keeps map[*html.Node]*Runtime
+}
+
+func newNumbers() *numbers {
+	return &numbers{nodes: map[int]*html.Node{}, ids: map[*html.Node]int{}, keeps: map[*html.Node]*Runtime{}}
+}
+
+// handles are the nodes of a page as its scripts know them.
+type handles struct {
+	*numbers
+	made int
 	// docs are the documents the page's scripts made, and owners the
 	// document of each node that is not the page's (documents.go).
 	docs   map[*html.Node]*made
@@ -35,32 +47,36 @@ type handles struct {
 	prefixes map[*html.Node]string
 }
 
-func newHandles() handles {
-	return handles{nodes: map[int]*html.Node{}, ids: map[*html.Node]int{}, docs: map[*html.Node]*made{},
-		owners: map[*html.Node]*html.Node{}, prefixes: map[*html.Node]string{}}
+func newHandles(shared *numbers) handles {
+	if shared == nil {
+		shared = newNumbers()
+	}
+	return handles{numbers: shared, docs: map[*html.Node]*made{}, owners: map[*html.Node]*html.Node{},
+		prefixes: map[*html.Node]string{}}
 }
 
-// ref is the number of n, 0 for none: a new one the first time.
-func (h *handles) ref(n *html.Node) int {
+// ref is the number of n, 0 for none: a new one the first time, of a
+// node r then keeps.
+func (r *Runtime) ref(n *html.Node) int {
 	if n == nil {
 		return 0
 	}
-	if id, known := h.ids[n]; known {
+	if id, known := r.ids[n]; known {
 		return id
 	}
-	h.last++
-	id := h.last
+	r.last++
+	id := r.last
 	if n.Type == html.TextNode && n.Namespace == "" {
 		id = -id
 	}
-	h.nodes[id], h.ids[n] = n, id
+	r.nodes[id], r.ids[n], r.keeps[n] = n, id, r
 	return id
 }
 
-func (h *handles) refs(nodes []*html.Node) []int {
+func (r *Runtime) refs(nodes []*html.Node) []int {
 	out := make([]int, len(nodes))
 	for i, n := range nodes {
-		out[i] = h.ref(n)
+		out[i] = r.ref(n)
 	}
 	return out
 }
@@ -70,6 +86,7 @@ func (h *handles) release(id int) {
 	if n, known := h.nodes[id]; known {
 		delete(h.nodes, id)
 		delete(h.ids, n)
+		delete(h.keeps, n)
 	}
 }
 
@@ -126,6 +143,9 @@ func (r *Runtime) of(do func(n *html.Node, a arguments) (any, error)) op {
 		n, err := r.node(a, 0)
 		if err != nil {
 			return nil, err
+		}
+		if kept := r.keeper(n); kept != r {
+			return kept.askedByKin(r.asked, a)
 		}
 		return do(n, a)
 	}

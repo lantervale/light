@@ -84,8 +84,14 @@ func TestSelectorsMatchAsABrowsersDo(t *testing.T) {
 		":is(header, ul) + ul, :where(p)": "list para empty",
 		"p:empty":                         "empty",
 		"li:has(> a)":                     "two",
+		":is(ns|li, li.chosen, :unheard)": "two",
+		"li:where(!!, [a=5], .chosen)":    "two",
 		"ul:has(.chosen)":                 "list",
-		":root":                           "root",
+		":root":                           "",
+		"li::before, #one:after":          "",
+		`[lang="en-GB`:                    "head",
+		`#\6f ne, [lang=en\-GB], *|em`:    "head one em",
+		"header:lang(en), :lang(fr)":      "head",
 		":scope > p":                      "para empty",
 		"a:focus":                         "link",
 		"a:link, a:any-link":              "link",
@@ -113,8 +119,8 @@ func TestSelectorsMatchAsABrowsersDo(t *testing.T) {
 }
 
 func TestASelectorThatIsNoneIsRefused(t *testing.T) {
-	for _, selector := range []string{"", "li >", "> li", "li:unheard-of", "[a=", "li::before", "#", ".", "li,,p",
-		"li:nth-child(x)", ":not(", "a b)"} {
+	for _, selector := range []string{"", "li >", "> li", "li:unheard-of", "[a=", "li::unheard-of", "#", ".", "li,,p",
+		".5", "[a=5]", "ns|li", "|", "li:lang()", "li:nth-child(x)", ":not(", "a b)"} {
 		if parsed, err := parseSelectors(selector); err == nil {
 			t.Errorf("%q is read as %v", selector, parsed)
 		}

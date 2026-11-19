@@ -20,8 +20,8 @@ class HTMLElement extends Element {
   focus() { host("focus", this[REF]); }
   blur() { host("blur", this[REF]); }
   click() {
-    const event = new MouseEvent("click", { bubbles: true, cancelable: true, composed: true });
-    if (dispatch(this, event)) host("activate", this[REF]);
+    if (this.matches(":disabled")) return;
+    dispatch(this, new MouseEvent("click", { bubbles: true, cancelable: true, composed: true, view: window }));
   }
 }
 withHandlers(HTMLElement.prototype);
@@ -71,16 +71,10 @@ const valued = {
   },
   form: formOf,
   labels: { get() { return this.id ? document.querySelectorAll(`label[for="${CSS.escape(this.id)}"]`) : nodeList([]); } },
-  validity: { get() { return { valid: true, valueMissing: false, typeMismatch: false, patternMismatch: false, customError: false }; } },
-  validationMessage: { get() { return ""; } },
-  willValidate: { get() { return false; } },
   selectionStart: { get() { return host("selection", this[REF])[0]; }, set(at) { this.setSelectionRange(at, this.selectionEnd); } },
   selectionEnd: { get() { return host("selection", this[REF])[1]; }, set(at) { this.setSelectionRange(this.selectionStart, at); } },
 };
 const valuedMethods = {
-  checkValidity() { return true; },
-  reportValidity() { return true; },
-  setCustomValidity() {},
   select() { host("select", this[REF], 0, -1); },
   setSelectionRange(from, to) { host("select", this[REF], Number(from) || 0, Number(to) || 0); },
 };
@@ -185,8 +179,6 @@ class HTMLFormElement extends HTMLElement {
       else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.value = field.defaultValue;
     }
   }
-  checkValidity() { return true; }
-  reportValidity() { return true; }
 }
 byName(HTMLFormElement.prototype, (form, name) => {
   const control = form.elements.namedItem(name);
@@ -276,7 +268,7 @@ const [HTMLDivElement, HTMLSpanElement, HTMLParagraphElement, HTMLHeadingElement
   "HTMLTableSectionElement", "HTMLMeterElement", "HTMLDListElement", "HTMLTimeElement", "HTMLDataElement",
   "HTMLPictureElement", "HTMLSourceElement", "HTMLObjectElement", "HTMLEmbedElement", "HTMLSlotElement",
   "HTMLOptGroupElement", "HTMLOutputElement", "HTMLMenuElement", "HTMLFontElement");
-withHandlers(HTMLBodyElement.prototype, ["load", "resize", "hashchange", "popstate", "beforeunload", "unload", "scroll"]);
+withHandlers(HTMLBodyElement.prototype, [...windowHandled]);
 
 const classes = {
   a: HTMLAnchorElement, img: HTMLImageElement, input: HTMLInputElement, textarea: HTMLTextAreaElement,
@@ -353,6 +345,15 @@ const qualified = (uri, name) => {
   return [spaceOf(space), local, prefix];
 };
 
+// legacyEvents are the kinds of event createEvent knows, by the names
+// it knew them by.
+const legacyEvents = {
+  beforeunloadevent: BeforeUnloadEvent, compositionevent: CompositionEvent, customevent: CustomEvent,
+  dragevent: DragEvent, event: Event, events: Event, focusevent: FocusEvent, hashchangeevent: HashChangeEvent,
+  htmlevents: Event, keyboardevent: KeyboardEvent, messageevent: MessageEvent, mouseevent: MouseEvent,
+  mouseevents: MouseEvent, storageevent: StorageEvent, svgevents: Event, touchevent: TouchEvent, uievent: UIEvent,
+  uievents: UIEvent,
+};
 class Document extends Node {
   constructor(key, ref) {
     if (key !== token) {
@@ -407,9 +408,9 @@ class Document extends Node {
   }
   get domain() { return this[PAGE] ? window.location.hostname : ""; }
   get referrer() { return ""; }
-  get characterSet() { return "UTF-8"; }
-  get charset() { return "UTF-8"; }
-  get inputEncoding() { return "UTF-8"; }
+  get characterSet() { return infoOf(this)[3] || "UTF-8"; }
+  get charset() { return this.characterSet; }
+  get inputEncoding() { return this.characterSet; }
   get compatMode() { return this[PAGE] || infoOf(this)[1] || this.doctype ? "CSS1Compat" : "BackCompat"; }
   get contentType() { return infoOf(this)[0]; }
   get doctype() { return kidsOf(this).find((n) => n instanceof DocumentType) || null; }
@@ -496,17 +497,21 @@ class Document extends Node {
     return wrap(host("document", "pi", target, text, this[REF]));
   }
   createEvent(kind) {
-    const constructors = { customevent: CustomEvent, mouseevent: MouseEvent, mouseevents: MouseEvent,
-      keyboardevent: KeyboardEvent, uievent: UIEvent, uievents: UIEvent };
-    return new (constructors[String(kind).toLowerCase()] || Event)("");
+    if (!arguments.length) throw new TypeError("createEvent takes the kind of event.");
+    const made = legacyEvents[asciiLower(String(kind))];
+    if (!made) throw new DOMException("There is no such kind of event.", "NotSupportedError");
+    const event = new made("");
+    eventStates.get(event).made = false;
+    return event;
   }
-  createRange() { return new Range(); }
-  createTreeWalker(root, show = 0xFFFFFFFF, filter = null) { return new TreeWalker(root, show, filter); }
-  createNodeIterator(root, show = 0xFFFFFFFF, filter = null) { return new TreeWalker(root, show, filter); }
   // A node of another document comes into this one as a copy
   // (importNode) or itself (adoptNode); a document does neither.
   importNode(node, deep) {
     if (node instanceof Document) throw new DOMException("The node provided is a document, which may not be imported.", "NotSupportedError");
+    // The copy of a node a kin keeps is made by the document it is for.
+    if (bag.mixed && !(node instanceof Attr) && keptBy(node) !== keptBy(this)) {
+      return wrap(host("document", "import", this[REF], refOf(node), Boolean(deep)));
+    }
     return this.adoptNode(node.cloneNode(deep));
   }
   adoptNode(node) {
@@ -542,102 +547,7 @@ class Document extends Node {
   }
 }
 withHandlers(Document.prototype);
+define(Document.prototype, {
+  prepend: parentMethods.prepend, replaceChildren: parentMethods.replaceChildren, moveBefore: parentMethods.moveBefore,
+});
 
-// Range is the little of it scripts use to build markup and select.
-class Range {
-  constructor() {
-    this.startContainer = this.endContainer = this.commonAncestorContainer = document;
-    this.startOffset = this.endOffset = 0;
-    this.collapsed = true;
-  }
-  createContextualFragment(markup) {
-    const within = this.startContainer instanceof Element ? this.startContainer.localName : "div";
-    const fragment = document.createDocumentFragment();
-    for (const node of wrapAll(host("fragment", String(markup), within))) fragment.appendChild(node);
-    return fragment;
-  }
-  selectNode(node) { this.startContainer = this.endContainer = this.commonAncestorContainer = node.parentNode || node; }
-  selectNodeContents(node) { this.startContainer = this.endContainer = this.commonAncestorContainer = node; }
-  setStart(node, offset) { this.startContainer = node; this.startOffset = offset; }
-  setEnd(node, offset) { this.endContainer = node; this.endOffset = offset; }
-  setStartBefore(node) { this.setStart(node.parentNode, 0); }
-  setStartAfter(node) { this.setStart(node.parentNode, 0); }
-  setEndBefore(node) { this.setEnd(node.parentNode, 0); }
-  setEndAfter(node) { this.setEnd(node.parentNode, 0); }
-  collapse() { this.collapsed = true; }
-  cloneRange() { return Object.assign(new Range(), this); }
-  deleteContents() {
-    if (this.commonAncestorContainer instanceof Element) this.commonAncestorContainer.replaceChildren();
-  }
-  getBoundingClientRect() {
-    return this.startContainer instanceof Element ? this.startContainer.getBoundingClientRect() : new DOMRect();
-  }
-  getClientRects() { return []; }
-  detach() {}
-  toString() { return this.commonAncestorContainer.textContent || ""; }
-}
-
-const SHOW_ELEMENT = 1, SHOW_TEXT = 4, SHOW_COMMENT = 128;
-const FILTER_ACCEPT = 1, FILTER_REJECT = 2, FILTER_SKIP = 3;
-const NodeFilter = {
-  SHOW_ALL: 0xFFFFFFFF, SHOW_ELEMENT, SHOW_TEXT, SHOW_COMMENT, FILTER_ACCEPT, FILTER_REJECT, FILTER_SKIP,
-};
-class TreeWalker {
-  constructor(root, whatToShow, filter) {
-    this.root = root;
-    this.currentNode = root;
-    this.whatToShow = whatToShow;
-    this.filter = filter;
-  }
-  _accepts(node) {
-    const bit = node.nodeType === ELEMENT_NODE ? SHOW_ELEMENT : node.nodeType === TEXT_NODE ? SHOW_TEXT : SHOW_COMMENT;
-    if (!(this.whatToShow & bit)) return FILTER_SKIP;
-    if (!this.filter) return FILTER_ACCEPT;
-    return typeof this.filter === "function" ? this.filter(node) : this.filter.acceptNode(node);
-  }
-  // _next is the node after one in document order, its subtree skipped
-  // when asked, never leaving the root.
-  _next(node, skip) {
-    if (!skip && node.firstChild) return node.firstChild;
-    for (let n = node; n && n !== this.root; n = n.parentNode) {
-      if (n.nextSibling) return n.nextSibling;
-    }
-    return null;
-  }
-  nextNode() {
-    let node = this._next(this.currentNode, false);
-    while (node) {
-      const verdict = this._accepts(node);
-      if (verdict === FILTER_ACCEPT) {
-        this.currentNode = node;
-        return node;
-      }
-      node = this._next(node, verdict === FILTER_REJECT);
-    }
-    return null;
-  }
-  firstChild() {
-    for (const child of kidsOf(this.currentNode)) {
-      if (this._accepts(child) === FILTER_ACCEPT) {
-        this.currentNode = child;
-        return child;
-      }
-    }
-    return null;
-  }
-  nextSibling() {
-    for (let n = this.currentNode.nextSibling; n; n = n.nextSibling) {
-      if (this._accepts(n) === FILTER_ACCEPT) {
-        this.currentNode = n;
-        return n;
-      }
-    }
-    return null;
-  }
-  parentNode() {
-    const parent = this.currentNode.parentNode;
-    if (!parent || this.currentNode === this.root) return null;
-    this.currentNode = parent;
-    return parent;
-  }
-}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -15,6 +16,7 @@ const (
 	guideName     = "guide"
 	examplesName  = "examples"
 	aboutName     = "about"
+	bookmarksName = "bookmarks"
 	historyName   = "history"
 	downloadsName = "downloads"
 	configName    = "config"
@@ -23,9 +25,6 @@ const (
 
 // own is what the address of a page of light's begins with.
 const own = tabs.Scheme + "://"
-
-// demo is the page of the web the start page offers.
-const demo = "https://csszengarden.com"
 
 // site is one page of light's own, found at tabs.Page(name).
 type site struct {
@@ -45,6 +44,7 @@ func pages() []site {
 			"sound.", examplesPage},
 		{aboutName, "About", "What light is: tabs, a history and an address bar over pages built in Go and the " +
 			"web.", aboutPage},
+		{bookmarksName, bookmarked, "The pages kept by the star of the address field, by folder.", bookmarksBody},
 		{historyName, visited, "Every page visited, newest first, kept between runs.", historyBody},
 		{downloadsName, saves, "The files saved from the web, in progress and done.", downloadsBody},
 		{configName, settings, "The start page, the downloads' folder, the history, the zoom, the network.",
@@ -72,17 +72,12 @@ func (s *Screen) ownPages() *ui.Node {
 	return list
 }
 
-func homePage(s *Screen) []*ui.Node {
-	search := ui.Input(ui.ID("search"), ui.Type("search"), ui.Placeholder("Search the pages or type an address"),
-		ui.Attr("autofocus", ""))
-	ui.On(search, ui.EventSubmit, func() { s.Open(tabs.Resolve(s.doc.Value(search))) })
-	tiles := ui.Div(ui.ID("tiles"))
-	for _, page := range pages()[1:] {
-		tiles.Append(s.tile("go-"+page.name, page.title, page.summary, tabs.Page(page.name)))
+// searches says what the start page's field does with what is typed.
+func (s *Screen) searches() string {
+	if e := s.engine(); e.ID != search.Own {
+		return "Search with " + e.Name + " or type an address"
 	}
-	tiles.Append(s.tile("go-demo", "CSS Zen Garden", "A page of the web, to see what light draws: csszengarden.com",
-		demo))
-	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")), search, tiles}
+	return "Search light's own pages or type an address"
 }
 
 // switcher is the start page's logo: a click switches the dark mode,
@@ -93,12 +88,6 @@ func (s *Screen) switcher() *ui.Node {
 		ui.OnClick(func() { s.configure(func(c *config.Config) { c.DarkMode = !c.DarkMode }) }))
 	s.fields = append(s.fields, func() { picture.SetAttr("src", s.logo()) })
 	return picture
-}
-
-// tile is a link of the start page, to address.
-func (s *Screen) tile(id, title, summary, address string) *ui.Node {
-	return ui.Button(ui.ID(id), ui.Class("tile"), ui.Attr(linked, address), ui.Strong(ui.Text(title)),
-		ui.Span(ui.Text(summary)), ui.OnClick(func() { s.activate(address) }))
 }
 
 func guidePage(s *Screen) []*ui.Node {
@@ -172,7 +161,7 @@ func (s *Screen) kept() *ui.Node {
 	for _, file := range []struct {
 		what  string
 		store *store
-	}{{visited, s.history}, {saves + " list", s.saved}, {settings, s.settings}} {
+	}{{visited, s.history}, {bookmarked, s.markFile}, {saves + " list", s.saved}, {settings, s.settings}} {
 		list.Append(ui.Div(ui.Strong(ui.Text(file.what)), ui.Text(": "+file.store.path(s.opts.Dir))))
 	}
 	return list

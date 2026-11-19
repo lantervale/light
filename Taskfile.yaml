@@ -55,6 +55,35 @@ tasks:
       - task: golangci:lint
         vars: {CLI_ARGS: --build-tags v8}
 
+  # light-model, the helper that runs a language model for light, is a Go module of its own (helper/model): what it
+  # is built on stays out of light's go.mod, and the workspace does not list it, hence GOWORK=off.
+  model:build:
+    desc: Build light-model, the helper that runs a language model for light, into dist (ignored by git) or the folder BIN names by its whole path
+    dir: helper/model
+    env: {GOWORK: "off", CGO_ENABLED: "0"}
+    cmds:
+      - go build -trimpath -o '{{.BIN | default "../../dist"}}/light-model{{exeExt}}' .
+
+  model:test:
+    desc: Vet and test light-model (no GPU, no network, no model - set LIGHT_MODEL_TEST_DEV as LIGHT_MODEL_DEV to run a real one already on this machine)
+    dir: helper/model
+    env: {GOWORK: "off", CGO_ENABLED: "0"}
+    cmds:
+      - go vet ./...
+      - go test ./...
+
+  release:snapshot:
+    desc: Build this system's release archive into dist, as the release workflow does, publishing nothing (needs GoReleaser v2 - brew install goreleaser; inside the workspace it builds on the ember beside light)
+    preconditions:
+      - sh: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.'
+        msg: "GoReleaser v2 is needed and the goreleaser first on PATH ({{.GORELEASER}}) is not: brew install goreleaser, and remove an older one that comes before it"
+    vars:
+      GORELEASER:
+        sh: command -v goreleaser || echo none
+    cmds:
+      - goreleaser --version | grep -E 'GitVersion'
+      - goreleaser build --snapshot --clean --single-target --id light-{{OS}}
+
   wpt:setup:
     desc: Fetch web-platform-tests at the commit wpt.lock pins into .wpt (ignored by git) - a shallow clone of the folders in tools/wpt/sparse.txt, its own Python virtualenv with its requirements, and light's product for its runner (tools/wpt)
     set: [errexit, pipefail]

@@ -10,10 +10,12 @@ import (
 // historyPage is where the history is shown.
 const historyPage = own + historyName
 
-// visit notes a move to a page of light's own; one of the web is noted
+// visit notes a move to a page of light's own, but those that list what
+// light keeps; one of the web is noted
 // when it lands, under the address that answered and its title.
 func (s *Screen) visit(address string) {
-	if _, _, lights := tabs.Own(address); lights && address != tabs.Home && address != historyPage {
+	if _, _, lights := tabs.Own(address); lights && address != tabs.Home && address != historyPage &&
+		address != bookmarksPage {
 		s.record(address, s.title(address))
 	}
 }

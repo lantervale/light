@@ -132,7 +132,11 @@ func (s *Screen) entries(t target) []menu.Entry {
 			s.savedEntries("Open image in new tab", "Save image as…", "Copy image address", t.picture))
 	}
 	if t.selection != "" {
-		groups = append(groups, []menu.Entry{{Label: "Copy", Do: func() { s.win.SetClipboard(t.selection) }}})
+		groups = append(groups, []menu.Entry{
+			{Label: "Copy", Do: func() { s.win.SetClipboard(t.selection) }},
+			{Label: searchLabel(s.engine().Name, t.selection),
+				Do: func() { s.openBeside(s.search(words(t.selection)), ahead) }},
+		})
 	}
 	if len(groups) == 0 {
 		groups = s.pageEntries()
@@ -148,6 +152,20 @@ func (s *Screen) entries(t target) []menu.Entry {
 		entries = append(entries, group...)
 	}
 	return entries
+}
+
+// words is text on one line, a space between its words.
+func words(text string) string { return strings.Join(strings.Fields(text), " ") }
+
+// searchLabel names the entry that asks engine for the selected text,
+// which it shows the beginning of.
+func searchLabel(engine, selection string) string {
+	const shown = 30
+	query := []rune(words(selection))
+	if len(query) > shown {
+		query = append(slices.Clone(query[:shown-1]), '…')
+	}
+	return "Search " + engine + " for “" + string(query) + "”"
 }
 
 // linkEntries open a link as the keys held at a click on it do: in a

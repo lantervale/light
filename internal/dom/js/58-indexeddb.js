@@ -505,13 +505,11 @@ const settle = () => {
 // one threw.
 const fired = (path, event) => {
   let ran = false, threw = false;
-  event.target = path[0];
-  event._path = path;
-  event._stopped = event._halted = false;
-  event.isTrusted = true;
+  const state = eventStates.get(event);
+  Object.assign(state, { target: path[0], path, stopped: false, halted: false, trusted: true });
   const call = (target, phase) => {
-    event.currentTarget = target;
-    event.eventPhase = phase;
+    state.currentTarget = target;
+    state.phase = phase;
     const lists = listenersOf(target);
     const list = lists ? (lists.get(event.type) || []).slice() : [];
     const inline = phase !== CAPTURING ? handlerOf(target, event.type) : null;
@@ -532,16 +530,16 @@ const fired = (path, event) => {
         threw = true;
         report(error);
       }
-      if (event._halted) break;
+      if (state.halted) break;
     }
   };
-  for (let i = path.length - 1; i > 0 && !event._stopped; i--) call(path[i], CAPTURING);
-  if (!event._stopped) call(path[0], AT_TARGET);
-  if (event.bubbles) {
-    for (let i = 1; i < path.length && !event._stopped; i++) call(path[i], BUBBLING);
+  for (let i = path.length - 1; i > 0 && !state.stopped; i--) call(path[i], CAPTURING);
+  if (!state.stopped) call(path[0], AT_TARGET);
+  if (state.bubbles) {
+    for (let i = 1; i < path.length && !state.stopped; i++) call(path[i], BUBBLING);
   }
-  event.currentTarget = null;
-  event.eventPhase = NONE;
+  state.currentTarget = null;
+  state.phase = NONE;
   return { ran, threw };
 };
 // task is a task that fires an event, then does after once the
@@ -557,8 +555,8 @@ const firing = (path, event, after) => {
 };
 
 class IDBVersionChangeEvent extends Event {
-  constructor(type, init = {}) {
-    super(type, init);
+  constructor(type, init) {
+    super(type, init = dictionary(init));
     this.oldVersion = Number(init.oldVersion) || 0;
     this.newVersion = init.newVersion === undefined || init.newVersion === null ? null : Number(init.newVersion);
   }

@@ -40,7 +40,14 @@ func (r *Runtime) titleNow() string {
 	return r.page.Title
 }
 
-func (r *Runtime) title(arguments) (any, error) { return r.titleNow(), nil }
+// title is the document's title: of a document shown as text, which
+// the browser names by its file, what its tree says alone.
+func (r *Runtime) title(arguments) (any, error) {
+	if r.tree.Unshown() && r.titleElement() == nil {
+		return "", nil
+	}
+	return r.titleNow(), nil
+}
 
 func (r *Runtime) setTitle(a arguments) (any, error) {
 	e := r.titleElement()
@@ -146,8 +153,10 @@ func (r *Runtime) history(a arguments) (any, error) {
 		return r.host.Steps(), nil
 	case how == "length":
 		return 1, nil
-	case r.host.Moved != nil:
-		r.host.Moved(how, a.text(1))
+	default:
+		if r.here = a.text(1); r.host.Moved != nil {
+			r.host.Moved(how, r.here)
+		}
 	}
 	return nothing()
 }

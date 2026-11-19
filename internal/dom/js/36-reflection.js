@@ -165,6 +165,7 @@ Object.assign(classes, {
   datalist: HTMLDataListElement, marquee: HTMLMarqueeElement, frameset: HTMLFrameSetElement, frame: HTMLFrameElement,
   dir: HTMLDirectoryElement, listing: HTMLPreElement, xmp: HTMLPreElement,
 });
+withHandlers(HTMLFrameSetElement.prototype, [...windowHandled]);
 for (const tag of ["acronym", "basefont", "noembed", "noframes", "plaintext", "rb", "rtc", "strike", "tt"]) known.add(tag);
 define(window, {
   HTMLAreaElement, HTMLMapElement, HTMLParamElement, HTMLTrackElement, HTMLModElement, HTMLTableCaptionElement,

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lantervale/light/pkg/localnet"
 )
@@ -292,5 +293,164 @@ func TestATransportThatDialsByItselfGivesNoAnswerAPageMayNotHave(t *testing.T) {
 	if got, err = n.get(localnet.From(t.Context(), localnet.Loopback), "http://rebound.test/"); err != nil ||
 		got != "loopback" {
 		t.Errorf("a page of this machine got %q, %v", got, err)
+	}
+}
+
+// counted is a server of this machine and how many connections were
+// opened to it.
+func counted(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	opened := &atomic.Int32{}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent, _ := io.ReadAll(r.Body)
+		_, _ = w.Write(sent)
+	}))
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			opened.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv, opened
+}
+
+func TestAPagesRequestsGoThroughTheConnectionItsDocumentCameThrough(t *testing.T) {
+	for _, space := range []localnet.Space{localnet.Public, localnet.Private, localnet.Loopback} {
+		srv, opened := counted(t)
+		guard := &localnet.Guard{Space: func(netip.AddrPort) localnet.Space { return space }}
+		t.Cleanup(guard.CloseIdleConnections)
+		client := &http.Client{Transport: guard}
+		for _, ctx := range []context.Context{t.Context(), localnet.From(t.Context(), space), t.Context()} {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL, strings.NewReader("sent"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if string(body) != "sent" {
+				t.Errorf("a request to the %s server carried %q", space, body)
+			}
+		}
+		if got := opened.Load(); got != 1 {
+			t.Errorf("the user's request and a page's to one %s server opened %d connections", space, got)
+		}
+	}
+}
+
+// held is a server that answers a request only once told to, how many
+// wait for it, and how many connections were opened to it.
+type held struct {
+	*httptest.Server
+	waiting, opened atomic.Int32
+	free            chan struct{}
+}
+
+func holding(t *testing.T, secure bool) *held {
+	t.Helper()
+	h := &held{free: make(chan struct{})}
+	h.Server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.waiting.Add(1)
+		defer h.waiting.Add(-1)
+		select {
+		case <-h.free:
+		case <-r.Context().Done():
+		}
+		_, _ = io.WriteString(w, r.Proto)
+	}))
+	h.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			h.opened.Add(1)
+		}
+	}
+	if secure {
+		h.EnableHTTP2 = true
+		h.StartTLS()
+	} else {
+		h.Start()
+	}
+	t.Cleanup(h.Close)
+	return h
+}
+
+// ask makes count requests of a public page at once, and gives what
+// each was answered once the server, told to when wait of them wait,
+// answered them all.
+func (h *held) ask(t *testing.T, client *http.Client, count, wait int) []string {
+	t.Helper()
+	answers := make(chan string, count)
+	for range count {
+		go func() {
+			req, _ := http.NewRequestWithContext(localnet.From(t.Context(), localnet.Public), http.MethodGet, h.URL,
+				http.NoBody)
+			resp, err := client.Do(req)
+			if err != nil {
+				answers <- err.Error()
+				return
+			}
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			answers <- string(body)
+		}()
+	}
+	for deadline := time.Now().Add(10 * time.Second); int(h.waiting.Load()) < wait; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d of %d requests reached the server at once", h.waiting.Load(), count)
+		}
+	}
+	close(h.free)
+	got := make([]string, count)
+	for i := range got {
+		got[i] = <-answers
+	}
+	h.free = make(chan struct{})
+	return got
+}
+
+func TestThePagesOfASpaceOpenSixConnectionsToAHostAndKeepThem(t *testing.T) {
+	h := holding(t, false)
+	guard := &localnet.Guard{Space: func(netip.AddrPort) localnet.Space { return localnet.Public }}
+	t.Cleanup(guard.CloseIdleConnections)
+	client := &http.Client{Transport: guard}
+	for _, answer := range h.ask(t, client, 14, 6) {
+		if answer != "HTTP/1.1" {
+			t.Fatalf("a request was answered %q", answer)
+		}
+	}
+	if got := h.opened.Load(); got != 6 {
+		t.Errorf("14 requests at once to one host opened %d connections", got)
+	}
+	h.ask(t, client, 6, 6)
+	if got := h.opened.Load(); got != 6 {
+		t.Errorf("6 more requests opened %d more connections: those opened were not kept", got-6)
+	}
+}
+
+func TestHTTP2IsSpokenWhereTheServerOffersItAndItsOneConnectionShared(t *testing.T) {
+	h := holding(t, true)
+	guard := &localnet.Guard{Base: h.Client().Transport, Space: func(netip.AddrPort) localnet.Space {
+		return localnet.Public
+	}}
+	t.Cleanup(guard.CloseIdleConnections)
+	client := &http.Client{Transport: guard}
+	close(h.free)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, h.URL, http.NoBody)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	h.free = make(chan struct{})
+	for _, answer := range h.ask(t, client, 14, 14) {
+		if answer != "HTTP/2.0" {
+			t.Fatalf("a request was answered %q", answer)
+		}
+	}
+	if got := h.opened.Load(); resp.Proto != "HTTP/2.0" || got != 1 {
+		t.Errorf("the user's request, answered by %s, and 14 of a page at once opened %d connections", resp.Proto, got)
 	}
 }

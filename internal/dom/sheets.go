@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/css"
 )
@@ -459,6 +460,7 @@ func (r *Runtime) adoptSheets(a arguments) (any, error) {
 // compute.
 func (r *Runtime) computed(n *ui.Node, a arguments) (any, error) {
 	r.fresh()
+	r.reflow(n)
 	name := a.text(1)
 	value, ok := r.doc.ComputedValue(n, name)
 	if !ok {
@@ -470,6 +472,20 @@ func (r *Runtime) computed(n *ui.Node, a arguments) (any, error) {
 		}
 	}
 	return resolved(name, value), nil
+}
+
+// reflow has ui style and lay the page out at once when it has not
+// styled n, an element of the page a script made or moved since the
+// last frame: a script reads the style of what it just put there.
+func (r *Runtime) reflow(n *ui.Node) {
+	if _, styled := r.doc.ComputedValue(n, "display"); styled || !r.connected(n) {
+		return
+	}
+	var size geom.Vec2
+	if r.host.Viewport != nil {
+		size.X, size.Y = r.host.Viewport()
+	}
+	r.doc.Layout(size.Scale(r.doc.Zoom()))
 }
 
 // used is the width or the height of an element as it is laid out, in
@@ -494,6 +510,7 @@ func (r *Runtime) used(n *ui.Node, name string) (string, bool) {
 // name and a value each, null for an element ui has not styled.
 func (r *Runtime) computedStyle(n *ui.Node, _ arguments) (any, error) {
 	r.fresh()
+	r.reflow(n)
 	all := r.doc.ComputedStyle(n)
 	if len(all) == 0 {
 		return nothing()

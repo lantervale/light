@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"time"
 )
 
 // The kinds of Question.
@@ -38,6 +39,9 @@ var errUnanswered = errors.New("the page was closed before its question was answ
 // waits for an answer, no script of another runs.
 type Hold struct {
 	by *Runtime
+	// busy is the Runtime whose script, late, runs on while the frames
+	// do (slow.go).
+	busy *Runtime
 }
 
 // Asking is the Runtime whose script waits for an answer, nil for none.
@@ -87,12 +91,14 @@ type handover struct {
 	running *Runtime
 	// frame is the frame's goroutine, kept under test.
 	frame uint64
+	// lateness is a script that runs on while the frames do (slow.go).
+	lateness
 }
 
 // withheld reports whether the page's scripts must not be entered: one of
 // them, or of another document of its tab, waits for an answer.
 func (r *Runtime) withheld() bool {
-	return r.asking.parked || r.host.Hold != nil && r.host.Hold.by != nil
+	return r.asking.parked || r.asking.late || r.host.Hold != nil && (r.host.Hold.by != nil || r.host.Hold.busy != nil)
 }
 
 // free runs fn as an entry into the page's scripts and reports whether
@@ -154,10 +160,12 @@ func (r *Runtime) through(touch func()) bool {
 			panic("light: the engine of a page is entered while its script waits for an answer")
 		}
 		return false
+	case p.entered && !p.answering:
+		return false
 	case p.entered:
 		p.script = true
 		p.toScript <- touch
-		r.serve()
+		r.serve(false)
 	case r.host.Ask == nil:
 		touch()
 	default:
@@ -171,40 +179,71 @@ func (r *Runtime) enterScript(touch func()) {
 	p := &r.asking
 	if p.toFrame == nil {
 		p.toFrame, p.toScript, p.answer = make(chan func()), make(chan func()), make(chan *Answer)
+		p.token, p.tardy = make(chan struct{}, 1), make(chan struct{}, 1)
 	}
+	p.told, p.askAt = false, r.host.Patience.notice()
 	if proven {
 		p.frame = goroutine()
 	}
 	p.entered, p.script = true, true
 	go func() {
+		p.take()
 		defer func() {
 			if thrown := recover(); thrown != nil {
 				p.failed = fmt.Sprintf("%v\n\n%s", thrown, debug.Stack())
 			}
-			p.entered, p.script = false, false
+			if !p.script {
+				p.take()
+			}
+			p.entered = false
+			p.give()
 			p.toFrame <- nil
 		}()
 		touch()
 	}()
-	r.serve()
+	r.serve(true)
 }
 
 // serve gives the script's side its turn, running on the frame what it
 // hands over, until it ends, asks, or is done with what it was handed.
-func (r *Runtime) serve() {
+// A script that outlasts the browser's patience is left to run, and
+// the frame goes on (slow.go): at the top, where nothing of the
+// frame's waits under it; under a call it is stopped once the user
+// would have been asked, and light's own script of a page being made
+// is waited for.
+func (r *Runtime) serve(top bool) {
 	p := &r.asking
+	var token chan struct{}
+	stopped := false
 	for {
-		do := <-p.toFrame
-		if do == nil {
-			if failed := p.failed; failed != "" {
-				p.failed = ""
-				panic(failed)
+		select {
+		case do := <-p.toFrame:
+			if do == nil {
+				if failed := p.failed; failed != "" {
+					p.failed = ""
+					panic(failed)
+				}
+				return
 			}
+			r.served(do)
+		case <-p.tardy:
+			switch ran := time.Duration(p.ran.Load()); {
+			case ran < r.host.Patience.after() || r.entry == nil:
+			case top:
+				token = p.token
+			case ran >= r.host.Patience.notice() && !stopped:
+				stopped = true
+				r.ctx.Interrupt()
+			}
+		case token <- struct{}{}:
+			if p.leaving() {
+				<-p.token
+				token = nil
+				continue
+			}
+			r.belated()
 			return
 		}
-		do()
-		p.script = true
-		p.toScript <- nil
 	}
 }
 
@@ -254,9 +293,10 @@ func (r *Runtime) ask(a arguments) (any, error) {
 	if r.host.Hold != nil {
 		r.host.Hold.by = r
 	}
-	p.script = false
+	p.give()
 	p.toFrame <- nil
 	answer := <-p.answer
+	p.take()
 	resume()
 	if answer == nil {
 		return nil, errUnanswered
@@ -286,16 +326,15 @@ func (r *Runtime) resumed(a *Answer) {
 	if r.host.Hold != nil && r.host.Hold.by == r {
 		r.host.Hold.by = nil
 	}
-	p.script = true
 	p.answer <- a
-	r.serve()
+	r.serve(true)
 	r.left()
 }
 
 // left forgets whose scripts were entered, once none runs or waits,
 // and closes the documents that were closed meanwhile.
 func (r *Runtime) left() {
-	if p := &r.asking; !p.parked {
+	if p := &r.asking; !p.parked && !p.late {
 		p.running = nil
 		r.settled()
 	}

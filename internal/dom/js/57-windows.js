@@ -360,13 +360,26 @@ const mine = {
   element: (id) => wrap(host("window", "element", id)),
   prototype: () => Object.getPrototypeOf(window),
   view: (id) => windowOf(id),
+  // What the kin ask of the page for a node it keeps, or made.
+  node: (ref) => wrap(ref),
+  viewOf: (node) => (node === document ? window : null),
+  insert: (parent, child, before, replaced) => insert(parent, child, before, replaced),
+  detach: (child) => detach(child),
+  mixing: () => mixing(),
+  observing: () => observing(),
+  watch: (any) => { watching = any; },
+  heard: (change) => observedHere(change),
 };
 // ownOf are the names a window of a kin answers as any window of
 // another frame does: what is done to a window, not in it.
 const ownOf = new Set(["postMessage", "close", "focus", "blur"]);
 const kinWindows = new Map();
 const kinPlaces = new Map();
-const kinTo = (id) => (kin.all && host("window", "kin", id) ? kin.all("get", id) : undefined);
+const kinTo = (id) => {
+  const to = kin.all && host("window", "kin", id) ? kin.all("get", id) : undefined;
+  if (to) mixed();
+  return to;
+};
 // kinPlace is the location of the window of a kin: it reads as the
 // other document's own, and what sends that window elsewhere is asked
 // of light as of any window, since who may send a window where is not
@@ -505,28 +518,30 @@ const kinView = () => {
   return to ? to.view(kin.self) : window;
 };
 // kinCalls are what light calls to make the page one of its kin: kin
-// gives the registry to hand to the next, join takes it, or makes it,
+// gives what they share to make the next with, join
 // and registers the page's window under its number, leave takes it
 // out.
 const kinCalls = {
   kin() { return kin.all; },
-  join(registry, self) {
-    if (registry === null || registry === undefined) {
-      const windows = new Map();
-      registry = (what, id, of) => {
-        if (what === "get") return windows.get(id);
-        if (what === "set") windows.set(id, of);
-        else if (windows.get(id) === of) windows.delete(id);
-        return undefined;
-      };
-    }
-    kin.all = registry;
+  join(self) {
+    kin.all = bag;
     kin.self = self;
-    registry("set", self, mine);
+    bag("set", self, mine);
+    if (bag.mixed) mixing();
   },
+  // The objects the page made of nodes go with it, and leave answers
+  // their numbers: one a kin keeps is made again there the next time
+  // it is reached.
   leave() {
     if (kin.all) kin.all("leave", kin.self, mine);
     kin.all = null;
+    const own = Function.prototype[Symbol.hasInstance], gone = [];
+    for (const [ref, held] of wrappers) {
+      const node = held instanceof WeakRef ? held.deref() : held;
+      if (node === undefined || own.call(Node, node)) gone.push(ref);
+    }
+    for (const ref of gone) wrappers.delete(ref);
+    return gone;
   },
 };
 

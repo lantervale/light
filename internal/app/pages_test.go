@@ -6,6 +6,8 @@ import (
 
 	"github.com/lantervale/ember/ui/align"
 
+	"github.com/lantervale/light/pkg/config"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -71,6 +73,7 @@ func TestTheSchemeLightHadIsNoAddressOfItsPages(t *testing.T) {
 		!strings.Contains(text, "light opens light://, http:// and https:// addresses") {
 		t.Fatalf("the page reads %q", text)
 	}
+	s.configure(func(c *config.Config) { c.SearchEngine = search.Own })
 	s.enter("history")
 	s.at(tabs.Search("history"))
 	if text := s.node("page").Text(); !strings.Contains(text, historyPage) {

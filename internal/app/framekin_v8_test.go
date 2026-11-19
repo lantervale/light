@@ -224,6 +224,33 @@ func TestFramesOfAPagesOriginComeAndGoAndLeaveNothing(t *testing.T) {
 	}
 }
 
+// A browser ends the documents under an iframe the moment the element
+// leaves its document: no timer of theirs runs after it.
+func TestNoScriptOfAFrameRunsOnceItsElementLeftTheDocument(t *testing.T) {
+	_, transport := framingOf(t, map[string]answer{
+		"site.test/": html(`<title>Top</title><iframe id="made" src="/inner"></iframe>
+			<script>window.ticks = 0;</script>`),
+		"site.test/inner": html(`<iframe id="deep" src="/deep"></iframe>
+			<script>window.tick = () => { top.ticks++; }; setInterval(tick, 0);</script>`),
+		"site.test/deep": html(`<script>setInterval(() => parent.tick(), 0);</script>`),
+	})
+	s := showWith(t, Options{Transport: transport, Downloads: t.TempDir()})
+	s.visit("https://site.test/")
+	s.running("", "made", "deep")
+	s.until("the frames tick", func() bool { return s.within("", `ticks > 2`) == "true" })
+	s.does("", `document.getElementById("made").remove(); window.ticks = 0;`)
+	for range 5 {
+		time.Sleep(2 * time.Millisecond)
+		s.frame()
+	}
+	if got := s.within("", `ticks`); got != "0" {
+		t.Errorf("the frames ticked %s times once their element was removed", got)
+	}
+	if said := s.said(); strings.Contains(said, "error:") {
+		t.Errorf("the console says %s", said)
+	}
+}
+
 func TestAScriptThatNeverEndsIsStoppedWhicheverKinItRunsIn(t *testing.T) {
 	const ticking = `<script>window.ticks = 0; setInterval(() => { ticks++; }, 5);</script>`
 	_, transport := framingOf(t, map[string]answer{

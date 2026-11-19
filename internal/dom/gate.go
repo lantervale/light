@@ -54,12 +54,23 @@ func (r *Runtime) engine(o script.Options) (script.Context, error) {
 	g := &gate{r: r, modules: map[script.Module]*gatedModule{}}
 	if answer := o.Import; answer != nil {
 		o.Import = func(from string, what script.Import, done func(script.Module, error)) {
-			answer(from, what, func(m script.Module, err error) { done(bare(m), err) })
+			r.inGo(func() { answer(from, what, func(m script.Module, err error) { done(bare(m), err) }) })
 		}
+	}
+	if resolve := o.Resolve; resolve != nil {
+		o.Resolve = func(from, specifier string) (string, error) {
+			var address string
+			var err error
+			r.inGo(func() { address, err = resolve(from, specifier) })
+			return address, err
+		}
+	}
+	if rejected := o.Rejected; rejected != nil {
+		o.Rejected = func(e *script.Error) { r.inGo(func() { rejected(e) }) }
 	}
 	var ctx script.Context
 	err := ErrAsking
-	r.through(func() { ctx, err = script.New(o) })
+	r.through(func() { r.inEngine(func() { ctx, err = script.New(o) }) })
 	if err != nil {
 		return nil, err
 	}
@@ -82,14 +93,20 @@ func (g *gate) runs(touch func()) bool {
 
 func (g *gate) Bind(name string, fn script.Func) error {
 	err := ErrAsking
-	g.r.through(func() { err = g.ctx.Bind(name, fn) })
+	called := func(args []any) (any, error) {
+		var value any
+		var failed error
+		g.r.inGo(func() { value, failed = fn(args) })
+		return value, failed
+	}
+	g.r.through(func() { g.r.inEngine(func() { err = g.ctx.Bind(name, called) }) })
 	return err
 }
 
 func (g *gate) Run(source, origin string) (any, error) {
 	var value any
 	err := ErrAsking
-	g.runs(func() { value, err = g.ctx.Run(source, origin) })
+	g.runs(func() { g.r.inEngine(func() { value, err = g.ctx.Run(source, origin) }) })
 	if fn, kept := value.(script.Function); kept {
 		value = &gatedFunction{g: g, fn: fn}
 	}
@@ -99,14 +116,14 @@ func (g *gate) Run(source, origin string) (any, error) {
 func (g *gate) Module(source, address string) (script.Module, error) {
 	var m script.Module
 	err := ErrAsking
-	g.r.through(func() { m, err = g.ctx.Module(source, address) })
+	g.r.through(func() { g.r.inEngine(func() { m, err = g.ctx.Module(source, address) }) })
 	return g.module(m), err
 }
 
 func (g *gate) JSON(text, address string) (script.Module, error) {
 	var m script.Module
 	err := ErrAsking
-	g.r.through(func() { m, err = g.ctx.JSON(text, address) })
+	g.r.through(func() { g.r.inEngine(func() { m, err = g.ctx.JSON(text, address) }) })
 	return g.module(m), err
 }
 
@@ -157,7 +174,7 @@ func (f *gatedFunction) Call(args ...any) (any, error) {
 	}
 	var value any
 	err := ErrAsking
-	f.g.runs(func() { value, err = f.fn.Call(args...) })
+	f.g.runs(func() { f.g.r.inEngine(func() { value, err = f.fn.Call(args...) }) })
 	if fn, kept := value.(script.Function); kept {
 		value = &gatedFunction{g: f.g, fn: fn}
 	}
@@ -165,9 +182,9 @@ func (f *gatedFunction) Call(args ...any) (any, error) {
 }
 
 // Release lets the function go, once the answer came if the page's
-// scripts wait for one.
+// scripts wait for one, or once the script that runs on ended.
 func (f *gatedFunction) Release() {
-	if p := &f.g.r.asking; p.parked {
+	if p := &f.g.r.asking; !p.script && (p.parked || p.late && !p.answering) {
 		p.queued = append(p.queued, f.fn.Release)
 		return
 	}
@@ -184,16 +201,21 @@ func (m *gatedModule) Imports() []script.Import { return m.m.Imports() }
 func (m *gatedModule) Link(resolve func(from script.Module, what script.Import) (script.Module, error)) error {
 	err := ErrAsking
 	m.g.r.through(func() {
-		err = m.m.Link(func(from script.Module, what script.Import) (script.Module, error) {
-			to, failed := resolve(m.g.module(from), what)
-			return bare(to), failed
+		m.g.r.inEngine(func() {
+			err = m.m.Link(func(from script.Module, what script.Import) (script.Module, error) {
+				var to script.Module
+				var failed error
+				m.g.r.inGo(func() { to, failed = resolve(m.g.module(from), what) })
+				return bare(to), failed
+			})
 		})
 	})
 	return err
 }
 
 func (m *gatedModule) Run(done func(error)) {
-	if !m.g.runs(func() { m.m.Run(done) }) {
+	ended := func(err error) { m.g.r.inGo(func() { done(err) }) }
+	if !m.g.runs(func() { m.g.r.inEngine(func() { m.m.Run(ended) }) }) {
 		done(ErrAsking)
 	}
 }

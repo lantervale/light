@@ -135,6 +135,13 @@ type Host struct {
 	// Hold is shared by the documents of one tab: while a script of one
 	// waits for an answer, no script of another runs.
 	Hold *Hold
+	// Slow, when set, has a script that runs long go on while the
+	// frames do, in place of being stopped at Budget: it is told, once
+	// the script has run for Patience's Notice, that the user is to be
+	// asked whether to wait for it (Wait) or to stop it (Stop). It
+	// takes a Host with an Ask, whose scripts run beside the frame.
+	Slow     func(ran time.Duration)
+	Patience Patience
 	// Cleared is told the console was cleared by a script.
 	Cleared func()
 	// Navigate opens address in the page's tab, in place of the page in
@@ -208,6 +215,11 @@ type Runtime struct {
 	handles
 	// selectors are the selectors read so far.
 	selectors map[string]selectors
+	// validity is what the page last said of its controls' values.
+	validity validity
+	// here is the address the page moved to without leaving, "" while
+	// it is where it was read from.
+	here string
 	// ran are the script elements that ran or are about to.
 	ran map[*html.Node]bool
 	// waiting are the scripts to run at the next frame.
@@ -258,17 +270,22 @@ type Runtime struct {
 	// leaving a Runtime closed while a script of its kin held its engine.
 	asking  parking
 	leaving bool
+	// asked is the operation a script asks now, for the kin that keeps
+	// its node to do, and forKin whether r does one for a kin
+	// (adoption.go).
+	asked  string
+	forKin bool
 }
 
 // New makes the Runtime of page, loaded with its scripts (web.Loader's
 // Scripts), in a new context of the engine. Nothing runs until Start.
 func New(page *web.Page, host Host) (*Runtime, error) {
-	if page.Doc == nil || page.Tree == nil {
+	if page.Tree == nil || page.Tree.Document() == nil {
 		return nil, errors.New("the page was not loaded for scripts to run")
 	}
 	r := &Runtime{
-		page: page, doc: page.Doc, tree: page.Tree, began: time.Now(),
-		handles: newHandles(), selectors: map[string]selectors{}, stores: map[string]Storage{},
+		page: page, doc: page.Tree.Document(), tree: page.Tree, began: time.Now(),
+		handles: newHandles(host.Kin.numbers()), selectors: map[string]selectors{}, stores: map[string]Storage{},
 		ran: map[*html.Node]bool{}, requests: map[int]func(){}, kept: map[int]bool{}, loaded: newModuleMap(),
 	}
 	r.asking.handover = host.Kin.handover()
@@ -278,8 +295,8 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 	r.sheetOps()
 	r.fontOps()
 	r.seedSheets()
-	ctx, err := r.engine(script.Options{Budget: host.Budget, Rejected: r.rejected, Import: r.imported,
-		Resolve: r.specified, Kin: host.Kin.name(), Beside: host.Kin.beside()})
+	ctx, err := r.engine(r.patient(script.Options{Budget: host.Budget, Rejected: r.rejected, Import: r.imported,
+		Resolve: r.specified, Kin: host.Kin.name(), Beside: host.Kin.beside()}))
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +322,7 @@ func (r *Runtime) install() error {
 		return err
 	}
 	var source strings.Builder
-	source.WriteString("(function () {\n\"use strict\";\n")
+	source.WriteString("(function (handed) {\n\"use strict\";\n")
 	for _, file := range files {
 		text, failed := sources.ReadFile("js/" + file.Name())
 		if failed != nil {
@@ -314,8 +331,26 @@ func (r *Runtime) install() error {
 		source.Write(text)
 		source.WriteByte('\n')
 	}
-	source.WriteString("})()")
-	entry, err := r.ctx.Run(source.String(), origin)
+	source.WriteString("})")
+	made, err := r.ctx.Run(source.String(), origin)
+	if err != nil {
+		return fmt.Errorf("light's own script: %w", err)
+	}
+	makes, ok := made.(script.Function)
+	if !ok {
+		return errors.New("light's own script gave no function")
+	}
+	defer makes.Release()
+	shared, err := r.host.Kin.shared()
+	if err != nil {
+		return err
+	}
+	var given any
+	if shared != nil {
+		given = shared
+		defer shared.Release()
+	}
+	entry, err := makes.Call(given)
 	if err != nil {
 		return fmt.Errorf("light's own script: %w", err)
 	}
@@ -339,6 +374,7 @@ func (r *Runtime) call(args []any) (any, error) {
 		return nil, fmt.Errorf("light: no operation %q", name)
 	}
 	r.sheets.stale = r.sheets.stale || mutates[name]
+	r.asked = name
 	return do(arguments(args[1:]))
 }
 
@@ -356,20 +392,38 @@ func (r *Runtime) start() {
 		switch {
 		case s.Skipped != "":
 			r.say("warn", fmt.Sprintf("A script was not run: %s.", s.Skipped), s.Address)
+			r.arrived(s.Node, "error")
 		case s.ImportMap:
 			r.mapImports(s.Source)
 		case s.Module:
 			r.begin(s)
 		case s.Deferred:
-			r.later = append(r.later, &turn{ready: true, run: func() { r.run(s.Source, s.Address, s.Node) }})
+			r.later = append(r.later, &turn{ready: true, run: func() { r.ranFrom(s.Source, s.Address, s.Node) }})
 		default:
-			r.run(s.Source, s.Address, s.Node)
+			r.ranFrom(s.Source, s.Address, s.Node)
 		}
 	}
 	r.preload()
 	r.starting = false
 	r.proceed()
 	r.syncSheets()
+}
+
+// ranFrom runs a script the page names, then tells its element it
+// loaded when its text came from elsewhere.
+func (r *Runtime) ranFrom(source, address string, element *html.Node) {
+	r.run(source, address, element)
+	r.arrived(element, "load")
+}
+
+// arrived fires load or error at the element of a script that has a src.
+func (r *Runtime) arrived(element *html.Node, kind string) {
+	if element == nil || r.closed {
+		return
+	}
+	if _, external := attribute(element, "src"); external {
+		r.fire(element, kind, nil)
+	}
 }
 
 // run runs one script as its element's.
@@ -449,6 +503,7 @@ func (r *Runtime) tell(m Message) {
 // frame callbacks. It reports whether anything is left to run later.
 func (r *Runtime) Frame() bool {
 	more := true
+	r.slice()
 	r.free(func() { more = r.frame() })
 	return more
 }
@@ -502,8 +557,10 @@ func (r *Runtime) land(fn func()) {
 // Evaluate runs source as the console's line does, and gives its value
 // as the console prints it.
 func (r *Runtime) Evaluate(source string) (string, error) {
-	text, err := "", ErrAsking
-	r.free(func() { text, err = r.evaluated(source) })
+	text, err := "", r.refusal()
+	if r.free(func() { text, err = r.evaluated(source) }); r.asking.late {
+		return "", ErrBusy
+	}
 	return text, err
 }
 
@@ -534,7 +591,7 @@ func (r *Runtime) Close() {
 	if r.closed {
 		return
 	}
-	if r.heldByKin() {
+	if r.halt(); r.heldByKin() {
 		if !r.leaving {
 			r.leaving = true
 			r.asking.closing = append(r.asking.closing, r.Close)
@@ -553,7 +610,7 @@ func (r *Runtime) Close() {
 	r.tree.Activate, r.tree.Heard, r.tree.Submit = nil, nil, nil
 	r.entry.Release()
 	r.ctx.Close()
-	r.handles = newHandles()
+	r.handles = newHandles(nil)
 	r.ran, r.requests, r.kept, r.waiting, r.later, r.loaded = nil, nil, nil, nil, nil, moduleMap{}
 }
 

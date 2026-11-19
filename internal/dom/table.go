@@ -16,6 +16,7 @@ func (r *Runtime) table() map[string]op {
 		"sibling":       r.of(r.sibling),
 		"connected":     r.of(r.isConnected),
 		"contains":      r.of(r.contains),
+		"treeTop":       r.of(r.treeTop),
 		"compare":       r.of(r.compare),
 		"create":        r.create,
 		"createText":    r.createText,
@@ -34,6 +35,7 @@ func (r *Runtime) table() map[string]op {
 		"closest":       r.of(r.closest),
 		"byId":          r.byID,
 		"handles":       r.held,
+		"keeper":        r.keptBy,
 		"release":       r.let,
 		// elements (element.go)
 		"attr":         r.of(r.attr),
@@ -41,6 +43,7 @@ func (r *Runtime) table() map[string]op {
 		"removeAttr":   r.of(r.removeAttr),
 		"attrs":        r.of(r.attrs),
 		"attribute":    r.of(r.attribute),
+		"validity":     r.validityTold,
 		"value":        r.on(r.value),
 		"setValue":     r.on(r.setValue),
 		checked:        r.on(r.checked),

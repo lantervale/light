@@ -4,11 +4,11 @@
 // it: a text node's is negative. wrap gives the one object a script
 // ever sees for it.
 
-const REF = Symbol("ref");
+const REF = bag.REF;
 const TAG = Symbol("tag");
 const NS = Symbol("namespace");
 const token = Symbol("light");
-const wrappers = new Map();
+const wrappers = bag.wrappers;
 const ELEMENT_NODE = 1, TEXT_NODE = 3, CDATA_NODE = 4, INSTRUCTION_NODE = 7, COMMENT_NODE = 8, DOCUMENT_NODE = 9,
   DOCTYPE_NODE = 10, FRAGMENT_NODE = 11;
 const FRAGMENT = "#document-fragment";
@@ -40,6 +40,8 @@ const inXML = (node) => xmlAbout && host("document", "xml", node[REF]);
 // objectOf is the object of the node of a number, of that name.
 const objectOf = (ref, tag) => {
   if (tag === FRAGMENT) return new DocumentFragment(token, ref);
+  if (tag === "#text") return new Text(token, ref);
+  if (tag[0] === "@") return bag("get", Number(tag.slice(1))).node(ref);
   if (tag === "#comment") return new Comment(token, ref);
   if (tag === "#doctype") return new DocumentType(token, ref);
   if (tag === "#cdata-section") return new CDATASection(token, ref);
@@ -68,7 +70,7 @@ const wrap = (ref) => {
       return node;
     }
   }
-  node = ref < 0 ? new Text(token, ref) : objectOf(ref, host("tag", ref));
+  node = ref < 0 && !bag.mixed ? new Text(token, ref) : objectOf(ref, host("tag", ref));
   wrappers.set(ref, node);
   return node;
 };
@@ -107,10 +109,74 @@ const byName = (prototype, find) => {
   }));
 };
 
+// keptBy is the kin whose document keeps a node, for what follows a
+// document's tree to be done there: undefined for a node of the page.
+const keptBy = (node) => {
+  const id = node instanceof Node ? host("keeper", node[REF]) : kin.self;
+  return id === kin.self ? undefined : bag("get", id);
+};
+// mixing has the page tell a node of its kin from what is no node, by
+// the interface of the same name where the node was made, and its
+// observers hear of what the kin change: done once one of the kin has
+// reached into another.
+const mixing = () => {
+  const ordinary = Function.prototype[Symbol.hasInstance];
+  // A window of another document, which is asked nothing, is no node.
+  const told = (brand) => ({
+    configurable: true,
+    value(value) {
+      if (ordinary.call(this, value)) return true;
+      if (value === null || typeof value !== "object") return false;
+      try {
+        if (!brand(value)) return false;
+        for (let of = Object.getPrototypeOf(value); of; of = Object.getPrototypeOf(of)) {
+          const made = Object.getOwnPropertyDescriptor(of, "constructor");
+          if (made && typeof made.value === "function" && made.value.name === this.name) return true;
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    },
+  });
+  Object.defineProperty(Node, Symbol.hasInstance, told((value) => Object.hasOwn(value, REF)));
+  Object.defineProperty(Event, Symbol.hasInstance, told((value) => eventStates.has(value)));
+  kinWatch();
+};
+// mixed is told when the page reaches into one of its kin.
+const mixed = () => {
+  if (bag.mixed) return;
+  bag.mixed = true;
+  for (const one of bag("all")) one.mixing();
+};
+// kinWatch has the kin tell their observers of each other's changes
+// once one of them has any.
+const kinWatch = () => {
+  if (!bag.mixed) {
+    watching = observing();
+    return;
+  }
+  const all = bag("all");
+  const any = all.some((one) => one.observing());
+  for (const one of all) one.watch(any);
+};
+let observing = () => false;
+
 // observed tells the mutation observers of a change (60-observers.js),
 // and watching is whether there is any to tell.
 let observed = () => {};
 let watching = false;
+// hushed counts the changes under way that tell observers once, of the
+// whole, and not node by node.
+let hushed = 0;
+const hushing = (run) => {
+  hushed++;
+  try {
+    run();
+  } finally {
+    hushed--;
+  }
+};
 
 class Node extends EventTarget {
   constructor(key, ref) {
@@ -122,7 +188,7 @@ class Node extends EventTarget {
   get nodeName() { return ""; }
   get nodeValue() { return null; }
   set nodeValue(_) { /* an element has none */ }
-  get ownerDocument() { return (strangers && wrap(host("document", "owner", this[REF]))) || document; }
+  get ownerDocument() { return ((strangers || bag.mixed) && wrap(host("document", "owner", this[REF]))) || document; }
   get isConnected() { return host("connected", this[REF]); }
   get parentNode() {
     const parent = host("parent", this[REF]);
@@ -140,13 +206,22 @@ class Node extends EventTarget {
   get textContent() { return host("text", this[REF]); }
   set textContent(text) {
     const removed = watching ? kidsOf(this) : null;
+    emptied(this);
     host("setText", this[REF], text === null || text === undefined ? "" : String(text));
-    if (watching) observed({ type: "childList", target: this, removedNodes: removed, addedNodes: kidsOf(this) });
+    if (!watching) return;
+    const added = kidsOf(this);
+    if (removed.length || added.length) {
+      observed({ type: "childList", target: this, removedNodes: removed, addedNodes: added });
+    }
   }
   hasChildNodes() { return host("child", this[REF], 0, false) !== 0; }
   getRootNode() {
+    if (!bag.mixed && this[REF] !== undefined && !(this instanceof Document)) {
+      const top = host("treeTop", this[REF]);
+      return top === "document" ? document : wrap(top);
+    }
     let root = this;
-    while (root.parentNode) root = root.parentNode;
+    for (let parent = root.parentNode; parent; parent = root.parentNode) root = parent;
     return root;
   }
   contains(other) {
@@ -167,16 +242,27 @@ class Node extends EventTarget {
     return child;
   }
   replaceChild(child, old) {
-    aNode(child);
-    if (aNode(old).parentNode !== this) {
-      throw new DOMException("The node to be replaced is not a child of this node.", "NotFoundError");
+    if (arguments.length < 2) throw new TypeError("replaceChild takes a node and the child it replaces.");
+    insertable(this, aNode(child), aNode(old), old);
+    let next = old.nextSibling;
+    if (next === child) next = child.nextSibling;
+    const previousSibling = watching ? old.previousSibling : null;
+    const added = child instanceof DocumentFragment ? kidsOf(child) : [child];
+    if (child.parentNode && !(child instanceof DocumentFragment)) detach(child);
+    const removed = old.parentNode === this ? [old] : [];
+    hushing(() => {
+      detach(old);
+      insert(this, child, next);
+    });
+    if (watching) {
+      observed({
+        type: "childList", target: this, addedNodes: added, removedNodes: removed, previousSibling, nextSibling: next,
+      });
     }
-    if (child === old) return old;
-    insert(this, child, old, old);
-    detach(old);
     return old;
   }
   cloneNode(deep) { return wrap(host("clone", this[REF], Boolean(deep))); }
+  get baseURI() { return (this.ownerDocument || document).baseURI; }
   isSameNode(other) { return this === other; }
   isEqualNode(other) { return other instanceof Node && equalNodes(this, other); }
   compareDocumentPosition(other) {
@@ -185,7 +271,7 @@ class Node extends EventTarget {
       const from = other.compareDocumentPosition(this);
       return (from & 33) | (from & 2 ? 4 : 0) | (from & 4 ? 2 : 0) | (from & 8 ? 16 : 0) | (from & 16 ? 8 : 0);
     }
-    if (!(other instanceof Node) || other[REF] === undefined) return 1;
+    if (!(other instanceof Node) || other[REF] === undefined) return 35;
     return host("compare", this[REF], other[REF]);
   }
   normalize() {
@@ -197,7 +283,9 @@ class Node extends EventTarget {
       const before = child.previousSibling;
       if (child.data === "") detach(child);
       else if (before instanceof Text) {
-        before.data += child.data;
+        const length = before.length;
+        retexted(before, before.data, length, 0, child.data);
+        textJoined(before, length, child);
         detach(child);
       }
     }
@@ -264,8 +352,8 @@ const refuse = (why) => { throw new DOMException(why, "HierarchyRequestError"); 
 // admit refuses what a document cannot hold: more than one element,
 // more than one doctype, or a doctype after its element. replaced is
 // the child the new one takes the place of.
-const admit = (parent, child, before, replaced) => {
-  const kids = kidsOf(parent);
+const admit = (parent, child, before, replaced, leaving = []) => {
+  const kids = kidsOf(parent).filter((n) => !leaving.includes(n));
   const at = before ? kids.indexOf(before) : kids.length;
   const has = (from, kind) => kids.slice(...from).some((n) => n !== replaced && n instanceof kind);
   const parts = child instanceof DocumentFragment ? kidsOf(child) : [child];
@@ -278,9 +366,9 @@ const admit = (parent, child, before, replaced) => {
     refuse("Only one doctype on document allowed, before its element.");
   }
 };
-// insert puts child in parent before another of its children, at its
-// end for none: a fragment gives its children in its place.
-const insert = (parent, child, before, replaced = null) => {
+// insertable refuses a child a parent cannot take before another of
+// its children, and gives the two numbers light knows them by.
+const insertable = (parent, child, before, replaced = null) => {
   if (!(parent instanceof Element || parent instanceof Document || parent instanceof DocumentFragment)) {
     refuse("This node type does not support this method.");
   }
@@ -288,7 +376,6 @@ const insert = (parent, child, before, replaced = null) => {
   if (child instanceof Attr) refuse("An attribute is held by its element only.");
   const ref = refOf(child, "the child");
   if (child === parent || host("contains", ref, into)) refuse("The new child element contains the parent.");
-  if (before === child && replaced === null) before = child.nextSibling;
   if (before !== null && (!(before instanceof Node) || before.parentNode !== parent)) {
     throw new DOMException("The node before which the new node is to be inserted is not a child of this node.",
       "NotFoundError");
@@ -296,13 +383,32 @@ const insert = (parent, child, before, replaced = null) => {
   if (child instanceof Document) refuse("Nodes of type '#document' may not be inserted inside nodes of type '" + parent.nodeName + "'.");
   if (parent instanceof Document) admit(parent, child, before, replaced);
   else if (child instanceof DocumentType) refuse("A doctype is held by a document only.");
+  return [into, ref];
+};
+// insert puts child in parent before another of its children, at its
+// end for none: a fragment gives its children in its place.
+const insert = (parent, child, before, replaced = null) => {
+  const keeps = bag.mixed && keptBy(parent);
+  if (keeps) return keeps.insert(parent, child, before, replaced);
+  const [into, ref] = insertable(parent, child, before, replaced);
+  if (before === child && replaced === null) before = child.nextSibling;
   if (child instanceof DocumentFragment) {
-    for (const one of kidsOf(child)) insert(parent, one, before);
+    const parts = kidsOf(child);
+    if (!parts.length) return child;
+    const previousSibling = watching ? (before ? before.previousSibling : parent.lastChild) : null;
+    hushing(() => { for (const one of parts) insert(parent, one, before); });
+    if (watching) {
+      observed({ type: "childList", target: child, addedNodes: [], removedNodes: parts });
+      if (!hushed) {
+        observed({ type: "childList", target: parent, addedNodes: parts, removedNodes: [], previousSibling, nextSibling: before });
+      }
+    }
     return child;
   }
   if (child.parentNode) detach(child);
   host("insert", into, ref, before ? before[REF] : 0);
-  if (watching) {
+  nodeEntered(parent, child);
+  if (watching && !hushed) {
     observed({
       type: "childList", target: parent, addedNodes: [child], removedNodes: [],
       previousSibling: child.previousSibling, nextSibling: child.nextSibling,
@@ -311,11 +417,16 @@ const insert = (parent, child, before, replaced = null) => {
   return child;
 };
 const detach = (child) => {
+  const keeps = bag.mixed && keptBy(child);
+  if (keeps) return keeps.detach(child);
   const parent = child.parentNode;
-  if (!parent || (parent === document && child instanceof Element)) return;
+  if (!parent) return;
   const previousSibling = watching ? child.previousSibling : null, nextSibling = watching ? child.nextSibling : null;
+  nodeLeaving(child);
   host("remove", child[REF]);
-  if (watching) observed({ type: "childList", target: parent, addedNodes: [], removedNodes: [child], previousSibling, nextSibling });
+  if (watching && !hushed) {
+    observed({ type: "childList", target: parent, addedNodes: [], removedNodes: [child], previousSibling, nextSibling });
+  }
 };
 // nodesOf turns what append and its kin take, nodes and strings, into
 // one node.
@@ -362,9 +473,8 @@ const nodesOf = (items) => {
 class CharacterData extends Node {
   get data() { return host("text", this[REF]); }
   set data(text) {
-    const oldValue = watching ? this.data : null;
-    host("setText", this[REF], String(text));
-    if (watching) observed({ type: "characterData", target: this, oldValue });
+    const data = this.data;
+    retexted(this, data, 0, data.length, text === null ? "" : String(text));
   }
   get nodeValue() { return this.data; }
   set nodeValue(text) { this.data = text; }
@@ -379,7 +489,8 @@ class CharacterData extends Node {
   get previousElementSibling() { return wrap(host("sibling", this[REF], -1, true)); }
   appendData(text) {
     if (!arguments.length) throw new TypeError("appendData takes the text to add.");
-    this.data += text;
+    const data = this.data;
+    retexted(this, data, data.length, 0, String(text));
   }
   substringData(at, count) { return this.data.substr(offsetIn(this, at), count >>> 0); }
   insertData(at, text) { this.replaceData(at, 0, text); }
@@ -387,13 +498,20 @@ class CharacterData extends Node {
   replaceData(at, count, text) {
     const data = this.data;
     at = offsetIn(this, at);
-    this.data = data.slice(0, at) + String(text) + data.slice(at + (count >>> 0));
+    retexted(this, data, at, Math.min(count >>> 0, data.length - at), String(text));
   }
   remove() { detach(this); }
   before(...items) { putBefore(this, items); }
   after(...items) { putAfter(this, items); }
   replaceWith(...items) { putInPlaceOf(this, items); }
 }
+// retexted puts text in place of count units of a node's data, from
+// at.
+const retexted = (node, data, at, count, text) => {
+  host("setText", node[REF], data.slice(0, at) + text + data.slice(at + count));
+  if (watching) observed({ type: "characterData", target: node, oldValue: data });
+  textReplaced(node, at, count, text.length);
+};
 // offsetIn is an offset into a node's text, refused past its end.
 const offsetIn = (node, at) => {
   at >>>= 0;
@@ -414,9 +532,16 @@ class Text extends CharacterData {
   get nodeName() { return "#text"; }
   get wholeText() { return this.data; }
   splitText(at) {
-    const rest = document.createTextNode(this.data.slice(at));
-    this.data = this.data.slice(0, at);
-    if (this.parentNode) insert(this.parentNode, rest, this.nextSibling);
+    if (!arguments.length) throw new TypeError("splitText takes where to split.");
+    const data = this.data;
+    at = offsetIn(this, at);
+    const rest = (this.ownerDocument || document).createTextNode(data.slice(at));
+    const parent = this.parentNode;
+    if (parent) {
+      insert(parent, rest, this.nextSibling);
+      textSplit(this, at, rest, parent);
+    }
+    retexted(this, data, at, data.length - at, "");
     return rest;
   }
 }
@@ -446,6 +571,9 @@ class DocumentType extends Node {
   get textContent() { return null; }
   set textContent(_) {}
   get childNodes() { return keptList(this, "childNodes", () => nodeList([])); }
+  before(...items) { putBefore(this, items); }
+  after(...items) { putAfter(this, items); }
+  replaceWith(...items) { putInPlaceOf(this, items); }
   get firstChild() { return null; }
   get lastChild() { return null; }
   hasChildNodes() { return false; }
@@ -466,7 +594,10 @@ class DocumentFragment extends Node {
   get nodeName() { return FRAGMENT; }
   get parentNode() { return null; }
   get isConnected() { return false; }
-  getElementById(id) { return this.querySelector("#" + CSS.escape(id)); }
+  getElementById(id) {
+    id = String(id);
+    return (id !== "" && foundIn(this, "[id]").find((node) => ownAttr(node, "id") === id)) || null;
+  }
 }
 
 // parentMixin is what elements, fragments and the document share.
@@ -484,8 +615,35 @@ const parentMethods = {
   append(...items) { if (items.length) insert(this, nodesOf(items), null); },
   prepend(...items) { if (items.length) insert(this, nodesOf(items), this.firstChild); },
   replaceChildren(...items) {
-    for (const child of kidsOf(this)) detach(child);
-    if (items.length) insert(this, nodesOf(items), null);
+    const nodes = items.length ? nodesOf(items) : null;
+    const removed = kidsOf(this);
+    // A document is asked what it may hold as if it were empty.
+    if (nodes && this instanceof Document) admit(this, nodes, null, null, removed);
+    else if (nodes) insertable(this, nodes, null);
+    const added = nodes instanceof DocumentFragment ? kidsOf(nodes) : nodes ? [nodes] : [];
+    if (nodes && nodes.parentNode && nodes.parentNode !== this && !(nodes instanceof DocumentFragment)) detach(nodes);
+    hushing(() => {
+      for (const child of removed) if (child.parentNode === this) detach(child);
+      if (nodes) insert(this, nodes, null);
+    });
+    if (watching && (added.length || removed.length)) {
+      observed({ type: "childList", target: this, addedNodes: added, removedNodes: removed });
+    }
+  },
+  // moveBefore moves a node of the same tree to another place in it.
+  moveBefore(node, before) {
+    if (arguments.length < 2) throw new TypeError("moveBefore takes a node and the child to put it before.");
+    aNode(node);
+    if (before !== null) aNode(before);
+    if (this.getRootNode() !== node.getRootNode()) refuse("A node is moved within its own tree only.");
+    if (node.contains(this)) refuse("The node to move holds the place it would go to.");
+    if (before !== null && before.parentNode !== this) {
+      throw new DOMException("The node to move before is not a child of this node.", "NotFoundError");
+    }
+    if (!(node instanceof Element || node instanceof CharacterData)) refuse("Only an element or text is moved.");
+    if (this instanceof Document) admit(this, node, before, node.parentNode === this ? node : null);
+    if (before === node) before = node.nextSibling;
+    insert(this, node, before);
   },
   querySelector(selector) { return wrap(host("query", this[REF], String(selector), false)); },
   querySelectorAll(selector) { return wrapAll(host("query", this[REF], String(selector), true)); },
@@ -692,6 +850,7 @@ class Element extends Node {
   get innerHTML() { return host("html", this[REF], false); }
   set innerHTML(markup) {
     const removed = watching ? kidsOf(this) : null;
+    emptied(this);
     host("setHTML", this[REF], markup === null ? "" : String(markup));
     if (watching) observed({ type: "childList", target: this, removedNodes: removed, addedNodes: kidsOf(this) });
   }

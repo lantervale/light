@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/lantervale/light/pkg/identity"
+	"github.com/lantervale/light/pkg/search"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -40,6 +41,9 @@ const (
 type Config struct {
 	// StartPage is the address a new tab and the home button show.
 	StartPage string `json:"start_page"`
+	// SearchEngine is the engine what is typed in the address bar and
+	// is not an address is sent to, by its id (search.Engines).
+	SearchEngine string `json:"search_engine"`
 	// DarkMode is whether light's own pages are drawn dark.
 	DarkMode bool `json:"dark_mode"`
 	// Downloads is the folder files are saved to, "" for the user's
@@ -87,6 +91,18 @@ type Config struct {
 	// ToolsHeight is the height the developer tools were dragged to, 0
 	// for their own.
 	ToolsHeight int `json:"tools_height"`
+	// Model is whether the language model that runs on this device is
+	// on: nothing of it is downloaded or started until it is. ModelID is
+	// the one chosen among those light knows (model.Known), "" for the
+	// one proposed to this device, and ModelFile the path of a GGUF file
+	// of the user's in its place: never both. ModelThreads is how many
+	// threads compute, 0 for light's own choice, and ModelCPU whether
+	// the graphics card is left out of it.
+	Model        bool   `json:"model"`
+	ModelID      string `json:"model_id"`
+	ModelFile    string `json:"model_file"`
+	ModelThreads int    `json:"model_threads"`
+	ModelCPU     bool   `json:"model_cpu"`
 }
 
 // formerUserAgent is the User-Agent light once had by default and wrote
@@ -96,8 +112,8 @@ const formerUserAgent = "light/1.0 (ember)"
 // Default is the settings light starts with.
 func Default() Config {
 	return Config{
-		StartPage: tabs.Home, KeepHistory: true, HistoryLimit: 2000, Zoom: 100, Pictures: true,
-		Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
+		StartPage: tabs.Home, SearchEngine: search.Default, KeepHistory: true, HistoryLimit: 2000, Zoom: 100,
+		Pictures: true, Timeout: 30, Redirects: 10, MetaRefresh: true, Requests: 1000,
 		JavaScript: true, Frames: true, Cookies: true,
 	}
 }
@@ -106,6 +122,9 @@ func Default() Config {
 func (c Config) Valid() Config {
 	d := Default()
 	c.StartPage = text(c.StartPage, d.StartPage)
+	if !search.Known(c.SearchEngine) {
+		c.SearchEngine = d.SearchEngine
+	}
 	c.Downloads = strings.TrimSpace(c.Downloads)
 	if c.UserAgent = text(c.UserAgent, d.UserAgent); c.UserAgent == formerUserAgent {
 		c.UserAgent = d.UserAgent
@@ -117,7 +136,7 @@ func (c Config) Valid() Config {
 	c.Redirects = within(c.Redirects, MinRedirects, MaxRedirects, d.Redirects)
 	c.Requests = within(c.Requests, MinRequests, MaxRequests, d.Requests)
 	c.ToolsHeight = within(c.ToolsHeight, MinToolsHeight, MaxToolsHeight, d.ToolsHeight)
-	return c
+	return c.validModel()
 }
 
 // text is value trimmed, or fallback when nothing is left or it holds a

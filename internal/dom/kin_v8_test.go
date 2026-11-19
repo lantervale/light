@@ -42,6 +42,7 @@ type member struct {
 	*family
 	self int
 	rt   *dom.Runtime
+	page *web.Page
 	said []string
 	on   func(string)
 }
@@ -90,7 +91,7 @@ func (f *family) joins(t *testing.T, kin *dom.Kin, hold *dom.Hold, self int, bod
 		t.Fatal(err)
 	}
 	t.Cleanup(rt.Close)
-	m.rt = rt
+	m.rt, m.page = rt, page
 	page.Doc.Layout(geom.Vec2{X: 800, Y: 600})
 	rt.Start()
 	return m

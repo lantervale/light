@@ -8,6 +8,7 @@ func (s *Screen) follow() {
 		s.editing = editing
 		s.locate()
 	}
+	s.seek()
 	stage, _ := s.doc.BoxOf(s.status.Parent())
 	bubble, shown := s.doc.BoxOf(s.status)
 	at := s.win.Input().Mouse()
@@ -36,7 +37,7 @@ func (s *Screen) say() {
 	switch {
 	case text != "":
 	case s.loading():
-		text = "Waiting for " + hostOf(shownBy(s.browser.Tab().Current())) + "…"
+		text = "Waiting for " + hostOf(s.waited(s.browser.Tab())) + "…"
 	default:
 		text = s.session().note
 	}

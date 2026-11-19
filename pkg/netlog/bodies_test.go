@@ -275,6 +275,10 @@ func TestTheStepsOfARequestAddUpToWhatItTook(t *testing.T) {
 	if again.Connect != -1 || again.Blocked < 0 {
 		t.Fatalf("a request on the connection of another took %+v", again)
 	}
+	if rows[0].Reused || rows[0].Idle || !rows[1].Reused || !rows[1].Idle {
+		t.Fatalf("the first request's connection was used before (%t), the second's was not (%t), or was not idle (%t)",
+			rows[0].Reused, !rows[1].Reused, !rows[1].Idle)
+	}
 	for i, timing := range []netlog.Timing{first, again} {
 		if timing.Wait < 20*time.Millisecond || timing.Send < 0 || timing.Receive < 0 {
 			t.Fatalf("request %d took %+v, and the server waited 20 ms", i, timing)

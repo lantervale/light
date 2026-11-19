@@ -26,6 +26,9 @@ func TestAListOfNodesIsNoArrayAndFollowsTheTree(t *testing.T) {
 			Object.getOwnPropertyDescriptor(c, "0").enumerable].join("|"))(d.children)`,
 			`0,1,2,3,4,foo,one,bar,baz,svg|0,1,2,3,4|foo|one|c|||` +
 				`|svg|true|false|true|function|number|{"value":{},"writable":false,"enumerable":false,"configurable":true}|true`},
+		{"what inherits from it sets its own properties, but for an index it has", d + `(c => { const o =
+			Object.create(c); o.foo = "mine"; o[0] = "no"; o[9] = "far"; return [o.foo, o[0] === c[0], o[9], c.foo.id,
+			thrown(() => o.length)].join() })(d.children)`, "mine,true,far,foo,TypeError"},
 		{"it is not written to", d + `(c => { "use strict"; return [thrown(() => { c[0] = 1 }), thrown(() => { c.foo = 1 }),
 			thrown(() => { delete c[0] }), thrown(() => { delete c.foo }), delete c[9], (c.mine = 4, c.mine),
 			Object.getOwnPropertyNames(c).pop(), thrown(() => Object.defineProperty(c, "1", { value: 1 }))].join() })(
