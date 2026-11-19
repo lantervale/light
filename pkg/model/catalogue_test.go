@@ -56,6 +56,31 @@ func TestLightsOwnManifestIsPinnedToItsPublishers(t *testing.T) {
 	}
 }
 
+func TestTheBiggerModelIsProposedOnlyWhereItWasFoundQuick(t *testing.T) {
+	const small, big = "qwen2.5-1.5b-instruct-q4", "qwen3-4b-q4"
+	m := model.Pinned()
+	for _, c := range []struct {
+		gb           int64
+		goos, goarch string
+		want         string
+	}{
+		{0, "darwin", "arm64", small}, {8, "darwin", "arm64", small}, {15, "darwin", "arm64", small},
+		{16, "darwin", "arm64", big}, {64, "darwin", "arm64", big},
+		{64, "darwin", "amd64", small}, {64, "linux", "amd64", small}, {64, "linux", "arm64", small},
+		{64, "windows", "amd64", small},
+	} {
+		if got := m.RecommendedFor(c.gb<<30, c.goos, c.goarch); got.ID != c.want {
+			t.Errorf("%s/%s with %d GB is proposed %q, want %q", c.goos, c.goarch, c.gb, got.ID, c.want)
+		}
+	}
+	if got := m.Recommended(64 << 30); got != m.RecommendedFor(64<<30, runtime.GOOS, runtime.GOARCH) {
+		t.Errorf("this system is proposed %q", got.ID)
+	}
+	if d, _ := m.Model(big); d.MinMemory > *d.RecommendedFrom {
+		t.Errorf("%s is proposed from %d GB and needs %d", big, *d.RecommendedFrom, d.MinMemory)
+	}
+}
+
 func TestAManifestThatCouldFetchAnythingIsRefused(t *testing.T) {
 	good, err := json.Marshal(model.Pinned())
 	if err != nil {
@@ -70,16 +95,19 @@ func TestAManifestThatCouldFetchAnythingIsRefused(t *testing.T) {
 			m.Models[0].URL = strings.Replace(m.Models[0].URL,
 				"https", "http", 1)
 		},
-		"a model with no digest":       func(m *model.Manifest) { m.Models[0].SHA256 = "" },
-		"a model with a short digest":  func(m *model.Manifest) { m.Models[0].SHA256 = "abcd" },
-		"a model with no size":         func(m *model.Manifest) { m.Models[0].Size = 0 },
-		"a model with no licence":      func(m *model.Manifest) { m.Models[0].Licence = "" },
-		"a file name with a folder":    func(m *model.Manifest) { m.Models[0].File = "../" + m.Models[0].File },
-		"two models of one id":         func(m *model.Manifest) { m.Models[1].ID = m.Models[0].ID },
-		"a model named as the library": func(m *model.Manifest) { m.Models[1].ID = model.RuntimeID },
-		"a model of no kind":           func(m *model.Manifest) { m.Models[0].Kind = "vision" },
-		"no model proposed":            func(m *model.Manifest) { m.Models[0].RecommendedFrom = nil },
-		"two models proposed alike":    func(m *model.Manifest) { m.Models[1].RecommendedFrom = m.Models[0].RecommendedFrom },
+		"a model with no digest":        func(m *model.Manifest) { m.Models[0].SHA256 = "" },
+		"a model with a short digest":   func(m *model.Manifest) { m.Models[0].SHA256 = "abcd" },
+		"a model with no size":          func(m *model.Manifest) { m.Models[0].Size = 0 },
+		"a model with no licence":       func(m *model.Manifest) { m.Models[0].Licence = "" },
+		"a file name with a folder":     func(m *model.Manifest) { m.Models[0].File = "../" + m.Models[0].File },
+		"two models of one id":          func(m *model.Manifest) { m.Models[1].ID = m.Models[0].ID },
+		"a model named as the library":  func(m *model.Manifest) { m.Models[1].ID = model.RuntimeID },
+		"a model of no kind":            func(m *model.Manifest) { m.Models[0].Kind = "vision" },
+		"no model proposed":             func(m *model.Manifest) { m.Models[0].RecommendedFrom = nil },
+		"none proposed to every system": func(m *model.Manifest) { m.Models[0].RecommendedOn = "darwin/arm64" },
+		"two models proposed alike": func(m *model.Manifest) {
+			m.Models[1].RecommendedFrom = m.Models[0].RecommendedFrom
+		},
 		"an embedding model proposed": func(m *model.Manifest) {
 			e := len(m.Models) - 1
 			m.Models[e].RecommendedFrom = new(8)

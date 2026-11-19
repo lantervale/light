@@ -70,6 +70,10 @@ func drawings() map[string]drawing {
 		dim    = "#a9a6b8"
 		row    = "#c9c6d6"
 		accent = "#7ab0ff"
+		ready  = "#46c46e"
+		warn   = "#f0a23c"
+		robot  = `<rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V5M2 13v3M22 13v3M9 13v1M15 13v1"/>` +
+			`<circle cx="12" cy="4" r="1"/>`
 	)
 	glyphs := map[string]drawing{
 		"star":    {path: star, stroke: dim},
@@ -77,6 +81,17 @@ func drawings() map[string]drawing {
 		"menu":    {path: `<path d="M4 7h16M4 12h16M4 17h16"/>`, stroke: "#efecf4"},
 		"check":   {path: `<path d="M5 12l5 5 9-10"/>`, stroke: "#cfe1ff"},
 		"folder":  {path: `<path d="M3 7h6l2 2h10v10H3z"/>`, stroke: "#8f8c9c"},
+
+		"fetch":             {path: `<path d="M12 4v12M6 11l6 6 6-6M5 21h14"/>`, stroke: dim},
+		"check-dark":        {path: `<path d="M5 12l5 5 9-10"/>`, stroke: "#0f1b2b"},
+		"robot":             {path: robot, stroke: "#efecf4"},
+		"robot-tile":        {path: robot, stroke: "#0f1b2b"},
+		"robot-ready":       {path: `<circle cx="12" cy="12" r="9"/>`, stroke: ready, fill: ready},
+		"robot-working":     {path: `<rect x="4" y="4" width="16" height="16" rx="3"/>`, stroke: accent, fill: accent},
+		"robot-preparing":   {path: `<circle cx="12" cy="12" r="8"/>`, stroke: accent},
+		"robot-downloading": {path: `<path d="M12 3v15M5 12l7 7 7-7"/>`, stroke: accent},
+		"robot-missing":     {path: `<path d="M4 12h16"/>`, stroke: warn},
+		"robot-failed":      {path: `<path d="M12 3l10 18H2z"/>`, stroke: warn, fill: warn},
 	}
 	for name, path := range map[string]string{
 		"tab":       `<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>`,
@@ -92,6 +107,8 @@ func drawings() map[string]drawing {
 		"code":      `<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/>`,
 		"settings":  `<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>`,
 		"quit":      `<path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/>`,
+		"model":     robot,
+		"model-on":  robot,
 	} {
 		glyphs["row-"+name] = drawing{path: path, stroke: row}
 	}

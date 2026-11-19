@@ -3,6 +3,7 @@ package commands
 import (
 	"github.com/lantervale/light/cmd/light/globals"
 	"github.com/lantervale/light/internal/app"
+	"github.com/lantervale/light/pkg/model"
 )
 
 // Browse is a person's browser, the command of a light given none.
@@ -23,7 +24,29 @@ func (b *Browse) Options(build *globals.Build, profile *globals.Profile) app.Opt
 	return opts
 }
 
+// Modelled are the browser's options with the model that runs on this
+// device, off until its user turns it on: none for a light nobody sits
+// at, and none for one that keeps nothing on disk. An error is a model
+// of a developer's own that does not read.
+func (b *Browse) Modelled(build *globals.Build, profile *globals.Profile) (app.Options, error) {
+	opts := b.Options(build, profile)
+	if opts.Driven {
+		return opts, nil
+	}
+	given, err := profile.Model(build, false)
+	if err != nil || given.Dir == "" {
+		return opts, err
+	}
+	local := model.Open(given, model.Settings{})
+	opts.Model, opts.Library = local, local
+	return opts, nil
+}
+
 func (b *Browse) Run(build *globals.Build, profile *globals.Profile) error {
-	run(open(b.Options(build, profile), b.Address))
+	opts, err := b.Modelled(build, profile)
+	if err != nil {
+		return err
+	}
+	run(open(opts, b.Address))
 	return nil
 }

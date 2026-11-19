@@ -13,6 +13,7 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/world"
 
+	"github.com/lantervale/light/pkg/assist"
 	"github.com/lantervale/light/pkg/bookmarks"
 	"github.com/lantervale/light/pkg/config"
 	"github.com/lantervale/light/pkg/cookies"
@@ -67,6 +68,11 @@ type Profile struct {
 	unkept   error
 	markFile *store
 
+	// assists are the features the model helps with, and assisted their
+	// file.
+	assists  *assist.Features
+	assisted *store
+
 	// sites is what sites store through their scripts, and stored its
 	// file.
 	sites  *storage.Store
@@ -114,6 +120,7 @@ func NewProfile(opts Options) *Profile {
 	p := &Profile{opts: opts, system: runtime.GOOS}
 	p.restore()
 	p.restoreDownloads()
+	p.assistFeatures()
 	p.hold()
 	return p
 }
@@ -203,6 +210,9 @@ func (p *Profile) hold() {
 	p.guard.Open(c.LocalNetwork)
 	p.visits.SetLimit(c.HistoryLimit)
 	p.saves.SetDir(p.downloadsDir())
+	if p.modelGiven() {
+		p.opts.Library.Configure(c.ModelSettings())
+	}
 }
 
 // keep writes the files that changed and were not written lately.
@@ -213,7 +223,7 @@ func (p *Profile) keep() {
 	if p.jar.Changed() {
 		p.jarFile.touch()
 	}
-	for _, file := range []*store{p.settings, p.history, p.markFile, p.saved, p.stored, p.jarFile} {
+	for _, file := range []*store{p.settings, p.history, p.markFile, p.saved, p.stored, p.jarFile, p.assisted} {
 		if err := file.keep(p.opts.Dir); err != nil {
 			p.unreadable = err
 		}
@@ -275,6 +285,11 @@ func (p *Profile) Close() error {
 	if p.jar.Changed() {
 		p.jarFile.touch()
 	}
-	return errors.Join(p.settings.flush(p.opts.Dir), p.history.flush(p.opts.Dir), p.markFile.flush(p.opts.Dir),
+	var stopped error
+	if p.modelGiven() {
+		stopped = p.opts.Library.Close()
+	}
+	return errors.Join(stopped, p.assisted.flush(p.opts.Dir), p.settings.flush(p.opts.Dir),
+		p.history.flush(p.opts.Dir), p.markFile.flush(p.opts.Dir),
 		p.saved.flush(p.opts.Dir), p.stored.flush(p.opts.Dir), p.jarFile.flush(p.opts.Dir), p.bases.Close())
 }

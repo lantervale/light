@@ -150,6 +150,7 @@ func (s *Screen) openPanel(address string) {
 		return
 	}
 	s.menu.Close()
+	s.closeCard(false)
 	p.address, p.naming = address, false
 	empty(p.tile)
 	p.tile.Append(s.siteTile(address, "big"))

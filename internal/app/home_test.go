@@ -272,3 +272,21 @@ func TestAVisitIsSaidToBeAsLongAgoAsItWas(t *testing.T) {
 		}
 	}
 }
+
+func TestTheStartPageIsAColumnInTheMiddleOfAWideWindow(t *testing.T) {
+	s, _ := seeded(t)
+	s.win.SetSize(geom.V2(1600, 900))
+	s.frame()
+	s.frame()
+	s.frame()
+	view, page, held := s.box("view"), s.box("page"), s.box("held")
+	left, right := page.X-view.X, view.X+view.W-page.X-page.W
+	if page.W != 960 || held.W > 960 || left < 300 || left-right > 16 || right-left > 16 {
+		t.Fatalf("in a window 1600 wide the page is at %v, what it holds at %v, in a view %v", page, held, view)
+	}
+	logo := s.box("logo")
+	if centre := logo.X + logo.W/2; centre < page.X+page.W/2-1 || centre > page.X+page.W/2+1 {
+		t.Fatalf("the logo %v is not in the middle of the page %v", logo, page)
+	}
+	s.clean()
+}

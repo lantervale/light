@@ -173,7 +173,7 @@ func configBody(s *Screen) []*ui.Node {
 		body = append(body, ui.P(ui.ID("config-problem"), ui.Text("The settings' file is not in use: "+
 			s.misread.Error()+". It is written again when a setting changes.")))
 	}
-	return append(body,
+	body = append(body,
 		ui.H2(ui.Text("Start")),
 		s.textSetting("set-start-page", "Start page", "What a new tab and the home button show: "+tabs.Home+
 			" or an address.", func(c *config.Config) *string { return &c.StartPage }, address),
@@ -231,6 +231,10 @@ func configBody(s *Screen) []*ui.Node {
 		s.numberSetting("set-requests", "Requests kept", "In each tab's Network panel.",
 			config.MinRequests, config.MaxRequests, func(c *config.Config) *int { return &c.Requests }),
 	)
+	if s.modelGiven() {
+		body = append(body, ui.H2(ui.Text(modelName)), s.modelSettings())
+	}
+	return body
 }
 
 func same(text string) string { return text }

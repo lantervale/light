@@ -30,6 +30,7 @@ func (s *Screen) menuButton() *ui.Node {
 			ui.Div(ui.ID("menu-full"), ui.Attr("role", "menuitem"), ui.Attr("aria-label", "Full screen"),
 				glyph("row-full"), ui.OnClick(func() { s.win.SetFullscreen(!s.win.Fullscreen()) }))),
 		ui.Div(ui.Attr("role", "separator")),
+		s.card.rows,
 		s.keeps,
 		ui.Div(ui.Attr("role", "separator")),
 		s.choice("code", "Developer tools", keys.tools, s.toggleTools),
@@ -92,6 +93,7 @@ func (s *Screen) followChoices() {
 	s.hang(s.choices, s.more, menuNotch)
 	s.list.RemoveClass("shown")
 	s.recent.RemoveClass("shown")
+	s.closeCard(false)
 	if zoom := percent(s.zoomOf(s.session()), ""); s.zoomed.Text() != zoom {
 		s.zoomed.SetText(zoom)
 	}

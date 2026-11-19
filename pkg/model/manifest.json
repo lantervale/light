@@ -95,7 +95,10 @@
       "licence": "Apache-2.0",
       "context": 8192,
       "min_memory_gb": 8,
-      "tried": false
+      "recommended_from_gb": 16,
+      "recommended_on": "darwin/arm64",
+      "tried": true,
+      "why": "Answers questions and explains passages more reliably than the small one; needs a graphics card to be quick, and about 4 GB of memory."
     },
     {
       "id": "nomic-embed-text-v1.5-q8",

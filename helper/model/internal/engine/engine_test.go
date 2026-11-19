@@ -280,8 +280,9 @@ func stopsWhenCancelled(t *testing.T, s *session) {
 // keepsToWhatIsAsked checks a grammar, a stop text, the longest answer and the context.
 func keepsToWhatIsAsked(t *testing.T, s *session) {
 	t.Helper()
-	s.send(wire.Command{Op: wire.OpGenerate, ID: 5, Messages: user("Is a page selling shoes news, a shop or a recipe?"),
-		Grammar: `root ::= "news" | "shop" | "recipe"`, MaxTokens: 8})
+	s.send(wire.Command{Op: wire.OpGenerate, ID: 5,
+		Messages: user("Which kind of page sells shoes? Answer with one word: news, shop or recipe."),
+		Grammar:  `root ::= "news" | "shop" | "recipe"`, MaxTokens: 8})
 	if text, _ := s.answer(5, nil); text != "shop" {
 		t.Errorf("kept to three words the answer is %q", text)
 	}

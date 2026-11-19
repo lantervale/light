@@ -49,6 +49,28 @@ func TestARealHelperAnswers(t *testing.T) {
 			t.Error(closing)
 		}
 	}()
+	realWarms(t, l)
+	realAnswers(t, l)
+	realStopsAndKeepsToAGrammar(t, l)
+	realKeepsToJSON(t, l)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wrote []string
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, _ error) error {
+		if d != nil && !d.IsDir() {
+			rel, _ := filepath.Rel(dir, path)
+			wrote = append(wrote, rel)
+		}
+		return nil
+	})
+	t.Logf("%d entries in the model folder; files: %q", len(entries), wrote)
+}
+
+// realWarms loads the model, noting what light says of it meanwhile.
+func realWarms(t *testing.T, l *model.Local) {
+	t.Helper()
 	at := time.Now()
 	l.Warm()
 	var seen []string
@@ -71,7 +93,11 @@ func TestARealHelperAnswers(t *testing.T) {
 	if !status.Capabilities.Chat || status.Capabilities.Context != model.DefaultContext {
 		t.Fatalf("the model can %+v", status.Capabilities)
 	}
+}
 
+// realAnswers asks a question.
+func realAnswers(t *testing.T, l *model.Local) {
+	t.Helper()
 	stream, err := l.Generate(t.Context(), model.Request{
 		System: "You answer in one short sentence.", Messages: []model.Message{{Role: model.User,
 			Text: "What is the capital of France?"}},
@@ -84,9 +110,13 @@ func TestARealHelperAnswers(t *testing.T) {
 		t.Fatalf("the answer is %q (%v)", result.Text, err)
 	}
 	t.Logf("%q: first token after %v, %d tokens in %v", result.Text, result.FirstToken, result.Tokens, result.Total)
+}
 
+// realStopsAndKeepsToAGrammar cancels an answer, counts, and asks again within a grammar.
+func realStopsAndKeepsToAGrammar(t *testing.T, l *model.Local) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	stream, err = l.Generate(ctx, say("Count from 1 to 300, one number a line."))
+	stream, err := l.Generate(ctx, say("Count from 1 to 300, one number a line."))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,38 +137,30 @@ func TestARealHelperAnswers(t *testing.T) {
 		t.Fatalf("nine words are %d tokens (%v)", n, err)
 	}
 	stream, err = l.Generate(t.Context(), model.Request{
-		Messages: []model.Message{{Role: model.User, Text: "Is a page selling shoes news, a shop or a recipe?"}},
+		Messages: say("Which kind of page sells shoes? Answer with one word: news, shop or recipe.").Messages,
 		Grammar:  model.Choice("news", "shop", "recipe"), MaxTokens: 8,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result, err = stream.Wait(); err != nil || result.Text != "shop" {
+	result, err := stream.Wait()
+	if err != nil || result.Text != "shop" {
 		t.Fatalf("after a cancel, kept to three words, the answer is %q (%v)", result.Text, err)
 	}
+}
 
-	stream, err = l.Generate(t.Context(), model.Request{
+// realKeepsToJSON asks for a JSON value.
+func realKeepsToJSON(t *testing.T, l *model.Local) {
+	t.Helper()
+	stream, err := l.Generate(t.Context(), model.Request{
 		Messages: []model.Message{{Role: model.User, Text: "Give the name and the population of Paris as a JSON object."}},
 		Grammar:  model.JSON, MaxTokens: 60,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result, err = stream.Wait(); err != nil || result.Stopped != model.StoppedStop || !json.Valid([]byte(result.Text)) {
+	result, err := stream.Wait()
+	if err != nil || result.Stopped != model.StoppedStop || !json.Valid([]byte(result.Text)) {
 		t.Fatalf("kept to JSON the answer is %q, ended as %q (%v)", result.Text, result.Stopped, err)
 	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var wrote []string
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, _ error) error {
-		if d != nil && !d.IsDir() {
-			rel, _ := filepath.Rel(dir, path)
-			wrote = append(wrote, rel)
-		}
-		return nil
-	})
-	t.Logf("%d entries in the model folder; files: %q", len(entries), wrote)
 }

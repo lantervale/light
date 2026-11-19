@@ -27,6 +27,7 @@ import (
 	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/downloads"
 	"github.com/lantervale/light/pkg/localnet"
+	"github.com/lantervale/light/pkg/model"
 	"github.com/lantervale/light/pkg/tabs"
 )
 
@@ -80,6 +81,11 @@ type Options struct {
 	// stem darkening, unless a page says how its own is smoothed: for a
 	// light a test runner compares the pictures of.
 	ExactText bool
+	// Model is the language model that runs on this device and Library
+	// what its settings change of it; with either nil this light has no
+	// model, and shows nothing of one.
+	Model   model.Model
+	Library model.Library
 }
 
 // Screen is a window's screen, redrawn from the browser after each
@@ -111,6 +117,10 @@ type Screen struct {
 	// keeps. again is the entry the menu opens on again once chosen.
 	star, more, choices, zoomed, keeps, again *ui.Node
 	panel                                     bookmarkPanel
+	// card is the model's card and marks, and features what the model
+	// helps with.
+	card     modelCard
+	features []feature
 
 	// sought shows the search engine's mark in the address field while
 	// words are typed there.
@@ -255,7 +265,7 @@ func (s *Screen) build() {
 		s.tabs,
 		s.navigation(),
 		ui.Div(ui.ID("split"), ui.Div(ui.ID("stage"), s.view, s.loadline(), s.inspect.Overlay(), s.status, s.list,
-			s.recent, s.buildPanel(), s.choices),
+			s.recent, s.buildPanel(), s.choices, s.card.root),
 			s.tools.Node()),
 		s.shortcuts(),
 		s.menu.Node())
@@ -310,11 +320,13 @@ func (s *Screen) tick() {
 	s.watchDownloads()
 	s.watchHistory()
 	s.watchBookmarks()
+	s.watchModel()
 	s.followChoices()
 	s.measure()
 	s.drew()
 	s.stopByKey()
 	s.followPanel()
+	s.followCard()
 	s.runScripts()
 	if s.host != nil {
 		page := s.session().pages[s.browser.Tab().Current()]
@@ -341,7 +353,7 @@ func (s *Screen) tick() {
 // page: a press or a key is then not the page's scripts' to hear.
 func (s *Screen) overlaid() bool {
 	return s.menu.IsOpen() || s.list.HasClass("shown") || s.recent.HasClass("shown") || s.inspect.Picking() ||
-		s.panelOpen() || s.choosing()
+		s.panelOpen() || s.choosing() || s.cardOpen()
 }
 
 // show redraws the screen from the browser: the tabs, the shown tab's
@@ -352,6 +364,7 @@ func (s *Screen) show() {
 	s.recent.RemoveClass("shown")
 	s.closePanel(false)
 	s.closeChoices()
+	s.closeCard(false)
 	tab, session := s.browser.Tab(), s.session()
 	empty(s.view)
 	s.host, s.alone, s.listed, s.fields, s.relist, s.relistMarks = nil, nil, nil, nil, nil, nil

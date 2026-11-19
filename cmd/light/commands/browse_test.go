@@ -1,10 +1,12 @@
 package commands_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/lantervale/light/cmd/light/commands"
 	"github.com/lantervale/light/cmd/light/globals"
+	"github.com/lantervale/light/pkg/model"
 )
 
 func shown(t *testing.T) {
@@ -35,5 +37,34 @@ func TestABrowserIsItsPersonsAndWaitsForASlowScript(t *testing.T) {
 			t.Fatalf("--patient does not have a light run with %s wait", name)
 		}
 		t.Setenv(name, "")
+	}
+}
+
+func TestABrowserWithAFolderHasAModelThatIsOffAndWritesNothing(t *testing.T) {
+	shown(t)
+	t.Setenv(model.EnvDev, "")
+	dir := t.TempDir()
+	build, profile := &globals.Build{Version: "1.2.3"}, &globals.Profile{Dir: dir}
+	browse := &commands.Browse{}
+	got, err := browse.Modelled(build, profile)
+	if err != nil || got.Model == nil || got.Library == nil {
+		t.Fatalf("a browser's options have the model %v, %v", got.Model, err)
+	}
+	t.Cleanup(func() { _ = got.Library.Close() })
+	if state := got.Model.Status().State; state != model.Off {
+		t.Fatalf("a browser's model starts %v", state)
+	}
+	if left, _ := os.ReadDir(dir); len(left) != 0 {
+		t.Fatalf("a model that is off wrote %v", left)
+	}
+	t.Setenv("EMBER_HIDDEN", "1")
+	if hidden, problem := browse.Modelled(build, profile); problem != nil || hidden.Model != nil ||
+		hidden.Library != nil {
+		t.Fatalf("a hidden light has the model %v, %v", hidden.Model, problem)
+	}
+	t.Setenv("EMBER_HIDDEN", "")
+	t.Setenv(model.EnvDev, "nonsense")
+	if _, err = browse.Modelled(&globals.Build{Version: "dev"}, profile); err == nil {
+		t.Fatal("a LIGHT_MODEL_DEV that does not read is not refused")
 	}
 }

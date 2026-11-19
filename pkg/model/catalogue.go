@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -83,6 +84,10 @@ type Download struct {
 	// much memory, in GB, and more, up to the next one's; nil for a
 	// model never proposed.
 	RecommendedFrom *int `json:"recommended_from_gb,omitempty"`
+	// RecommendedOn keeps that proposal to these systems, as "os/arch"
+	// with spaces between: a model that is only quick enough where a
+	// graphics card computes it. Empty is every system.
+	RecommendedOn string `json:"recommended_on,omitempty"`
 	// Tried is whether light's makers ran it.
 	Tried bool `json:"tried"`
 	// Why is one line on what it is good for.
@@ -170,8 +175,8 @@ func (m Manifest) Check() error {
 		}
 		from[*d.RecommendedFrom] = d.ID
 	}
-	if from[0] == "" {
-		return errors.New("the manifest proposes no model for a device of little memory")
+	if least, _ := m.Model(from[0]); from[0] == "" || least.RecommendedOn != "" {
+		return errors.New("the manifest proposes no model for a device of little memory, whatever its system")
 	}
 	return nil
 }
@@ -219,13 +224,23 @@ func (m Manifest) Embedding() (Download, bool) {
 	return m.Models[i], true
 }
 
-// Recommended is the chat model proposed to a device of that much
-// memory, in bytes: the one whose RecommendedFrom is the highest the
-// memory reaches; with an unknown memory (0), the one for the least.
+// Recommended is the chat model proposed to this system with that
+// much memory, in bytes (RecommendedFor).
 func (m Manifest) Recommended(memory int64) Download {
+	return m.RecommendedFor(memory, runtime.GOOS, runtime.GOARCH)
+}
+
+// RecommendedFor is the chat model proposed to a device of that system
+// and that much memory, in bytes: the one whose RecommendedFrom is the
+// highest the memory reaches, among those proposed to the system; with
+// an unknown memory (0), the one for the least.
+func (m Manifest) RecommendedFor(memory int64, goos, goarch string) Download {
 	var best Download
 	for _, d := range m.Models {
 		if d.RecommendedFrom == nil || int64(*d.RecommendedFrom)<<30 > memory {
+			continue
+		}
+		if d.RecommendedOn != "" && !slices.Contains(strings.Fields(d.RecommendedOn), goos+"/"+goarch) {
 			continue
 		}
 		if best.RecommendedFrom == nil || *d.RecommendedFrom > *best.RecommendedFrom {

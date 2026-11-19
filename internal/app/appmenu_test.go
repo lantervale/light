@@ -18,7 +18,15 @@ import (
 func (s *shown) rows() []string {
 	s.t.Helper()
 	var out []string
+	var listed []*ui.Node
 	for _, row := range s.choices.Children() {
+		if row.HasClass("group") {
+			listed = append(listed, row.Children()...)
+			continue
+		}
+		listed = append(listed, row)
+	}
+	for _, row := range listed {
 		role, _ := row.Attr("role")
 		switch {
 		case row.HasClass("notch"):
@@ -69,8 +77,9 @@ func (s *shown) pick(id string) {
 // focused is the id of the menu's row that has the focus, "" for none.
 func (s *shown) focused() string {
 	for _, id := range []string{"menu", "menu-tab", "menu-window", "menu-star", "menu-history", "menu-downloads",
-		"menu-zoom-out", "menu-zoom-in", "menu-full", "menu-save", "menu-code", "menu-settings", "menu-quit"} {
-		if s.doc.Focused(s.node(id)) {
+		"menu-zoom-out", "menu-zoom-in", "menu-full", "menu-model-on", "menu-model", "menu-save", "menu-code",
+		"menu-settings", "menu-quit"} {
+		if n := s.doc.ByID(id); n != nil && s.doc.Focused(n) {
 			return id
 		}
 	}

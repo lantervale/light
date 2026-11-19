@@ -23,7 +23,7 @@ func (s *Screen) navigation() *ui.Node {
 	s.field = ui.Div(ui.ID("field"), s.lock, s.sought, s.address, s.starButton())
 	return ui.Header(ui.ID("bar"), s.back, s.forward, s.reload,
 		s.button("home", "Home", "home", func() { s.Open(s.config.StartPage) }), s.field, s.downloadsButton(),
-		s.menuButton())
+		s.modelMark(), s.menuButton())
 }
 
 // engine is the search engine the settings name.
