@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>light: a web browser written from scratch</title>
+<meta name="description" content="light is a small web browser written from scratch in Go. No WebKit, no Chromium, no Gecko. A very early preview.">
+<meta property="og:title" content="light: a web browser written from scratch">
+<meta property="og:description" content="No WebKit. No Chromium. No Gecko. Its own CSS, layout, text and paint, in Go. A very early preview.">
+<meta property="og:image" content="https://lantervale.github.io/light/tour.jpg">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+:root {
+	--bg: #f7f4ee; --ink: #0e2a3f; --dim: #5b6b78; --line: #e2dccf; --card: #ffffff;
+	--orange: #f15a2b; --violet: #5b46c9; --warn-bg: #fff3e0; --warn-ink: #7a3b00; --warn-line: #f3c98b;
+	--glow: rgba(241, 90, 43, .22);
+}
+:root.dark {
+	--bg: #0b0c0f; --ink: #f1f3f4; --dim: #9aa0a6; --line: #26282d; --card: #15171b;
+	--violet: #b3a1f4; --warn-bg: #2a2012; --warn-ink: #ffd9a8; --warn-line: #6b4a1c;
+	--glow: rgba(179, 161, 244, .22);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 system-ui, -apple-system, "Segoe UI",
+	Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -.5px;
+	text-decoration: none; }
+.brand img { width: 30px; height: 30px; }
+nav { display: flex; gap: 22px; font-size: 15px; }
+nav a { text-decoration: none; color: var(--dim); }
+nav a:hover { color: var(--ink); }
+.hero { text-align: center; padding: 56px 0 28px; }
+.logo { width: 92px; height: 92px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 22px;
+	transition: transform .2s; }
+.logo:hover { transform: rotate(22.5deg); }
+.logo img { width: 100%; height: 100%; display: block; }
+h1 { margin: 26px auto 14px; max-width: 14em; font-size: clamp(40px, 7vw, 76px); line-height: 1.02;
+	letter-spacing: -2.5px; font-weight: 800; }
+h1 s { text-decoration: line-through var(--orange) .12em; color: var(--dim); }
+.lead { margin: 0 auto; max-width: 34em; font-size: 20px; color: var(--dim); }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 30px 0 14px; }
+.button { display: inline-block; padding: 13px 24px; border-radius: 999px; font-weight: 600; text-decoration: none;
+	border: 1px solid var(--line); background: var(--card); }
+.button.main { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.button:hover { transform: translateY(-1px); }
+.small { font-size: 14px; color: var(--dim); }
+.status { display: flex; gap: 14px; align-items: flex-start; text-align: left; max-width: 760px; margin: 30px auto 0;
+	padding: 16px 20px; border: 1px solid var(--warn-line); border-radius: 16px; background: var(--warn-bg);
+	color: var(--warn-ink); font-size: 16px; }
+.status b { display: block; }
+.status .sign { font-size: 22px; line-height: 1.2; }
+.stage { margin: 48px auto 0; border-radius: 18px; overflow: hidden; background: #000;
+	box-shadow: 0 30px 90px var(--glow), 0 0 0 1px var(--line); }
+.stage video { display: block; width: 100%; height: auto; }
+.caption { text-align: center; margin-top: 12px; }
+section { padding: 84px 0 0; }
+h2 { margin: 0 0 12px; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08; letter-spacing: -1.4px; }
+.sub { max-width: 38em; color: var(--dim); margin: 0 0 30px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+.card { padding: 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
+.card h3 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.3px; }
+.card p { margin: 0; color: var(--dim); font-size: 16px; }
+.tag { display: inline-block; margin-bottom: 12px; padding: 3px 10px; border-radius: 999px; font-size: 12px;
+	font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--violet);
+	border: 1px solid currentColor; }
+table { width: 100%; border-collapse: collapse; font-size: 16px; }
+td { padding: 13px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+td:last-child { text-align: right; color: var(--dim); white-space: nowrap; }
+td b { color: var(--orange); }
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 30px; }
+.shots img { width: 100%; height: auto; display: block; border-radius: 14px; border: 1px solid var(--line); }
+ul.plain { margin: 0; padding: 0; list-style: none; columns: 2 320px; column-gap: 40px; color: var(--dim); }
+ul.plain li { padding: 7px 0 7px 22px; position: relative; break-inside: avoid; }
+ul.plain li::before { content: "–"; position: absolute; left: 0; color: var(--orange); }
+.get { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.get .card { display: flex; flex-direction: column; gap: 8px; }
+.get .button { align-self: flex-start; margin-top: 8px; padding: 9px 18px; font-size: 15px; }
+code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6px; border-radius: 6px;
+	background: var(--line); overflow-wrap: anywhere; }
+footer { margin-top: 96px; padding: 28px 0 44px; border-top: 1px solid var(--line); display: flex; gap: 18px;
+	justify-content: space-between; flex-wrap: wrap; font-size: 14px; color: var(--dim); }
+footer a { text-decoration: none; margin-left: 18px; }
+footer a:first-child { margin-left: 0; }
+@media (max-width: 640px) {
+	nav a.wide { display: none; }
+	.hero { padding-top: 32px; }
+	section { padding-top: 60px; }
+	td:last-child { white-space: normal; }
+}
+</style>
+<script>
+(function () {
+	var kept = null;
+	try { kept = localStorage.getItem("appearance"); } catch (e) {}
+	var dark = kept ? kept === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+	document.documentElement.classList.toggle("dark", dark);
+})();
+</script>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+	<a class="brand" href="."><img src="logo.svg" alt="">light</a>
+	<nav>
+		<a class="wide" href="#why">Why</a>
+		<a class="wide" href="#inside">What you get</a>
+		<a class="wide" href="#not-yet">Not yet</a>
+		<a href="#get">Download</a>
+		<a href="https://github.com/lantervale/light">GitHub</a>
+	</nav>
+</header>
+
+<main>
+<div class="hero">
+	<button class="logo" id="switch" title="Switch the dark mode, as in light" aria-label="Switch the dark mode">
+		<img src="logo.svg" alt="light's logo: a disc with eight orange rays">
+	</button>
+	<h1>A browser that is <s>one of the three</s> its own.</h1>
+	<p class="lead">light is a small web browser written from scratch in Go. No WebKit, no Chromium, no Gecko, no
+		system web view. It draws every page itself.</p>
+	<div class="cta">
+		<a class="button main" href="#get">Download the preview</a>
+		<a class="button" href="https://github.com/lantervale/light">Read the source</a>
+	</div>
+	<p class="small">Free and open source, MIT. macOS, Linux and Windows.</p>
+
+	<div class="status" role="note">
+		<span class="sign" aria-hidden="true">⚠️</span>
+		<span><b>A very early preview, not even an alpha.</b>
+		Its security is not hardened yet. Do not open sensitive pages with it, and do not type a password, a card
+		number or any other secret anywhere in it. Use it to look at how it draws the web, nothing more.</span>
+	</div>
+
+	<div class="stage">
+		<video src="tour.mp4" poster="tour.jpg" autoplay muted loop playsinline controls preload="metadata"></video>
+	</div>
+	<p class="small caption">A search, Wikipedia, and the model on the device explaining and translating a selection.
+		Played at twice the speed.</p>
+</div>
+
+<section id="why">
+	<h2>Almost every browser is one of three engines.</h2>
+	<p class="sub">light is none of them. It parses the CSS, lays out the page, shapes the text and paints it with its
+		own code, on <a href="https://github.com/lantervale/ember">ember</a>, a game engine in Go. It exists to see
+		how far that goes on the real web.</p>
+	<table>
+		<tr><td>CSS, layout, text and painting</td><td><b>ours</b>, checked against headless Chrome</td></tr>
+		<tr><td>The DOM and the web APIs a script sees</td><td><b>ours</b>, in Go</td></tr>
+		<tr><td>Cookies, CORS, mixed content, request headers</td><td><b>ours</b></td></tr>
+		<tr><td>Tabs, windows, history, bookmarks, developer tools</td><td><b>ours</b>, drawn like the page, on the GPU</td></tr>
+		<tr><td>JavaScript</td><td>V8</td></tr>
+		<tr><td>HTML parsing</td><td>golang.org/x/net/html</td></tr>
+		<tr><td>Network</td><td>Go's standard library</td></tr>
+	</table>
+	<div class="shots">
+		<img src="zen-garden.png" alt="light showing CSS Zen Garden" loading="lazy">
+		<img src="developer-tools.png" alt="light's developer tools: the requests of a tab and the details of one" loading="lazy">
+	</div>
+</section>
+
+<section id="inside">
+	<h2>Small, and yours.</h2>
+	<p class="sub">A browser around the page, with nothing phoning home.</p>
+	<div class="grid">
+		<div class="card"><h3>Nothing leaves while you type</h3>
+			<p>No suggestions from a server, no page fetched ahead. A search leaves on Enter, to the engine you
+				chose.</p></div>
+		<div class="card"><h3>No telemetry</h3>
+			<p>No usage statistics, no crash reports, no update check. Third-party cookies are blocked, and a page
+				of the Internet cannot reach your local network.</p></div>
+		<div class="card"><h3>It says who it is</h3>
+			<p>An honest User-Agent that names no other browser. Some sites answer it with less. So be it.</p></div>
+		<div class="card"><span class="tag">Experimental · off by default</span><h3>A model that stays home</h3>
+			<p>Turn it on and a small language model runs on your device: ask a question of the page, translate
+				it, explain a selection, find by meaning. Nothing of a page leaves the machine.</p></div>
+		<div class="card"><h3>Developer tools</h3>
+			<p>Inspector, Network with HAR export, Console, Warnings, Storage. And WebDriver, for a test runner to
+				drive it.</p></div>
+		<div class="card"><h3>It follows your system</h3>
+			<p>Dark mode and languages, each of which the settings override. Click the logo above: it does here
+				what it does on light's start page.</p></div>
+	</div>
+</section>
+
+<section id="not-yet">
+	<h2>What does not work yet.</h2>
+	<p class="sub">Plenty. Many pages show well, many do not. We would rather tell you here.</p>
+	<ul class="plain">
+		<li>No JavaScript on Windows</li>
+		<li>No canvas, audio or video</li>
+		<li>No workers, WebSockets or service workers</li>
+		<li>No shadow DOM or custom elements</li>
+		<li>CSS is a subset</li>
+		<li>No HTTP cache, no file upload, no HTTP sign-in</li>
+		<li>No Content Security Policy</li>
+		<li>No extensions, sync, private window or password manager</li>
+		<li>One process: V8 isolates are the only wall between sites</li>
+		<li>Not notarized, no installer, no automatic update</li>
+	</ul>
+	<p class="small" style="margin-top:22px">The full, honest list is in the
+		<a href="https://github.com/lantervale/light/blob/main/docs/reference.md#what-works-and-what-does-not">reference</a>.</p>
+</section>
+
+<section id="get">
+	<h2>Try the preview.</h2>
+	<p class="sub">Remember what it is: a preview to look at, not a browser to live in. No secrets in it.</p>
+	<div class="get">
+		<div class="card"><h3>macOS</h3>
+			<p>13 or later, Apple silicon or Intel. Not notarized: the first launch needs
+				<b>Open Anyway</b> in System Settings → Privacy &amp; Security.</p>
+			<a class="button main" href="https://github.com/lantervale/light/releases/latest">Get light.app</a></div>
+		<div class="card"><h3>Linux</h3>
+			<p>x86-64 or arm64, glibc 2.35 or later. Needs Vulkan, X11 and ALSA.</p>
+			<a class="button" href="https://github.com/lantervale/light/releases/latest">Get the archive</a></div>
+		<div class="card"><h3>Windows</h3>
+			<p>10 or later, x86-64. Pages show without their scripts there.</p>
+			<a class="button" href="https://github.com/lantervale/light/releases/latest">Get the archive</a></div>
+	</div>
+	<p class="small" style="margin-top:22px">Checksums are signed with cosign and each archive has its SBOM. Or build
+		it: <a href="https://github.com/lantervale/light/blob/main/docs/development.md">from source</a>.</p>
+</section>
+</main>
+
+<footer>
+	<span>light, MIT. Made on <a href="https://github.com/lantervale/ember" style="margin:0">ember</a>. This page
+		sets no cookie and loads nothing from anywhere else.</span>
+	<span><a href="https://github.com/lantervale/light">GitHub</a><a
+		href="https://github.com/lantervale/light/releases">Releases</a><a
+		href="https://github.com/lantervale/light/blob/main/docs/reference.md">Reference</a></span>
+</footer>
+
+</div>
+<script>
+document.getElementById("switch").addEventListener("click", function () {
+	var dark = document.documentElement.classList.toggle("dark");
+	try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}
+});
+</script>
+</body>
+</html>

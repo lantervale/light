@@ -1,4 +1,4 @@
-## light v0.2.0
+## light v0.2.1
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,16 +7,12 @@ ember's UI goes on real pages, not a browser to live in.
 
 ## What is new
 
-- **An optional model on your device**, experimental and off by default, turned on in the settings: questions
-  about the page from the address bar, translation of a page or of a text, a card on a selection made with the
-  right button (Explain, Summarise, Translate), find by meaning, bookmark suggestions, page summaries and page
-  categories of your own.
-- **light follows your system**: dark mode and languages, which the settings override; a click on the start
-  page's logo switches the dark mode. The wheel has its direction and its speed in the settings.
-- **A warning at the first start of each release** that light is an early preview.
-- A new start page, a list under the address field, ICO and BMP icons, `min()`, `max()`, `clamp()` and the units
-  of the font and the viewport in CSS, and fixes (a page that crashed light on an empty CSS variable, the zoom
-  that never came back to 100 %).
+- **Links to a place in a page work**: an address with a `#fragment` scrolls to the element it names, a link
+  within the page fetches nothing and is a step of the history, and Back, Forward and Reload put a page back
+  where it was scrolled.
+- The start page links to light's project, and light has a home page: https://lantervale.github.io/light/
+- Since v0.2.0: an optional model on your device (experimental, off by default), the dark mode and the languages
+  following your system, scroll settings, and the warning at the first start of each release.
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with

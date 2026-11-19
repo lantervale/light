@@ -13,7 +13,7 @@ No WebKit. No Chromium. No Gecko. No system web view.
 
 <sub>A search, Wikipedia, and the model on the device explaining and translating a selection. Sped up 2.5 times.</sub>
 
-**[Download](https://github.com/lantervale/light/releases)** · [Reference](docs/reference.md) ·
+**[lantervale.github.io/light](https://lantervale.github.io/light/)** · **[Download](https://github.com/lantervale/light/releases)** · [Reference](docs/reference.md) ·
 [The model](docs/model.md) · [Build it](docs/development.md)
 
 </div>
