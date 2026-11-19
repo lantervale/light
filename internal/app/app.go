@@ -71,6 +71,10 @@ type Options struct {
 	// User-Agent when a build was given one ("" and "dev" are a build
 	// made by hand).
 	Version string
+	// Preview warns, at the first start of each release, that light is
+	// an early preview no secret should be typed in: for a light with
+	// somebody at its window.
+	Preview bool
 	// Languages are the languages the system's user prefers, most
 	// wanted first, and Driven whether the run is driven by something
 	// else than a person at its window: what light tells a site

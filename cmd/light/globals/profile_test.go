@@ -54,17 +54,17 @@ func TestTheOptionsOnlyOverrideWhatTheSettingsSay(t *testing.T) {
 func TestARunIsDrivenByATestRunnerOrByWhatItsEnvironmentSays(t *testing.T) {
 	shown(t)
 	build, profile := &globals.Build{}, &globals.Profile{}
-	if profile.Options(build, false).Driven {
-		t.Fatal("light is driven unasked")
+	if got := profile.Options(build, false); got.Driven || !got.Preview {
+		t.Fatalf("light with somebody at its window is driven %v and warns them %v", got.Driven, got.Preview)
 	}
-	if got := profile.Options(build, true); !got.Driven || got.Dir != "" {
+	if got := profile.Options(build, true); !got.Driven || got.Dir != "" || got.Preview {
 		t.Fatalf("a light a test runner drives is driven %v and keeps its files in %q", got.Driven, got.Dir)
 	}
 	for name, value := range map[string]string{"EMBER_HIDDEN": "1", "EMBER_AUTOMATION": "127.0.0.1:1",
 		"EMBER_CAPTURE": "x.png"} {
 		t.Setenv(name, value)
-		if !profile.Options(build, false).Driven {
-			t.Fatalf("a light run with %s is not driven", name)
+		if got := profile.Options(build, false); !got.Driven || got.Preview {
+			t.Fatalf("a light run with %s is not driven, or warns nobody", name)
 		}
 		t.Setenv(name, "")
 	}

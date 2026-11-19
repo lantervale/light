@@ -34,10 +34,11 @@ func (p *Profile) Folder(driven bool) string {
 // the system's. driven says a test runner drives the run over
 // WebDriver.
 func (p *Profile) Options(build *Build, driven bool) app.Options {
+	alone := driven || identity.Driven(os.Environ())
 	return app.Options{
 		Dir: p.Folder(driven), Downloads: p.Downloads, DefaultDownloads: systemDownloads(),
-		Files: shell.System{}, Version: build.Version,
-		Languages: identity.System(), Driven: driven || identity.Driven(os.Environ()),
+		Files: shell.System{}, Version: build.Version, Preview: !alone,
+		Languages: identity.System(), Driven: alone,
 	}
 }
 

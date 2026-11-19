@@ -99,6 +99,8 @@ type Profile struct {
 	// clock the seconds its frames have taken.
 	system string
 	clock  float32
+	// warning is whether this run showed that light is an early preview.
+	warning bool
 	// shuts are the tabs closed since light started, the newest first,
 	// for the start page, and shutCount how many times they changed.
 	shuts     []shutTab
@@ -257,6 +259,7 @@ func (p *Profile) Update(f world.Frame) {
 		p.letGo(gone.Window)
 	}
 	p.clock = f.Time.RealElapsed
+	p.warn()
 	for _, s := range slices.Clone(p.screens) {
 		s.tick()
 	}

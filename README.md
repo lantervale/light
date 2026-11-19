@@ -14,6 +14,11 @@
 
 </div>
 
+> [!WARNING]
+> light is a very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive
+> pages with it and do not type a password, a card number or any other secret anywhere in it.** light says so
+> itself at its first start and at the first start of each release.
+
 ## What it is
 
 light is a web browser whose engine is not one of the three everyone else builds on. It embeds no WebKit, no
@@ -967,6 +972,7 @@ section under Experimental in `light://config`. Its settings are also in
 | `model_file` | `""` | A GGUF file of your own in its place, by its whole path (ignored when `model_id` is set) |
 | `model_threads` | `0` | The threads it computes on (up to 64); 0 is half the fast cores, at least 2, at most 8 |
 | `model_cpu` | `false` | Leave the graphics card out of it |
+| `preview_seen` | `""` | The release whose warning, that light is an early preview, you agreed to; light shows it again at the first start of each release |
 | `hide_summaries` | `false` | Keep what the model wrote of the pages visited off the start page |
 | `translate_always` | `""` | The languages whose pages are translated as they show, as `fr, de` |
 | `translate_never` | `""` | The languages whose pages are offered no translation |

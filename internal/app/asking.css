@@ -27,3 +27,14 @@
 #slow.dark { border-color: #3a3d42; background: #2a2618; color: #f1f3f4; }
 #slow.dark button { border-color: #3a3d42; background: #121316; color: #f1f3f4; }
 #slow.dark #slow-stop { border-color: #b3a1f4; background: #b3a1f4; color: #1d1f23; }
+#preview { box-sizing: border-box; width: 460px; max-width: 90%; padding: 22px; border: 1px solid #dadce0;
+	border-radius: 12px; background: #ffffff; color: #202124; font-size: 13px; line-height: 1.5; }
+#preview h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; }
+#preview p { margin: 0 0 10px; }
+#preview strong { color: #b3261e; }
+#preview-buttons { display: flex; justify-content: flex-end; margin-top: 6px; }
+#preview-ok { min-width: 72px; height: 30px; padding: 0 16px; border: 1px solid #302b42; border-radius: 15px;
+	background: #302b42; color: #ffffff; }
+#preview.dark { border-color: #3a3d42; background: #1d1f23; color: #f1f3f4; }
+#preview.dark strong { color: #f28b82; }
+#preview.dark #preview-ok { border-color: #b3a1f4; background: #b3a1f4; color: #1d1f23; }

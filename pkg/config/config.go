@@ -109,6 +109,9 @@ type Config struct {
 	// HideSummaries is whether the start page keeps to itself what the
 	// model wrote of the pages visited.
 	HideSummaries bool `json:"hide_summaries"`
+	// PreviewSeen is the release whose warning, that light is an early
+	// preview, its user agreed to; "" for none.
+	PreviewSeen string `json:"preview_seen"`
 	// TranslateInto is the language a selection, a page and a text typed
 	// on light://translate are translated into, by its tag, "" for the
 	// reader's.

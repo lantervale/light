@@ -5,6 +5,11 @@ The first release of light, a small web browser written from scratch in Go on th
 own HTML and CSS code: there is no WebKit, Blink or Gecko in it. Scripts run in V8 on macOS and Linux; the Windows
 build runs no script. It is a demo of how far ember's UI goes on real pages, not a browser to live in.
 
+> [!WARNING]
+> A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
+> it and do not type a password, a card number or any other secret anywhere in it.** light says so itself at its
+> first start.
+
 ## What to download
 
 | System | Archive | Scripts |
