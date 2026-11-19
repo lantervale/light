@@ -119,7 +119,7 @@ func (s *Screen) followAnswer() {
 
 // showSource selects the sentence the answer is from in the page and
 // brings it into view while the robot is on, and selects nothing while
-// it is off. The selection's card stays closed for it.
+// it is off. The selection's card is not opened for it.
 func (s *Screen) showSource() {
 	c := &s.replying
 	page := s.readable()
@@ -128,12 +128,10 @@ func (s *Screen) showSource() {
 	}
 	if c.off {
 		page.Doc.ClearSelection()
-		s.excerpt.seen = ""
 		return
 	}
 	page.Doc.Select(c.source.from, c.source.to)
 	page.Doc.ScrollIntoView(c.source.from.Node.Parent())
-	s.excerpt.seen = page.Doc.Selection().Text
 }
 
 func (s *Screen) fillAnswer() {

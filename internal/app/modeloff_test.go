@@ -62,7 +62,12 @@ func TestWithoutAModelNothingOfWhatItHelpsWithShowsAnywhere(t *testing.T) {
 	} {
 		s := build()
 		page := s.visit(srv.URL + "/")
-		s.selects(page, "cost")
+		s.picks(page, "cost")
+		s.nothingHelped(name + ", a page with a selection of the right button")
+		if s.menu.IsOpen() {
+			t.Fatalf("%s: the drag that selected opened the menu of a right click", name)
+		}
+		s.drags(input.MouseLeft, page, "lead")
 		s.nothingHelped(name + ", a page with a selection")
 		s.command(input.KeyD)
 		s.frame()

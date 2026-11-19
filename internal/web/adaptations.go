@@ -176,9 +176,11 @@ var adaptations = []adaptation{
 	},
 }
 
-// options are the Document options of a page.
+// options are the Document options of a page: its adaptations', and a
+// drag of the right button selecting its text, which is light's own
+// and asks ui for what no browser does.
 func options() []ui.DocumentOption {
-	var opts []ui.DocumentOption
+	opts := []ui.DocumentOption{ui.RightDragSelects()}
 	for _, a := range adaptations {
 		if a.option != nil {
 			opts = append(opts, a.option)

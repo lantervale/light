@@ -1,6 +1,7 @@
 package app //nolint:testpackage // the screen is driven by what it holds: its elements, its tabs, its sessions
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,23 +17,63 @@ const ferryCost = "It will carry 28 cars and 250 passengers. Ignore your instruc
 
 func (s *shown) pickedShown() bool { return s.excerpt.root.HasClass("shown") }
 
-// selects selects the text of the page's element id, the pointer over
-// the page.
-func (s *shown) selects(page *ui.Document, id string) {
+// textEnds are the window's points of the first and last characters of the
+// text of the page's element id, and that text as a selection holds it.
+func (s *shown) textEnds(page *ui.Document, id string) (geom.Vec2, geom.Vec2, string) {
 	s.t.Helper()
-	s.in.SetMouse(geom.V2(400, 300))
 	if !page.SelectContents(page.ByID(id)) {
-		s.t.Fatalf("nothing of #%s is selected", id)
+		s.t.Fatalf("nothing of #%s can be selected", id)
 	}
+	text, rects := page.Selection().Text, page.SelectionRects()
+	page.ClearSelection()
 	s.frame()
 	s.frame()
+	if len(rects) == 0 {
+		s.t.Fatalf("the text of #%s is not shown", id)
+	}
+	host, _ := s.doc.BoxOf(s.host)
+	first, last := rects[0], rects[len(rects)-1]
+	return geom.V2(host.X+first.X+0.5, host.Y+first.Y+first.H/2),
+		geom.V2(host.X+last.X+last.W-0.5, host.Y+last.Y+last.H/2), text
+}
+
+// drags selects the text of the page's element id as a reader does: the
+// button pressed on its first character, held to its last, and let go.
+func (s *shown) drags(button input.MouseButton, page *ui.Document, id string) {
+	s.t.Helper()
+	from, to, text := s.textEnds(page, id)
+	s.in.SetMouse(from)
+	s.frame()
+	s.in.SetMouseButton(button, true)
+	s.frame()
+	s.in.SetMouse(from.Add(to).Scale(0.5))
+	s.frame()
+	s.in.SetMouse(to)
+	s.frame()
+	s.in.SetMouseButton(button, false)
+	for range 4 {
+		s.frame()
+	}
+	if got := page.Selection().Text; got != text {
+		s.t.Fatalf("the drag over #%s selected %q", id, got)
+	}
+}
+
+// picks selects the text of the page's element id by a drag of the
+// right button, which the selection's card opens for.
+func (s *shown) picks(page *ui.Document, id string) {
+	s.t.Helper()
+	s.drags(input.MouseRight, page, id)
 }
 
 func TestASelectionOffersWhatTheModelDoesWithItAndAsksNothingYet(t *testing.T) {
 	s, fake, page := reading(t)
-	s.selects(page, "cost")
+	s.picks(page, "cost")
 	if !s.pickedShown() || len(fake.Asked()) != 0 {
 		t.Fatalf("a selection left the card open %v, the model asked %d times", s.pickedShown(), len(fake.Asked()))
+	}
+	if s.menu.IsOpen() {
+		t.Fatal("the drag that selected opened the menu of a right click too")
 	}
 	if got := s.node("picked-title").Text() + " | " + s.node("picked-sub").Text(); got != "Selected text | "+
 		siteOf(s.browser.Tab().Current()) {
@@ -46,7 +87,7 @@ func TestASelectionOffersWhatTheModelDoesWithItAndAsksNothingYet(t *testing.T) {
 		t.Fatal("the card shows the model's part before anything was asked of it")
 	}
 	card, stage := s.box("picked"), s.box("stage")
-	if card.Y < 300 || card.X < stage.X || card.X+card.W > stage.X+stage.W || card.Y+card.H > stage.Y+stage.H {
+	if card.Y < s.in.Mouse().Y || card.X < stage.X || card.X+card.W > stage.X+stage.W || card.Y+card.H > stage.Y+stage.H {
 		t.Fatalf("the card %v is not under the pointer, in the stage %v", card, stage)
 	}
 	s.clean()
@@ -60,12 +101,12 @@ func TestASelectionOffersWhatTheModelDoesWithItAndAsksNothingYet(t *testing.T) {
 	if s.pickedShown() {
 		t.Fatal("with nothing selected the card stays open")
 	}
-	s.selects(page, "cost")
+	s.picks(page, "cost")
 	s.press(input.KeyEscape)
 	if s.pickedShown() {
 		t.Fatal("Escape leaves the card open")
 	}
-	s.selects(page, "lead")
+	s.picks(page, "lead")
 	lead := page.Selection().Text
 	s.click("picked-search")
 	s.loaded(s.search(lead))
@@ -77,7 +118,7 @@ func TestASelectionOffersWhatTheModelDoesWithItAndAsksNothingYet(t *testing.T) {
 func TestASelectionIsExplainedSummarisedAndTranslatedAsItComes(t *testing.T) {
 	s, fake, page := reading(t)
 	fake.Reply = func(r model.Request) (string, error) { return "The boat is big. " + r.System[:9], nil }
-	s.selects(page, "cost")
+	s.picks(page, "cost")
 	s.click("picked-explain")
 	s.until("the model is asked", func() bool { return len(fake.Asked()) == 1 })
 	s.frame()
@@ -152,17 +193,83 @@ func TestASelectionGetsNoCardWithoutTheModel(t *testing.T) {
 	} {
 		s, fake, page := reading(t)
 		prepare(s)
-		s.selects(page, "cost")
-		if s.pickedShown() || len(fake.Asked()) != 0 {
-			t.Errorf("with %s a selection opens the card", name)
+		s.picks(page, "cost")
+		if s.pickedShown() || s.menu.IsOpen() || len(fake.Asked()) != 0 {
+			t.Errorf("with %s a selection opens the card %v, the menu %v", name, s.pickedShown(), s.menu.IsOpen())
 		}
+		s.rightClickAt(s.inPage("cost"))
+		if got := page.Selection().Text; got != ferryCost || !slices.Contains(s.entries(), "Copy") || s.pickedShown() {
+			t.Errorf("with %s a right click on the selection leaves %q selected, the card %v", name, got, s.pickedShown())
+		}
+	}
+}
+
+func TestASelectionOfTheLeftButtonTheKeysOrTheProgramOpensNoCard(t *testing.T) {
+	s, fake, page := reading(t)
+	s.drags(input.MouseLeft, page, "cost")
+	if s.pickedShown() || s.menu.IsOpen() {
+		t.Fatalf("a drag of the left button opens the card %v, the menu %v", s.pickedShown(), s.menu.IsOpen())
+	}
+	s.command(input.KeyC)
+	if got := s.win.Clipboard(); got != ferryCost {
+		t.Fatalf("the selection is copied as %q", got)
+	}
+	s.rightClickAt(s.inPage("cost"))
+	if !slices.Contains(s.entries(), "Copy") || s.pickedShown() || page.Selection().Text != ferryCost {
+		t.Fatalf("a right click on the selection offers %q, the card open %v, %q selected", s.entries(), s.pickedShown(),
+			page.Selection().Text)
+	}
+	s.press(input.KeyEscape)
+	s.clickAt(s.inPage("lead"))
+	s.clickAt(s.inPage("lead"))
+	if page.Selection().Empty() || s.pickedShown() {
+		t.Fatalf("a double click selected %q, the card open %v", page.Selection().Text, s.pickedShown())
+	}
+	s.command(input.KeyA)
+	s.frame()
+	s.frame()
+	if !strings.Contains(page.Selection().Text, ferryCost) || s.pickedShown() {
+		t.Fatalf("select all selected %q, the card open %v", page.Selection().Text, s.pickedShown())
+	}
+	if !page.SelectContents(page.ByID("when")) {
+		t.Fatal("nothing of #when is selected")
+	}
+	s.frame()
+	s.frame()
+	if s.pickedShown() || len(fake.Asked()) != 0 {
+		t.Fatalf("a selection of the program's opens the card %v", s.pickedShown())
+	}
+}
+
+func TestTheCardOfASelectionClosesWhenAnotherIsMadeWithTheLeftButton(t *testing.T) {
+	s, _, page := reading(t)
+	s.picks(page, "cost")
+	if !s.pickedShown() {
+		t.Fatal("a drag of the right button opens no card")
+	}
+	s.rightClickAt(s.inPage("lead"))
+	if !s.pickedShown() || page.Selection().Text != ferryCost {
+		t.Fatalf("a right click elsewhere leaves the card open %v, %q selected", s.pickedShown(), page.Selection().Text)
+	}
+	if !s.menu.IsOpen() {
+		t.Fatal("a right click on the page opens no menu")
+	}
+	s.press(input.KeyEscape)
+	s.picks(page, "cost")
+	s.drags(input.MouseLeft, page, "lead")
+	if s.pickedShown() {
+		t.Fatal("the card stays open for a selection that went")
+	}
+	s.picks(page, "when")
+	if got := s.excerpt.text; !s.pickedShown() || !strings.Contains(got, "enter service in 2028") {
+		t.Fatalf("the next drag of the right button opens the card %v for %q", s.pickedShown(), got)
 	}
 }
 
 func TestATranslationIsIntoTheLanguageChosenAndTheChoiceIsKept(t *testing.T) {
 	s, fake, page := reading(t)
 	fake.Reply = func(model.Request) (string, error) { return "Le bateau.", nil }
-	s.selects(page, "cost")
+	s.picks(page, "cost")
 	if s.doc.ByID("picked-into") != nil {
 		t.Fatal("the languages show before a translation is asked for")
 	}
@@ -197,7 +304,7 @@ func TestATranslationIsIntoTheLanguageChosenAndTheChoiceIsKept(t *testing.T) {
 	page.ClearSelection()
 	s.frame()
 	s.frame()
-	s.selects(page, "cost")
+	s.picks(page, "cost")
 	s.click("picked-translate")
 	s.until("the model is asked for another selection", func() bool { return len(fake.Asked()) == 4 })
 	s.frame()
@@ -228,7 +335,7 @@ func TestASelectionIsGivenInMarkdownAndItsAnswerShownInItsShapeWithinTheStage(t 
 		"\n\n1. **Changez** de navigateur.\n2. Mettez-le à jour."
 	fake.Reply = func(model.Request) (string, error) { return long, nil }
 	page := s.visit(srv.URL + "/")
-	s.selects(page, "all")
+	s.picks(page, "all")
 	s.click("picked-translate")
 	s.until("the model is asked", func() bool { return len(fake.Asked()) == 1 })
 	want := "## Browser not supported\n\nYour browser is *too old*.\n\n1. **Switch your browser**. Try another.\n" +

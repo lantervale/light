@@ -238,7 +238,7 @@ func (p *Profile) screen(win *platform.Window, address string) *Screen {
 	s.apply()
 	s.features = features()
 	s.doc = ui.NewDocument(ui.CSS(sheet), ui.CSS(menu.Sheet), ui.CSS(devtools.Sheet), ui.Images(icons()),
-		ui.FetchImages(s.picture))
+		ui.FetchImages(s.picture), ui.RightDragSelects())
 	s.build()
 	s.header()
 	s.visit(address)

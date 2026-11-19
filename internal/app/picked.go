@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lantervale/ember/geom"
-	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/config"
@@ -83,10 +82,12 @@ func (s *Screen) translatesInto() translation {
 // with it, what light does by itself.
 type pickedCard struct {
 	root *ui.Node
-	// seen is the selection the card was last opened or left closed
-	// for, text the one it is open for and written what the model is
-	// given of it, of the page at address.
-	seen, text, written, address string
+	// dragged is the body of the Document whose text a drag of the right
+	// button selected since the last frame, text the selection the card
+	// is open for and written what the model is given of it, of the page
+	// at address.
+	dragged                *ui.Node
+	text, written, address string
 	// at is where the pointer stood on the stage when the card opened.
 	at geom.Vec2
 	// did is the action asked of the model, asked its answer, and off
@@ -115,31 +116,29 @@ func (s *Screen) closePicked() {
 	}
 }
 
-// followPicked opens the card for a selection of the page once the
-// button that made it is up, under the pointer, closes it when the
+// followPicked opens the card for the text a drag of the right button
+// selected in the page, under the pointer, closes it when that
 // selection goes or the card is left, and shows what came of what the
-// model was asked.
+// model was asked. A selection made any other way opens nothing.
 func (s *Screen) followPicked() {
 	p := &s.excerpt
+	dragged := p.dragged
+	p.dragged = nil
 	page := s.readable()
 	if page == nil || !s.helps(pickedFeature) {
-		p.seen = ""
 		s.closePicked()
 		return
 	}
-	if s.pickedOpen() && s.leftBy(p.root) {
+	selected := page.Doc.Selection().Text
+	if s.pickedOpen() && (selected != p.text || s.leftBy(p.root)) {
 		s.closePicked()
+	}
+	if dragged == page.Doc.Body() && strings.TrimSpace(selected) != "" {
+		s.closePicked()
+		s.openPicked(selected, markdownOf(page.Doc, page.Doc.Selection()))
 	}
 	if s.pickedOpen() {
 		s.placePicked()
-	}
-	in := s.win.Input()
-	if selected := page.Doc.Selection().Text; selected != p.seen && !in.Down(input.MouseLeft) {
-		p.seen = selected
-		s.closePicked()
-		if strings.TrimSpace(selected) != "" {
-			s.openPicked(selected, markdownOf(page.Doc, page.Doc.Selection()))
-		}
 	}
 	if p.asked != nil && p.asked.take() {
 		s.fillPicked()

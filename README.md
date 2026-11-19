@@ -241,8 +241,10 @@ With the model on, it helps with these, each of which can be turned off alone:
   page in a language you do not read has a label in the address field, "FR → EN", that translates it in place, a
   paragraph at a time, and puts the original back; per language you can ask each time, always translate, or never
   (`translate_always`, `translate_never`).
-- **Actions on selected text**: Explain, Summarise and Translate in a card under the selection. A translation is
-  into British English, American English or French, and the language chosen is kept (`translate_into`).
+- **Actions on selected text**: select text by dragging over it with the right button, and a card opens under
+  it when you let go, with Explain, Summarise and Translate. A selection made with the left button or the keys
+  stays a plain one, and a right click without a drag opens the menu as ever. A translation is into British
+  English, American English or French, and the language chosen is kept (`translate_into`).
 - **Find by meaning**: Find in page (Cmd+F) works without the model; with a model that embeds text, it also finds
   the passages that mean what you typed when the words are not on the page.
 - **Bookmark suggestions**: a name, a line of what the page says and a folder for a bookmark just made, in its

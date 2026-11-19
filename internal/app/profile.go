@@ -11,6 +11,7 @@ import (
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/platform"
+	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/world"
 
 	"github.com/lantervale/light/pkg/assist"
@@ -111,10 +112,11 @@ type Profile struct {
 	// screens are the open windows' screens, the oldest first; windows
 	// the windows to open at the next frame, closed those that closed,
 	// quitting whether light was told to end, and ended whether Close
-	// ran.
+	// ran. dragged are the selections made by a drag of the right button.
 	screens  []*Screen
 	windows  []ask
 	closed   world.Reader[platform.WindowClosed]
+	dragged  world.Reader[ui.RightDragSelected]
 	quitting bool
 	ended    bool
 }
@@ -257,6 +259,11 @@ func (p *Profile) Screen(win *platform.Window) *Screen { return p.screen(win, p.
 func (p *Profile) Update(f world.Frame) {
 	for gone := range p.closed.Read(f.World) {
 		p.letGo(gone.Window)
+	}
+	for made := range p.dragged.Read(f.World) {
+		for _, s := range p.screens {
+			s.excerpt.dragged = made.Node
+		}
 	}
 	p.clock = f.Time.RealElapsed
 	p.warn()
