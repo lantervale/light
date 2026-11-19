@@ -35,15 +35,34 @@ a { color: inherit; }
 header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -.5px;
 	text-decoration: none; }
-.brand img { width: 30px; height: 30px; }
+.brand svg { width: 30px; height: 30px; }
 nav { display: flex; gap: 22px; font-size: 15px; }
 nav a { text-decoration: none; color: var(--dim); }
 nav a:hover { color: var(--ink); }
 .hero { text-align: center; padding: 56px 0 28px; }
+.mark .tile { fill: #0e2a3f; }
+.mark .bulb { fill: #fff; transition: fill .6s ease; }
+.mark .rays { fill: none; stroke: #f15a2b; stroke-width: 1.4; transform-box: view-box; transform-origin: 32px 32px;
+	transition: stroke-width .6s ease, transform .6s cubic-bezier(.3, 1.4, .5, 1), filter .6s ease; }
+:root.dark .mark .bulb { fill: #141b22; }
+:root.dark .mark .rays { stroke-width: 2.4; filter: drop-shadow(0 0 1.5px #ff8a55) drop-shadow(0 0 5px #f15a2b); }
+.switch { display: inline-flex; flex-direction: column; align-items: center; gap: 10px; }
 .logo { width: 92px; height: 92px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 22px;
-	transition: transform .2s; }
-.logo:hover { transform: rotate(22.5deg); }
-.logo img { width: 100%; height: 100%; display: block; }
+	box-shadow: 0 14px 60px rgba(255, 176, 92, .55); transition: box-shadow .6s ease, transform .15s ease; }
+:root.dark .logo { box-shadow: 0 14px 60px rgba(241, 90, 43, .16); }
+.logo svg { width: 100%; height: 100%; display: block; }
+.logo:hover .rays, .logo:focus-visible .rays { transform: rotate(22.5deg); }
+.logo:active { transform: scale(.94); }
+.logo:focus-visible { outline: 2px solid var(--orange); outline-offset: 5px; }
+.hint { font-size: 13px; color: var(--dim); opacity: 0; transform: translateY(-4px);
+	transition: opacity .25s ease, transform .25s ease; }
+.switch:hover .hint, .logo:focus-visible + .hint { opacity: 1; transform: none; }
+kbd { padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+	font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+@media (prefers-reduced-motion: reduce) {
+	.mark .rays, .mark .bulb, .logo, .hint { transition: none; }
+}
 h1 { margin: 26px auto 14px; max-width: 14em; font-size: clamp(40px, 7vw, 76px); line-height: 1.02;
 	letter-spacing: -2.5px; font-weight: 800; }
 h1 s { text-decoration: line-through var(--orange) .12em; color: var(--dim); }
@@ -129,7 +148,8 @@ footer a:first-child { margin-left: 0; }
 <div class="wrap">
 
 <header>
-	<a class="brand" href="."><img src="logo.svg" alt="">light</a>
+	<a class="brand mark" href="."><svg viewBox="0 0 64 64" aria-hidden="true"><rect class="tile" width="64" height="64" rx="14"/><circle class="bulb"
+		cx="32" cy="32" r="23"/><path class="rays" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>light</a>
 	<nav>
 		<a class="wide" href="#why">Why</a>
 		<a class="wide" href="#pages">Pages</a>
@@ -144,9 +164,13 @@ footer a:first-child { margin-left: 0; }
 <div class="hero">
 	<a class="latest" href="https://github.com/lantervale/light/releases/tag/v__VERSION__"><b>New</b>
 		v__VERSION__: what changed →</a><br>
-	<button class="logo" id="switch" title="Switch the dark mode, as in light" aria-label="Switch the dark mode">
-		<img src="logo.svg" alt="light's logo: a disc with eight orange rays">
-	</button>
+	<span class="switch">
+		<button class="logo mark" id="switch" aria-pressed="false" aria-label="Turn the light off">
+			<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="tile" width="64" height="64" rx="14"/><circle class="bulb"
+			cx="32" cy="32" r="23"/><path class="rays" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>
+		</button>
+		<span class="hint" id="hint" aria-hidden="true">Turn the light off, or press <kbd>L</kbd></span>
+	</span>
 	<h1>Built from <s>Chromium</s> scratch.</h1>
 	<p class="lead">light is a small web browser in Go. No WebKit, no Chromium, no Gecko, no system web view: it
 		parses, lays out and paints every page with its own code.</p>
@@ -226,8 +250,8 @@ footer a:first-child { margin-left: 0; }
 			<p>Inspector, Network with HAR export, Console, Warnings, Storage. And WebDriver, for a test runner to
 				drive it.</p></div>
 		<div class="card"><h3>It follows your system</h3>
-			<p>Dark mode and languages, each of which the settings override. Click the logo above: it does here
-				what it does on light's start page.</p></div>
+			<p>Dark mode and languages, each of which the settings override. Click the logo at the top to turn the
+				light off and on again: light's start page does the same.</p></div>
 	</div>
 </section>
 
@@ -309,10 +333,49 @@ footer a:first-child { margin-left: 0; }
 document.getElementById("tour").addEventListener("click", function () {
 	if (this.paused) this.play(); else this.pause();
 });
-document.getElementById("switch").addEventListener("click", function () {
-	var dark = document.documentElement.classList.toggle("dark");
-	try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}
-});
+(function () {
+	var root = document.documentElement, button = document.getElementById("switch"), hint = document.getElementById("hint");
+	var system = matchMedia("(prefers-color-scheme: dark)"), still = matchMedia("(prefers-reduced-motion: reduce)");
+	function shade(dark) {
+		root.classList.toggle("dark", dark);
+		var say = dark ? "Turn the light on" : "Turn the light off";
+		button.setAttribute("aria-label", say);
+		button.setAttribute("aria-pressed", String(dark));
+		hint.firstChild.nodeValue = say + ", or press ";
+	}
+	var dark = root.classList.contains("dark"), turning = null;
+	function flip() {
+		dark = !dark;
+		try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}
+		if (turning) turning.skipTransition();
+		if (turning || !document.startViewTransition || still.matches) {
+			shade(dark);
+			return;
+		}
+		var box = button.getBoundingClientRect(), x = box.left + box.width / 2, y = box.top + box.height / 2;
+		var reach = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+		turning = document.startViewTransition(function () { shade(dark); });
+		turning.finished.finally(function () { turning = null; });
+		turning.ready.then(function () {
+			root.animate({ clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + reach + "px at " + x + "px " +
+				y + "px)"] }, { duration: 700, easing: "cubic-bezier(.4, 0, .2, 1)", pseudoElement: "::view-transition-new(root)" });
+		});
+	}
+	shade(dark);
+	button.addEventListener("click", flip);
+	addEventListener("keydown", function (e) {
+		var at = e.target.tagName;
+		if ((e.key === "l" || e.key === "L") && !e.metaKey && !e.ctrlKey && !e.altKey && at !== "INPUT" &&
+			at !== "TEXTAREA" && !e.target.isContentEditable) {
+			flip();
+		}
+	});
+	system.addEventListener("change", function () {
+		var kept = null;
+		try { kept = localStorage.getItem("appearance"); } catch (e) {}
+		if (!kept) shade(dark = system.matches);
+	});
+})();
 </script>
 </body>
 </html>
