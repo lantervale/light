@@ -28,11 +28,14 @@ type shutTab struct {
 	at             time.Time
 }
 
+// project is where light is made, which the start page links to.
+const project = "https://github.com/lantervale/light"
+
 // homePage is the start page: the logo, the search field, then what
 // light holds of its user's, the bookmarks over two columns, the last
 // pages visited beside what was read this week and the tabs closed.
-// Nothing is fetched to show it: a site's tile is its icon only when
-// light has it already.
+// Then a link to light's project. Nothing is fetched to show it: a
+// site's tile is its icon only when light has it already.
 func homePage(s *Screen) []*ui.Node {
 	search := ui.Input(ui.ID("search"), ui.Type("search"), ui.Placeholder(s.searches()), ui.Attr("autofocus", ""))
 	ui.On(search, ui.EventSubmit, func() { s.Open(s.Resolve(s.doc.Value(search))) })
@@ -51,7 +54,8 @@ func homePage(s *Screen) []*ui.Node {
 	s.relist, s.relistMarks = fill, fill
 	fill()
 	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")),
-		ui.Div(ui.ID("search-box"), mark, search), held}
+		ui.Div(ui.ID("search-box"), mark, search), held,
+		ui.P(ui.ID("project"), s.anchor(project, ui.ID("go-project"), ui.Text("light on GitHub")))}
 }
 
 // homeColumns is the start page's two columns: the last pages visited,

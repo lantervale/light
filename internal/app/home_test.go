@@ -3,6 +3,7 @@ package app //nolint:testpackage // the screen is driven by what it holds: its e
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -88,17 +89,18 @@ func TestTheStartPageOfANewLightHasItsLogoAndItsFieldAndNoFooter(t *testing.T) {
 			word, field)
 	}
 	s.doc.Body().Walk(func(n *ui.Node) bool {
-		if id := n.ID(); id == "home-note" || id == "own-links" || strings.HasPrefix(id, "go-") {
+		if id := n.ID(); id == "home-note" || id == "own-links" ||
+			strings.HasPrefix(id, "go-") && id != "go-project" {
 			t.Errorf("the start page has a footer: <%s id=%q>", n.Tag(), id)
 		}
 		return !n.IsText()
 	})
-	if links := s.texts("page", "link"); len(links) > 0 {
+	if links := s.texts("page", "link"); !slices.Equal(links, []string{"light on GitHub"}) {
 		t.Errorf("the start page of a new light has links: %q", links)
 	}
-	if all := s.node("page").Children(); all[len(all)-1] != s.node("held") {
-		t.Errorf("the start page ends with <%s id=%q>, not with what it holds", all[len(all)-1].Tag(),
-			all[len(all)-1].ID())
+	if all := s.node("page").Children(); all[len(all)-2] != s.node("held") || all[len(all)-1] != s.node("project") {
+		t.Errorf("the start page ends with <%s id=%q>, not with what it holds and its project",
+			all[len(all)-1].Tag(), all[len(all)-1].ID())
 	}
 	if text := s.node("page").Text(); strings.Contains(strings.ToLower(text), "model") ||
 		strings.Contains(strings.ToLower(text), "summar") {
@@ -402,4 +404,15 @@ func TestATabClosedIsOfferedAgainBesideTheLastPages(t *testing.T) {
 		t.Fatal("a tab closed while no history is kept is offered again")
 	}
 	s.clean()
+}
+
+func TestTheStartPageLinksToLightsProject(t *testing.T) {
+	s := show(t)
+	link := s.node("go-project")
+	if got, _ := link.Attr(linked); got != "https://github.com/lantervale/light" || link.Text() != "light on GitHub" {
+		t.Fatalf("the start page links to %q as %q", got, link.Text())
+	}
+	if box, held := s.box("go-project"), s.box("search-box"); box.Y < held.Y+held.H {
+		t.Fatalf("the link to the project is at %v, over the search field at %v", box, held)
+	}
 }
