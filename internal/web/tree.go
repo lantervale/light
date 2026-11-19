@@ -621,10 +621,10 @@ func (b *builder) heard(field *ui.Node) {
 func (b *builder) live(a *ui.Node) {
 	address := func() string {
 		href, _ := a.Attr("href")
-		if href == "" || strings.HasPrefix(href, "#") {
+		if href == "" {
 			return ""
 		}
-		return b.resolve(href)
+		return b.destination(href)
 	}
 	follow := func() {
 		to := address()
@@ -632,7 +632,9 @@ func (b *builder) live(a *ui.Node) {
 			return
 		}
 		if name, saved := a.Attr("download"); saved {
-			b.links.Save(to, name)
+			if href, _ := a.Attr("href"); !strings.HasPrefix(href, "#") {
+				b.links.Save(to, name)
+			}
 			return
 		}
 		target, _ := a.Attr("target")

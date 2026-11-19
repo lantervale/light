@@ -234,13 +234,13 @@ func TestAMiddleButtonReleasedOffTheLinkItWentDownOnOpensNothing(t *testing.T) {
 func TestALinkThatGoesNowhereOpensNoTab(t *testing.T) {
 	srv, _ := answers(t, map[string]answer{
 		"/": typed("text/html", `<title>Places</title><style>a { display: block; height: 24px }</style>
-			<a id="top" href="#top">the top</a><a id="code" href="javascript:void(0)">some code</a>
+			<a id="code" href="javascript:void(0)">some code</a>
 			<a id="mail" href="mailto:a@example.test">a letter</a><a id="bare">no address</a>`),
 	})
 	s := show(t)
 	s.system = "darwin"
 	s.visit(srv.URL + "/")
-	for _, id := range []string{"top", "code", "mail", "bare"} {
+	for _, id := range []string{"code", "mail", "bare"} {
 		s.clickHolding(s.inPage(id), input.KeyLeftSuper)
 		s.middleClickAt(s.inPage(id))
 		if got, want := s.opened(), "["+srv.URL+"/]"; got != want {

@@ -203,6 +203,9 @@ func (s *Screen) land(tab *tabs.Tab, address string, l *load, page *web.Page) {
 	if page.Err == nil && tab.Current() == page.Address {
 		s.record(page.Address, page.Title)
 	}
+	if page.Doc != nil && web.Fragment(page.Address) != "" {
+		web.Reveal(page.Doc, page.Address)
+	}
 	if tab != s.browser.Tab() {
 		s.showTabs()
 		return

@@ -577,8 +577,14 @@ func (r *Runtime) evaluated(source string) (string, error) {
 	return text, nil
 }
 
-// Arrived tells the page its tab is back at an address it pushed.
-func (r *Runtime) Arrived(address string) { r.whenFree(func() { r.enter("arrived", address) }) }
+// Arrived tells the page its tab is at another address of it: back at
+// one it pushed, or at a place in it.
+func (r *Runtime) Arrived(address string) {
+	r.whenFree(func() {
+		r.here = address
+		r.enter("arrived", address)
+	})
+}
 
 // Nodes is how many nodes of the page scripts hold a number for.
 func (r *Runtime) Nodes() int { return len(r.nodes) }

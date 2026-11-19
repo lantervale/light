@@ -189,13 +189,6 @@ func TestAnExternalPageIsBuiltWithItsSheetsAndPictures(t *testing.T) {
 	if href, _ := doc.ByID("jump").Attr("href"); href != "#top" {
 		t.Errorf("a link to the page's own #top has the href %q", href)
 	}
-	host, _ = s.doc.BoxOf(s.host)
-	s.in.SetMouse(box(t, doc, "jump").Center().Add(geom.V2(host.X, host.Y)))
-	s.frame()
-	s.frame()
-	if got := s.status.Text(); got != "" {
-		t.Errorf("a link to the page's own #top names %q to open", got)
-	}
 }
 
 func TestALinkOfAnExternalPageOpensRelativeToIt(t *testing.T) {

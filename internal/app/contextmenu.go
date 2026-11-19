@@ -91,7 +91,8 @@ func (s *Screen) targetOf(n *ui.Node) target {
 }
 
 // addressIn is the address n names in one of its attributes, read from
-// base; "" for none, and for one light does not open.
+// base; "" for none, for one light does not open, and for a place in
+// the page itself anywhere but in a link's href.
 func addressIn(n *ui.Node, base string, attributes ...string) string {
 	from, err := url.Parse(base)
 	if err != nil {
@@ -99,7 +100,7 @@ func addressIn(n *ui.Node, base string, attributes ...string) string {
 	}
 	for _, name := range attributes {
 		ref, ok := n.Attr(name)
-		if !ok || strings.HasPrefix(ref, "#") {
+		if !ok || name != "href" && strings.HasPrefix(ref, "#") {
 			continue
 		}
 		if to, bad := from.Parse(strings.TrimSpace(ref)); bad == nil && (onTheWeb(to.String()) ||

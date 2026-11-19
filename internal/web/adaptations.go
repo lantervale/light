@@ -146,7 +146,8 @@ var adaptations = []adaptation{
 	{
 		name: "links",
 		what: "An a keeps its href, so :link matches it; a click opens it from the page's address when that " +
-			"is http or https and not a place in the page itself (#…), the status bubble naming it under the pointer.",
+			"is http or https, a place in the page itself (#…) without fetching it again, the status bubble " +
+			"naming it under the pointer.",
 	},
 	{
 		name: "download links",
@@ -241,20 +242,24 @@ func (b *builder) skips(n *html.Node, key string) bool {
 
 // link makes a, an a element built from n, a link to its href: the href
 // :link matches by, and a click that opens it from the page's address,
-// or saves it when n has a download attribute, unless it is a place in
-// the page itself or nothing light opens.
+// a place in the page itself as any other, or saves it when n has a
+// download attribute, unless it is nothing light opens. A place in the
+// page is not saved.
 func (b *builder) link(a *ui.Node, n *html.Node) {
 	href := attr(n, "href")
 	if href == "" {
 		return
 	}
 	a.SetAttr("href", href)
-	address := b.resolve(href)
-	if address == "" || strings.HasPrefix(href, "#") {
+	address := b.destination(href)
+	if address == "" {
 		return
 	}
 	follow := func() { b.open(address, attr(n, "target")) }
 	if name, saved := lookup(n, "download"); saved {
+		if strings.HasPrefix(href, "#") {
+			return
+		}
 		follow = func() { b.links.Save(address, name) }
 	}
 	ui.OnClick(follow).Apply(a)

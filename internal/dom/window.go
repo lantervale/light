@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/lantervale/light/internal/web"
 	"github.com/lantervale/light/pkg/cookies"
 )
 
@@ -145,8 +146,8 @@ func (r *Runtime) reload(arguments) (any, error) {
 }
 
 // history tells the browser the page moved without leaving ("push",
-// "replace"), or answers how many steps the tab's history holds
-// ("length").
+// "replace"), to a place in it when told so, which it scrolls to, or
+// answers how many steps the tab's history holds ("length").
 func (r *Runtime) history(a arguments) (any, error) {
 	switch how := a.text(0); {
 	case how == "length" && r.host.Steps != nil:
@@ -156,6 +157,9 @@ func (r *Runtime) history(a arguments) (any, error) {
 	default:
 		if r.here = a.text(1); r.host.Moved != nil {
 			r.host.Moved(how, r.here)
+		}
+		if a.flag(2) {
+			web.Reveal(r.doc, r.here)
 		}
 	}
 	return nothing()

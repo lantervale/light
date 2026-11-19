@@ -469,7 +469,7 @@ func linksOpenFromThePagesAddress(t *testing.T) {
 		t.Error("an a without href is a link")
 	}
 	for i, want := range []string{srv.URL + "/crypt/vaults?x=1", srv.URL + "/top", "http://cdn.test/a",
-		"http://other.test/", "", "", ""} {
+		"http://other.test/", srv.URL + "/crypt/index.html#top", "", ""} {
 		a := doc.ByID("a" + strconv.Itoa(i))
 		if href, _ := a.Attr("href"); href != hrefs[i] || a.Box().W != 120 {
 			t.Errorf("a link to %q has the href %q and is %v wide, want :link's 120", hrefs[i], href, a.Box().W)

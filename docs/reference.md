@@ -169,6 +169,21 @@ A tab that shows a page keeps showing it while the next one loads: no empty page
   page* asked for (a link, a form, a script) is not named until its page shows: a page cannot have its own
   content read under an address it sent the tab to. Once a page shows, the address and the lock are its own,
   always.
+- **A place in the page.** An address that differs from the shown page's only by what follows its `#` (a link
+  to `#notes`, the address typed, `location.hash`) is not fetched: the tab takes a step of its history, the
+  address field shows it, and the page scrolls to the element it names. That element is the first whose `id` is
+  the fragment, else the first `<a name>`, by the fragment as written, then with its `%` escapes read; `#` and
+  `#top` are the top of the page, and a fragment that names nothing scrolls nowhere. A page opened at such an
+  address (a link of another page, Reload, a tab opened behind) scrolls there once it is laid out. Back and
+  Forward between two places of a page fetch nothing and scroll to the place the address names, the top for an
+  address that names none. The page's scripts hear `popstate` and `hashchange`; their own `history.pushState`
+  scrolls nothing. In a frame the step is the tab's, and that frame's document alone scrolls. What follows the
+  `#` is never sent to a server, in a request or in a `Referer`. What a browser does that light does not: a
+  browser brings the element to the top of the view, where light scrolls by the least that shows it, so an
+  element below the view comes to its bottom; Back returns a browser to where the page was scrolled, and light
+  to the place the address names; `:target` styles nothing (ember's ui does not read it), and for scripts
+  (`querySelector`) matches an element by its `id` only; `location.hash` set by a script tells `hashchange`
+  without `popstate`; and a place of the shown page is no visit of `light://history`.
 - **Where there is no page to hold** (a new tab opened on an address, a tab's first load): the page area is
   light's own surface, light or dark as the settings say, with the same line and spinner; Stop then leaves the
   page that says the load was stopped.

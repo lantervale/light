@@ -312,12 +312,16 @@ func (s *Screen) build() {
 	ui.OnContextMenu(s.contextMenu).Apply(s.doc.Body())
 }
 
-// Open shows address in the shown tab: at once for a page light has,
-// and once it is ready for one that is fetched, the tab holding the
-// page it shows till then (loading.go).
+// Open shows address in the shown tab: at once for a page light has
+// and for a place in the page shown (anchors.go), and once it is ready
+// for one that is fetched, the tab holding the page it shows till then
+// (loading.go).
 func (s *Screen) Open(address string) {
 	tab := s.browser.Tab()
 	s.session().note = ""
+	if s.place(address) {
+		return
+	}
 	s.depart(address, false, func() {
 		tab.Visit(address)
 		s.visit(address)

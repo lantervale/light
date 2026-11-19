@@ -239,7 +239,11 @@ func (r *Runtime) activated(n *ui.Node, _ arguments) (any, error) {
 		return nothing()
 	}
 	href, _ := n.Attr("href")
-	if to := r.resolve(href); to != "" && !strings.HasPrefix(strings.TrimSpace(href), "#") && r.sends(to, false) {
+	to := r.resolve(href)
+	if to != "" && strings.HasSuffix(strings.TrimSpace(href), "#") {
+		to += "#"
+	}
+	if to != "" && r.sends(to, false) {
 		r.host.Navigate(to, false)
 	}
 	return nothing()

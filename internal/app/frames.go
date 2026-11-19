@@ -614,6 +614,9 @@ func (s *Screen) showIn(f *frame, page *web.Page) {
 	f.page, f.held, f.origin, f.loads = page, f.sandbox, opaqueOrigin, false
 	f.home, f.first, f.pushed, f.born = f.at, page.Address, nil, 0
 	f.in.Doc.SetFrame(f.node, page.Doc)
+	if web.Fragment(page.Address) != "" {
+		web.Reveal(page.Doc, page.Address)
+	}
 }
 
 // frameLinks is what the links and the forms of f's documents do: a
@@ -661,7 +664,9 @@ func (s *Screen) openFrom(f *frame, address, target string) {
 		return
 	}
 	if to, may := s.target(f, target, address); to != nil {
-		s.navigate(to, wanted{from: f.page, ref: address, user: true})
+		if !s.placeFrame(to, address) {
+			s.navigate(to, wanted{from: f.page, ref: address, user: true})
+		}
 	} else if may && s.leaves(f, address) {
 		s.fromPage(f.page.Address, func() { s.Open(address) })
 	}
