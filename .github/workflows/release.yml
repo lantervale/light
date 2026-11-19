@@ -53,13 +53,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Linux libraries (GLFW's X11 headers, ALSA, Vulkan) and Clang for V8
+      # libgl1-mesa-dev for GL/glx.h alone: GLFW's native header names GLX, and nothing links libGL.
+      - name: Linux libraries (GLFW's X11 and GLX headers, ALSA, Vulkan) and Clang for V8
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
-            libasound2-dev libvulkan-dev
+            libgl1-mesa-dev libasound2-dev libvulkan-dev
           curl -fsSL https://apt.llvm.org/llvm.sh -o "$RUNNER_TEMP/llvm.sh"
           sudo bash "$RUNNER_TEMP/llvm.sh" "$CLANG_VERSION"
           echo "CC=clang-$CLANG_VERSION" >> "$GITHUB_ENV"
