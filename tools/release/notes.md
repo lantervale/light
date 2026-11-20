@@ -1,4 +1,4 @@
-## light v0.2.1
+## light v0.2.2
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,12 +7,14 @@ ember's UI goes on real pages, not a browser to live in.
 
 ## What is new
 
-- **Links to a place in a page work**: an address with a `#fragment` scrolls to the element it names, a link
-  within the page fetches nothing and is a step of the history, and Back, Forward and Reload put a page back
-  where it was scrolled.
-- The start page links to light's project, and light has a home page: https://lantervale.github.io/light/
-- Since v0.2.0: an optional model on your device (experimental, off by default), the dark mode and the languages
-  following your system, scroll settings, and the warning at the first start of each release.
+- **A page switching its theme by script switches whole**: a class set on the page's root is read at once by
+  `getComputedStyle`, so a light or dark switch no longer reads the colours it just left.
+- **A site that does not answer says so in words**: the page names the site and the seconds a page is given
+  (Request timeout, in the settings), in place of the error Go gave.
+- light runs a much wider part of the web-platform-tests: 2,876 of 6,791 pass
+  ([per directory](https://github.com/lantervale/light/blob/main/docs/reference.md#web-platform-tests)).
+- New in v0.2.1, the release before: links to a place in a page, Back and Forward keeping where a page was scrolled, and light's home
+  page, https://lantervale.github.io/light/
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
