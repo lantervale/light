@@ -1,10 +1,12 @@
 #!/bin/sh
 # Packs one built light into the archive a release ships, in dist:
 #
-#	macOS    light_<version>_darwin_<arch>.zip holding light.app: light in
-#	         Contents/MacOS, the wgpu-native library in Contents/Frameworks,
-#	         light-model in Contents/Helpers, the icon, the licences and the
-#	         README in Contents/Resources, signed ad hoc
+#	macOS    light_<version>_darwin_<arch>.dmg holding light.app and a
+#	         link to Applications to drag it onto: light in Contents/MacOS,
+#	         the wgpu-native library in Contents/Frameworks, light-model in
+#	         Contents/Helpers, the icon, the licences and the README in
+#	         Contents/Resources, signed ad hoc; with its SBOM beside it,
+#	         made from the app (syft reads no DMG), when syft is on PATH
 #	Linux    light_<version>_linux_<arch>.tar.gz holding one folder: light,
 #	         light-model, libwgpu_native.so, light.desktop, light.png, the
 #	         licences and the README side by side
@@ -195,9 +197,21 @@ EOF
 	# --deep signs the library and the helper inside before the app over them.
 	codesign --force --deep --sign - "$app"
 	codesign --verify --deep --strict "$app"
-	out=$dist/$name.zip
-	rm -f "$out"
-	ditto -c -k --norsrc --keepParent "$app" "$out"
+	out=$dist/$name.dmg
+	rm -f "$out" "$out.sbom.json"
+	if command -v syft > /dev/null 2>&1; then
+		syft scan "dir:$app" --quiet --source-name "$name.dmg" --source-version "$version" --output "spdx-json=$out.sbom.json"
+	else
+		echo "bundle: no syft on PATH, so no $out.sbom.json: assemble.sh refuses the DMG without it" >&2
+	fi
+	ln -s /Applications "$stage/Applications"
+	# hdiutil on a CI runner is now and then refused with "Resource busy".
+	tries=0
+	until hdiutil create -quiet -volname light -srcfolder "$stage" -ov -format UDZO "$out"; do
+		tries=$((tries + 1))
+		[ "$tries" -lt 3 ] || exit 1
+		sleep 5
+	done
 	echo "bundle: $out"
 	exit 0
 fi

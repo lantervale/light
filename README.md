@@ -68,9 +68,10 @@ Take the archive of your system from the [releases](https://github.com/lanterval
 | Linux x86-64 or arm64 (glibc 2.35+) | yes |
 | Windows 10+, x86-64 | **no**: pages show without their scripts |
 
-- **macOS**: move `light.app` to Applications. It is not notarized, so the first launch is refused: choose
-  **Open Anyway** in System Settings → Privacy & Security, or run
-  `xattr -dr com.apple.quarantine /Applications/light.app` once.
+- **macOS**: `brew install --cask lantervale/tap/light`, or open the `.dmg` and drag `light.app` onto
+  Applications. It is not notarized, so from the `.dmg` the first launch is refused: choose **Open Anyway** in
+  System Settings → Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/light.app` once
+  (the cask does that for you).
 - **Linux**: run `./light` from its folder. It needs Vulkan, X11 and ALSA:
   `sudo apt install libvulkan1 libx11-6 libxrandr2 libxinerama1 libxcursor1 libxi6 libxxf86vm1 libasound2`.
 - **Windows**: run `light.exe` from its folder.

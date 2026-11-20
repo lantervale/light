@@ -4,7 +4,7 @@
 # builds every target on one machine and publishes from it, and splitting it between machines is Pro.
 #
 # Each build's post hook (tools/release/bundle.sh) packs the binary with the wgpu-native library it loads at run time
-# into dist/light_<version>_<os>_<arch>.zip|tar.gz. Locally: task release:snapshot.
+# into dist/light_<version>_<os>_<arch>.dmg|tar.gz|zip. Locally: task release:snapshot.
 version: 2
 
 project_name: light

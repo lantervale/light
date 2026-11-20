@@ -140,6 +140,12 @@ ul.plain li::before { content: "–"; position: absolute; left: 0; color: var(--
 .get { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .get .card { display: flex; flex-direction: column; gap: 8px; }
 .get .button { align-self: flex-start; margin-top: 8px; padding: 9px 18px; font-size: 15px; }
+.brew { display: flex; gap: 10px 18px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+	margin-top: 16px; padding: 14px 16px 14px 24px; border: 1px solid var(--line); border-radius: 18px;
+	background: var(--card); color: var(--dim); font-size: 15px; }
+.brew .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.brew code { padding: 9px 14px; font-size: 14px; color: var(--ink); user-select: all; }
+.brew .button { padding: 8px 16px; font-size: 14px; cursor: pointer; font-family: inherit; color: var(--ink); }
 code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6px; border-radius: 6px;
 	background: var(--line); overflow-wrap: anywhere; }
 footer { margin-top: 96px; padding: 28px 0 44px; border-top: 1px solid var(--line); display: flex; gap: 18px;
@@ -310,8 +316,8 @@ footer a:first-child { margin-left: 0; }
 		<div class="card"><h3>macOS</h3>
 			<p>13 or later, Apple silicon or Intel. Not notarized: the first launch needs
 				<b>Open Anyway</b> in System Settings → Privacy &amp; Security.</p>
-			<div class="choices"><a class="button main" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___darwin_arm64.zip">Apple silicon</a>
-				<a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___darwin_amd64.zip">Intel</a></div></div>
+			<div class="choices"><a class="button main" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___darwin_arm64.dmg">Apple silicon</a>
+				<a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___darwin_amd64.dmg">Intel</a></div></div>
 		<div class="card"><h3>Linux</h3>
 			<p>x86-64 or arm64, glibc 2.35 or later. Needs Vulkan, X11 and ALSA.</p>
 			<div class="choices"><a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___linux_amd64.tar.gz">x86-64</a>
@@ -320,6 +326,9 @@ footer a:first-child { margin-left: 0; }
 			<p>10 or later, x86-64. Pages show without their scripts there.</p>
 			<div class="choices"><a class="button" href="https://github.com/lantervale/light/releases/download/v__VERSION__/light___VERSION___windows_amd64.zip">x86-64</a></div></div>
 	</div>
+	<div class="brew"><span>Or with Homebrew on macOS, which lets it past Gatekeeper:</span>
+		<div class="line"><code id="brew">brew install --cask lantervale/tap/light</code><button class="button" id="copy-brew"
+			type="button">Copy</button></div></div>
 	<p class="small" style="margin-top:22px">v__VERSION__, published __DATE__. Every file and the
 		<a href="https://github.com/lantervale/light/releases/tag/v__VERSION__">release notes</a> are on GitHub.
 		Checksums are signed with cosign and each archive has its SBOM. Or build
@@ -340,7 +349,7 @@ footer a:first-child { margin-left: 0; }
 (function () {
 	var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
 	var to = "", say = "";
-	if (/mac/i.test(platform)) { to = "darwin_arm64.zip"; say = "Download for Mac"; }
+	if (/mac/i.test(platform)) { to = "darwin_arm64.dmg"; say = "Download for Mac"; }
 	else if (/win/i.test(platform)) { to = "windows_amd64.zip"; say = "Download for Windows"; }
 	else if (/linux/i.test(platform) && !/android/i.test(navigator.userAgent)) {
 		to = /aarch64|arm/i.test(platform) ? "linux_arm64.tar.gz" : "linux_amd64.tar.gz"; say = "Download for Linux";
@@ -368,6 +377,22 @@ footer a:first-child { margin-left: 0; }
 		fit();
 	}, 2600);
 })();
+document.getElementById("copy-brew").addEventListener("click", function () {
+	var button = this, code = document.getElementById("brew");
+	function said(word) {
+		button.textContent = word;
+		setTimeout(function () { button.textContent = "Copy"; }, 1600);
+	}
+	function select() {
+		var range = document.createRange();
+		range.selectNodeContents(code);
+		getSelection().removeAllRanges();
+		getSelection().addRange(range);
+		said("Press ⌘C");
+	}
+	if (navigator.clipboard) navigator.clipboard.writeText(code.textContent).then(function () { said("Copied"); }, select);
+	else select();
+});
 document.getElementById("tour").addEventListener("click", function () {
 	if (this.paused) this.play(); else this.pause();
 });

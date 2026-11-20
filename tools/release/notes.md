@@ -1,4 +1,4 @@
-## light v0.2.2
+## light v0.2.3
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,14 +7,11 @@ ember's UI goes on real pages, not a browser to live in.
 
 ## What is new
 
-- **A page switching its theme by script switches whole**: a class set on the page's root is read at once by
-  `getComputedStyle`, so a light or dark switch no longer reads the colours it just left.
-- **A site that does not answer says so in words**: the page names the site and the seconds a page is given
-  (Request timeout, in the settings), in place of the error Go gave.
-- light runs a much wider part of the web-platform-tests: 2,876 of 6,791 pass
-  ([per directory](https://github.com/lantervale/light/blob/main/docs/reference.md#web-platform-tests)).
-- New in v0.2.1, the release before: links to a place in a page, Back and Forward keeping where a page was scrolled, and light's home
-  page, https://lantervale.github.io/light/
+- **macOS downloads are a disk image**: open it and drag `light.app` onto Applications, no zip to unpack.
+- **Homebrew**: `brew install --cask lantervale/tap/light` installs it on macOS, and `brew upgrade` keeps it current.
+- Now and then, turning the start page dark by its logo brings something else than the dark.
+- New in v0.2.2, the release before: a page switching its theme by script switches whole, and a site that does not
+  answer says so in words.
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
@@ -25,28 +22,32 @@ ember's UI goes on real pages, not a browser to live in.
 
 | System | Archive | Scripts |
 |---|---|---|
-| macOS 13 or later, Apple silicon | `light_<version>_darwin_arm64.zip` | yes (V8) |
-| macOS 13 or later, Intel | `light_<version>_darwin_amd64.zip` | yes (V8) |
+| macOS 13 or later, Apple silicon | `light_<version>_darwin_arm64.dmg` | yes (V8) |
+| macOS 13 or later, Intel | `light_<version>_darwin_amd64.dmg` | yes (V8) |
 | Linux, x86-64 (glibc 2.35 or later) | `light_<version>_linux_amd64.tar.gz` | yes (V8) |
 | Linux, arm64 (glibc 2.35 or later) | `light_<version>_linux_arm64.tar.gz` | yes (V8) |
 | Windows 10 or later, x86-64 | `light_<version>_windows_amd64.zip` | **no**: pages show without their scripts |
 
+On macOS, Homebrew installs it too: `brew install --cask lantervale/tap/light`.
+
 ## What is in an archive
 
-- **macOS**: `light.app`. Inside it: `Contents/MacOS/light` (the browser), `Contents/Frameworks/libwgpu_native.dylib`
-  (the wgpu-native library it draws with), `Contents/Helpers/light-model` (see the model below), and the icon, the
-  licences and the README in `Contents/Resources`.
+- **macOS**: a disk image holding `light.app` and a link to Applications. Inside the app: `Contents/MacOS/light`
+  (the browser), `Contents/Frameworks/libwgpu_native.dylib` (the wgpu-native library it draws with),
+  `Contents/Helpers/light-model` (see the model below), and the icon, the licences and the README in
+  `Contents/Resources`.
 - **Linux**: one folder holding `light`, `libwgpu_native.so`, `light-model`, `light.desktop`, `light.png`, the
   licences and the README.
 - **Windows**: one folder holding `light.exe`, `wgpu_native.dll`, `light-model.exe`, the licences and the README.
 
 ## How to run it
 
-- **macOS**: unzip and move `light.app` to Applications. **The app is not notarized by Apple**: there is no Apple
-  Developer identity behind it, and it is only signed ad hoc. macOS therefore refuses to open it the first time.
-  Either right-click (or Control-click) `light.app` and choose **Open**, and where macOS 15 or later still refuses,
-  open System Settings → Privacy & Security and choose **Open Anyway**; or run this once in a terminal:
-  `xattr -dr com.apple.quarantine /Applications/light.app`.
+- **macOS**: open the disk image and drag `light.app` onto Applications. **The app is not notarized by Apple**:
+  there is no Apple Developer identity behind it, and it is only signed ad hoc. macOS therefore refuses to open it
+  the first time. Either right-click (or Control-click) `light.app` and choose **Open**, and where macOS 15 or later
+  still refuses, open System Settings → Privacy & Security and choose **Open Anyway**; or run this once in a
+  terminal: `xattr -dr com.apple.quarantine /Applications/light.app`. Installed with
+  `brew install --cask lantervale/tap/light`, it opens at once: the cask runs that command for you.
   From a terminal, light is `/Applications/light.app/Contents/MacOS/light` (`--help` lists what it takes).
 - **Linux**: unpack and run `./light` from its folder; `libwgpu_native.so` and `light-model` must stay beside it. It
   needs a Vulkan driver with the Vulkan loader, X11 (or XWayland) and ALSA; on Debian and Ubuntu:
@@ -68,7 +69,7 @@ runs them on your machine only.
 ## Known limits
 
 - Windows runs no script, so pages that build themselves in JavaScript show little there.
-- No notarization on macOS, no installer or package on any system, no automatic update.
+- No notarization on macOS, no installer or package on Linux or Windows, no automatic update.
 - No cache, no sign-in prompt (401, 407), no file upload or `multipart/form-data` form, no AVIF, and
   `window.open` opens nothing.
 - It draws what ember's UI draws: many pages look right, many do not.
