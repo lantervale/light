@@ -131,7 +131,7 @@ func TestEveryKindOfCallOfTheHostIsHandedToTheFrame(t *testing.T) {
 	host := reflect.TypeFor[dom.Host]()
 	handed := map[string]bool{"Cookies": true, "Windows": true}
 	plain := map[string]bool{"Navigator": true, "Sandboxed": true, "Budget": true, "Hold": true, "Kin": true,
-		"Patience": true, "Self": true}
+		"Patience": true, "Self": true, "InputQuota": true}
 	for i := range host.NumField() {
 		field := host.Field(i)
 		switch {

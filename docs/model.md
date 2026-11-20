@@ -51,6 +51,8 @@ With the model on, it helps with these, each of which can be turned off alone:
 - **Remember what pages said** (off until you turn it on, apart from the model): the history page then takes a
   question and lists the pages that said something like it. Sites you exclude, local files and light's own
   pages are never remembered, and the page forgets what it holds on request.
+- **Translator API** and **Language Detector API**: a page's scripts can have a text translated or its language
+  named by the model, through the web's own APIs ([below](#the-model-for-pages)).
 
 Find by meaning and the questions asked of the history need a second, small model that embeds text (Nomic Embed
 Text v1.5, 146 MB, Apache-2.0, from `huggingface.co`). The card that proposes the model has a ticked line for it,
@@ -59,5 +61,29 @@ says so under "It helps with" and offers "Download Nomic Embed Text v1.5 (146 MB
 Until it is on the device, Find in page finds words only and the history page filters by title and address, with
 no question card. "Turn off and delete the model" deletes it too.
 <!-- /model-features -->
+
+## The model for pages
+
+A page's scripts reach the model through the W3C Web Machine Learning group's
+[Translator and Language Detector APIs](https://webmachinelearning.github.io/translation-api/): `Translator` and
+`LanguageDetector`, in a secure context only (https, a file, or this machine). The
+[demo page](https://lantervale.github.io/light/demos/translator.html) uses both.
+
+- **A page never turns anything on.** `availability()` answers `"available"` or `"unavailable"`, never
+  `"downloadable"`: while the model is off, not on the device, or the API switched off, every answer is
+  `"unavailable"`, so a page learns nothing of why. Nothing is downloaded or turned on for a page, and no click is
+  asked for.
+- **What it does.** A translation is from a language light names into English or French (`en`, `en-GB`, `en-US`,
+  `fr`), as light translates its own pages, and comes as plain text; `translateStreaming()` gives it as it comes.
+  `detect()` names one of those languages, with a confidence of 1, then `"und"`: the model gives no likelihoods. A
+  text of blanks only is given back, or named `"und"`, without the model.
+- **Within bounds.** A call takes 2,000 characters at most (`inputQuota`, less for a model with a small context;
+  `measureInputUsage()` counts characters), and over it is a `QuotaExceededError`. A page has one call with the
+  model at a time, the others waiting their turn, and light's own requests go first: one of light's stops a page's,
+  which starts over after it. The robot shows the model at work.
+- **Frames.** The Permissions Policy features `translator` and `language-detector` are allowed to the page and to
+  frames of its origin; a frame of another origin has them only with `allow="translator"` or
+  `allow="language-detector"` on its `iframe`.
+- **The page's text is data**, given between marks as for light's own features.
 
 [The model in detail](reference.md#the-model-in-detail) has the settings, the files and the developer options.

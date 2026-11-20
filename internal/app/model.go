@@ -415,17 +415,19 @@ func (s *Screen) fillCard() {
 				s.configure(func(c *config.Config) { c.Model = false })
 			})))
 	}
-	c.root.Append(ui.Span(ui.Class("notch")), head, ui.Div(ui.Class("part"), ui.Span(ui.Text("Model")), s.modelChips()))
+	held := ui.Div(ui.Class("held"))
+	c.root.Append(ui.Span(ui.Class("notch")), held)
+	held.Append(head, ui.Div(ui.Class("part"), ui.Span(ui.Text("Model")), s.modelChips()))
 	if c.owning {
-		c.root.Append(s.fileField())
+		held.Append(s.fileField())
 	}
 	target, proposing := s.offered()
 	settled := true
 	if coming := s.coming(target.ID); len(coming) > 0 && c.file == "" {
-		c.root.Append(s.progressOf(coming))
+		held.Append(s.progressOf(coming))
 		settled = false
 	} else if proposing {
-		c.root.Append(s.proposal(target))
+		held.Append(s.proposal(target))
 		settled = false
 	}
 	problem := c.problem
@@ -436,18 +438,18 @@ func (s *Screen) fillCard() {
 		problem = status.Reason
 	}
 	if problem != "" {
-		c.root.Append(ui.P(ui.ID("model-problem"), ui.Attr("role", "alert"), ui.Text(problem)))
+		held.Append(ui.P(ui.ID("model-problem"), ui.Attr("role", "alert"), ui.Text(problem)))
 	}
 	if on && settled && len(s.features) > 0 {
-		c.root.Append(ui.Div(ui.Class("part"), ui.Span(ui.Text("It helps with")), s.helpChips()))
+		held.Append(ui.Div(ui.Class("part"), ui.Span(ui.Text("It helps with")), s.helpChips()))
 		if offer := s.embedderOffer(); offer != nil {
-			c.root.Append(offer)
+			held.Append(offer)
 		}
 		if offer := s.forgetOffer("model-recall"); offer != nil {
-			c.root.Append(offer)
+			held.Append(offer)
 		}
 	}
-	c.root.Append(ui.P(ui.ID("model-note"), ui.Text("What pages say stays on this device.")),
+	held.Append(ui.P(ui.ID("model-note"), ui.Text("What pages say stays on this device.")),
 		s.cardFoot(target, proposing))
 	if n := s.doc.ByID(focused); focused != "" && n != nil {
 		s.doc.Focus(n)

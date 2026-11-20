@@ -8,14 +8,18 @@ import (
 // Stream is an answer as it comes. It is safe for use from several
 // goroutines.
 type Stream struct {
-	mu     sync.Mutex
-	held   bool
-	text   strings.Builder
-	taken  int
-	result Result
-	err    error
-	ended  bool
-	done   chan struct{}
+	mu   sync.Mutex
+	held bool
+	// resumes is whether a restart skips, as it comes again, what was
+	// given before it, and skip how much of it is still to come.
+	resumes bool
+	skip    int
+	text    strings.Builder
+	taken   int
+	result  Result
+	err     error
+	ended   bool
+	done    chan struct{}
 }
 
 // newStream is a stream nothing came on yet. A held one gives its text
@@ -61,16 +65,26 @@ func (s *Stream) Wait() (Result, error) {
 func (s *Stream) push(text string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.ended {
-		s.text.WriteString(text)
+	if s.ended {
+		return
 	}
+	if s.skip > 0 {
+		skipped := min(s.skip, len(text))
+		text, s.skip = text[skipped:], s.skip-skipped
+	}
+	s.text.WriteString(text)
 }
 
-// restart forgets what came: the request starts over.
+// restart forgets what came, or for one that resumes, has it skipped
+// as it comes again: the request starts over.
 func (s *Stream) restart() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.ended {
+	switch {
+	case s.ended:
+	case s.resumes:
+		s.skip = s.text.Len()
+	default:
 		s.text.Reset()
 		s.taken = 0
 	}

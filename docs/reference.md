@@ -872,7 +872,9 @@ capture, bubbling and `preventDefault`; `DOMContentLoaded` and `load`; timers, m
 sizes; stylesheets (a `<style>` or a `<link rel="stylesheet">` added, edited, moved or removed by a script, its
 `sheet` with `cssRules`, `insertRule` and `deleteRule`, a rule's `selectorText` and `style`, `document.styleSheets`,
 `new CSSStyleSheet()` with `adoptedStyleSheets`, `CSS.supports`), applied once a frame; `document.fonts` (`ready`, `status`, `check()`, `load()`, `loading` and `loadingdone`; it lists no `FontFace` and takes none); `getComputedStyle`; `localStorage` and `sessionStorage`; `indexedDB` (below); XPath 1.0 (`document.evaluate`, below); `history.pushState` and `popstate`; `MutationObserver`,
-`CustomEvent`, `URL`, `TextEncoder`, `atob`; messages (`MessageChannel` and its ports, a port sent through a port,
+`CustomEvent`, `URL`, `TextEncoder`, `atob`; `Translator` and `LanguageDetector` with the model on this device
+([the model for pages](model.md#the-model-for-pages), [a demo](https://lantervale.github.io/light/demos/translator.html));
+messages (`MessageChannel` and its ports, a port sent through a port,
 `window.postMessage` with its `targetOrigin`, `BroadcastChannel`, `structuredClone` with `transfer`). One context a
 page, closed when the tab leaves it.
 
@@ -1211,7 +1213,8 @@ Three more options are a test runner's, so they are `light drive`'s alone and un
 
 `task wpt` runs a subset of the [web-platform-tests](https://web-platform-tests.org) against light, with
 their own runner (`wpt run`) driving light over WebDriver. The subset (`tools/wpt/subset.txt`) is the whole of
-`dom/`, `domxpath/`, `url/`, `domparsing/`, `IndexedDB/`, `cors/`, `console/` and `hr-time/`, most of `encoding/`
+`dom/`, `domxpath/`, `url/`, `domparsing/`, `IndexedDB/`, `cors/`, `console/`, `hr-time/`, `ai/translator/` and
+`ai/language_detection/`, most of `encoding/`
 and `html/syntax/`, parts of `html/semantics/`, `css/` and `fetch/api/`, and a few tests of `html/dom/` and
 `css/CSS2/`. Within those, a test is left out only when it needs what light does not have (workers, shadow trees,
 custom elements, `window.open`, audio and video, WebSockets, `document.write`, frames of `blob:` addresses,
@@ -1281,6 +1284,12 @@ what they are:
 The figures, the commits and the command are kept in `tools/wpt/results/2026-11-20.json`, and the line a test of
 that run in `tools/wpt/results/2026-11-20.txt`. To run it again, check out those commits (ember beside light in the
 workspace) and run `task wpt`; a new dated result goes beside it.
+
+Since that run, `ai/translator/` and `ai/language_detection/` were added: 15 tests, in 4 seconds. A run of the
+web-platform-tests has no model, so light answers `"unavailable"`, as it does to any page while its model is off:
+of their 67 subtests, 12 pass (the language tags and the bad input), 25 end `PRECONDITION_FAILED` (they need a
+model that is there), and 30 fail before reaching light's APIs, on `test_driver.bless()`, whose click light's
+WebDriver refuses (`element click intercepted`).
 
 Earlier: on 19 November 2026, 461 of 625 tests and 122,244 of 124,986 subtests passed, on a subset of `dom/`,
 `domxpath/` and 24 other tests (`tools/wpt/results/2026-11-19.json`).

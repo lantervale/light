@@ -199,6 +199,24 @@ type Host struct {
 	// when a script first uses them; without them, they last as long
 	// as the page.
 	Bases func() *idb.Site
+	// Allows reports whether the page's document may use a feature of
+	// the Permissions Policy by the frames it is in (FeatureTranslator,
+	// FeatureDetector); without it, it may use every one, as a tab's
+	// page.
+	Allows func(feature string) bool
+	// Translates reports whether the language model on this device
+	// translates for the page from one language into another now, and
+	// Detects whether it names the language of a text among those
+	// expected, any for none: never while it is off, not ready, or that
+	// API is switched off (translator.go). Assist asks it off the frame:
+	// each piece of a translation is given to piece as it comes, and
+	// done is told the languages named, best first, or why it failed;
+	// both may be called from any goroutine, and what it returns stops
+	// it. InputQuota is the most characters one ask holds.
+	Translates func(from, into string) bool
+	Detects    func(expected []string) bool
+	Assist     func(asked Asked, piece func(string), done func(languages []string, err error)) (stop func())
+	InputQuota int
 }
 
 // Runtime is one page's scripts and what they see of the page.
@@ -263,9 +281,11 @@ type Runtime struct {
 	swept   time.Time
 	// activation is the click a script was told of last (events.go).
 	activation activation
-	// bases is the page's use of its site's databases (indexeddb.go).
-	bases  bases
-	closed bool
+	// bases is the page's use of its site's databases (indexeddb.go),
+	// and assisting what it asked of the model (translator.go).
+	bases     bases
+	assisting assisting
+	closed    bool
 	// asking is how the scripts wait for an answer (asking.go), and
 	// leaving a Runtime closed while a script of its kin held its engine.
 	asking  parking
@@ -535,7 +555,7 @@ func (r *Runtime) frame() bool {
 	r.watchFonts()
 	r.tree.Redraw()
 	return r.fonts.waited || left > 0 || len(r.waiting) > 0 || len(r.requests) > 0 || r.sheets.loading > 0 ||
-		len(r.later) > 0
+		len(r.later) > 0 || r.assisting.running != 0
 }
 
 // take is what landed since the last frame.
@@ -613,6 +633,7 @@ func (r *Runtime) Close() {
 		}
 	}
 	r.unbased()
+	r.unassisted()
 	r.tree.Activate, r.tree.Heard, r.tree.Submit = nil, nil, nil
 	r.entry.Release()
 	r.ctx.Close()

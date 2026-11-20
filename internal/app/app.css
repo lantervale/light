@@ -302,8 +302,9 @@ button img, .tab img, #lock { display: block; }
 #model-mark.shown { display: flex; }
 #robot { position: relative; }
 #bar #robot #robot-dot { position: absolute; right: 3px; bottom: 4px; width: 9px; height: 9px; margin: 0; }
-#model { display: none; right: 47px; width: 368px; }
-#model.shown { display: block; }
+#model { display: none; right: 47px; width: 368px; max-height: calc(100% - 12px); }
+#model.shown { display: flex; flex-direction: column; }
+#model .held { min-height: 0; overflow-y: auto; border-radius: 12px; }
 #model .notch { right: 10px; }
 #model .head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px; }
 #model .site.robot { background: #7ab0ff; }

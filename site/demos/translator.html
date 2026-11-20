@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Translator and Language Detector: a demo for light</title>
+<meta name="description" content="A page that asks the browser's own model to name the language of a text and to translate it, through the Translator and Language Detector APIs.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="../logo.svg" type="image/svg+xml">
+<style>
+:root {
+	--bg: #f7f4ee; --ink: #0e2a3f; --dim: #5b6b78; --line: #e2dccf; --card: #ffffff;
+	--orange: #f15a2b; --violet: #5b46c9; --warn-bg: #fff3e0; --warn-ink: #7a3b00; --warn-line: #f3c98b;
+	--ok: #1f7a4d;
+}
+:root.dark {
+	--bg: #0b0c0f; --ink: #f1f3f4; --dim: #9aa0a6; --line: #26282d; --card: #15171b;
+	--violet: #b3a1f4; --warn-bg: #2a2012; --warn-ink: #ffd9a8; --warn-line: #6b4a1c;
+	--ok: #7fd3a4;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 system-ui, -apple-system, "Segoe UI",
+	Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -.5px;
+	text-decoration: none; }
+.brand svg { width: 30px; height: 30px; }
+header nav a { font-size: 15px; color: var(--dim); text-decoration: none; }
+header nav a:hover { color: var(--ink); }
+h1 { margin: 34px 0 12px; font-size: clamp(34px, 5.5vw, 54px); line-height: 1.05; letter-spacing: -1.8px;
+	font-weight: 800; }
+.lead { margin: 0 0 26px; max-width: 36em; font-size: 19px; color: var(--dim); }
+h2 { margin: 0 0 6px; font-size: 22px; letter-spacing: -.5px; }
+.card { margin: 0 0 18px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 18px;
+	background: var(--card); }
+.card > p { margin: 0 0 14px; color: var(--dim); font-size: 16px; }
+.status { display: flex; gap: 14px; align-items: flex-start; margin: 0 0 18px; padding: 16px 20px;
+	border: 1px solid var(--warn-line); border-radius: 16px; background: var(--warn-bg); color: var(--warn-ink);
+	font-size: 16px; }
+.status b { display: block; }
+.status .sign { font-size: 22px; line-height: 1.2; }
+.status.ready { border-color: var(--line); background: var(--card); color: var(--ink); }
+.status.ready .sign { color: var(--ok); }
+code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6px; border-radius: 6px;
+	background: var(--line); overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; font-size: 16px; }
+td { padding: 10px 8px; border-top: 1px solid var(--line); }
+td:last-child { text-align: right; font-weight: 600; }
+.available { color: var(--ok); }
+.unavailable { color: var(--dim); }
+.downloadable, .downloading { color: var(--violet); }
+textarea { display: block; width: 100%; min-height: 110px; padding: 12px 14px; border: 1px solid var(--line);
+	border-radius: 12px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; resize: vertical; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+	color: var(--ink); font: inherit; font-size: 15px; }
+button.go { padding: 10px 22px; border: 1px solid var(--ink); border-radius: 999px; background: var(--ink);
+	color: var(--bg); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+button.go:disabled { opacity: .45; cursor: default; }
+.usage { flex: 1 1 200px; font-size: 14px; color: var(--dim); }
+.bar { height: 6px; margin-top: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar span { display: block; width: 0; height: 100%; background: var(--orange); }
+.out { min-height: 54px; margin-top: 14px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 12px;
+	white-space: pre-wrap; }
+.found { margin: 12px 0 0; font-size: 15px; color: var(--dim); }
+.found b { color: var(--ink); }
+.calls { margin: 0; padding: 0; list-style: none; font-size: 15px; color: var(--dim); }
+.calls li { padding: 8px 0; border-top: 1px solid var(--line); }
+.calls li:first-child { border-top: 0; }
+.calls code { color: var(--ink); }
+footer { margin-top: 56px; padding: 24px 0 40px; border-top: 1px solid var(--line); font-size: 14px;
+	color: var(--dim); }
+</style>
+<script>
+(function () {
+	var kept = null;
+	try { kept = localStorage.getItem("appearance"); } catch (e) {}
+	var dark = kept ? kept === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+	document.documentElement.classList.toggle("dark", dark);
+})();
+</script>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+	<a class="brand" href="../"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14"
+		fill="#0e2a3f"/><circle fill="#fff" cx="32" cy="32" r="23"/><path fill="none" stroke="#f15a2b"
+		stroke-width="1.4" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>light</a>
+	<nav><a href="https://github.com/lantervale/light/blob/main/docs/model.md#the-model-for-pages">How light does it</a></nav>
+</header>
+
+<h1>Translate in the page, on the device</h1>
+<p class="lead">This page asks the browser's own language model to name the language of a text and to translate
+	it, through the <a href="https://webmachinelearning.github.io/translation-api/">Translator and Language Detector
+	APIs</a>. Nothing is sent anywhere: the page has no server to send to.</p>
+
+<div class="status" id="status" role="status"><span class="sign" aria-hidden="true">…</span>
+	<span><b id="status-title">Asking the browser…</b><span id="status-text"></span></span></div>
+
+<div class="card">
+	<h2>What the browser can do</h2>
+	<p><code>Translator.availability()</code> says whether the browser translates from one language into another;
+		<code>LanguageDetector.availability()</code> whether it names languages. Neither starts or downloads
+		anything.</p>
+	<table><tbody id="pairs"></tbody></table>
+</div>
+
+<div class="card">
+	<h2>Try it</h2>
+	<p><code>detect()</code> names the language of what you type, most likely first;
+		<code>translateStreaming()</code> translates it, the words showing as they come;
+		<code>measureInputUsage()</code> says how much of <code>inputQuota</code>, the most one call takes, the
+		text uses.</p>
+	<textarea id="text" aria-label="A text to translate">Le petit café au coin de la rue ouvre à sept heures. On y sert le meilleur croissant du quartier, et le patron connaît tout le monde par son prénom.</textarea>
+	<div class="row">
+		<label>Into <select id="into"><option value="en-GB">English (UK)</option><option value="en-US">English (US)</option><option value="fr">French</option></select></label>
+		<button class="go" id="go" type="button" disabled>Detect and translate</button>
+		<div class="usage"><span id="usage">Input usage: not measured yet</span>
+			<div class="bar"><span id="usage-bar"></span></div></div>
+	</div>
+	<p class="found" id="found"></p>
+	<div class="out" id="out" aria-live="polite"></div>
+</div>
+
+<div class="card">
+	<h2>The calls, one by one</h2>
+	<ul class="calls">
+		<li><code>Translator.create({sourceLanguage, targetLanguage})</code> gives a translator for one pair; light
+			never downloads anything for a page, so it either has one at once or refuses.</li>
+		<li><code>translator.translate(text)</code> resolves with the whole translation, as plain text.</li>
+		<li><code>translator.translateStreaming(text)</code> gives a stream of the translation's pieces, read with
+			<code>for await</code>.</li>
+		<li><code>LanguageDetector.create()</code> then <code>detector.detect(text)</code> list the languages the
+			text may be in, ending with <code>"und"</code>, the unknown.</li>
+		<li><code>destroy()</code> ends a translator or a detector, and an <code>AbortSignal</code> stops any call.</li>
+	</ul>
+</div>
+
+<footer>A demo of <a href="../">light</a>. This page sets no cookie and loads nothing from anywhere else.</footer>
+
+</div>
+<script>
+(function () {
+	var $ = function (id) { return document.getElementById(id); };
+	var pairs = [["fr", "en"], ["de", "en"], ["es", "fr"], ["en", "fr"], ["en", "ja"]];
+	var names = { en: "English", fr: "French", de: "German", es: "Spanish", ja: "Japanese", "en-GB": "English (UK)",
+		"en-US": "English (US)" };
+	var nameOf = function (tag) {
+		if (names[tag]) return names[tag];
+		try { return new Intl.DisplayNames(["en"], { type: "language" }).of(tag); } catch (e) { return tag; }
+	};
+
+	function say(kind, title, text) {
+		var status = $("status");
+		status.className = "status" + (kind === "ready" ? " ready" : "");
+		status.querySelector(".sign").textContent = kind === "ready" ? "✓" : "!";
+		$("status-title").textContent = title;
+		$("status-text").textContent = text;
+	}
+
+	function row(label, answer) {
+		var tr = document.createElement("tr");
+		var what = document.createElement("td");
+		var said = document.createElement("td");
+		what.textContent = label;
+		said.textContent = answer;
+		said.className = answer;
+		tr.appendChild(what);
+		tr.appendChild(said);
+		$("pairs").appendChild(tr);
+	}
+
+	if (typeof Translator === "undefined" || typeof LanguageDetector === "undefined") {
+		var missing = typeof Translator === "undefined" ? "Translator" : "Language Detector";
+		say("missing", "This browser has no " + missing + " API.", window.isSecureContext === false
+			? " The APIs are given to secure pages only (https, a file, or this machine), and this one is not."
+			: " Open this page in light, or in a browser that has it, to try it.");
+		row("Translator", "missing");
+		return;
+	}
+
+	var measured = null;
+	async function measure() {
+		var text = $("text").value;
+		try {
+			if (!measured) measured = await LanguageDetector.create();
+			var used = await measured.measureInputUsage(text);
+			var quota = measured.inputQuota;
+			$("usage").textContent = "Input usage: " + used + " of " + quota;
+			$("usage-bar").style.width = Math.min(100, quota === Infinity ? 0 : used / quota * 100) + "%";
+		} catch (e) {
+			$("usage").textContent = "Input usage: " + e.name;
+		}
+	}
+
+	async function run() {
+		$("go").disabled = true;
+		$("out").textContent = "";
+		$("found").textContent = "";
+		var text = $("text").value;
+		try {
+			var detector = await LanguageDetector.create();
+			var found = await detector.detect(text);
+			var best = found[0];
+			$("found").innerHTML = "";
+			var lead = document.createElement("b");
+			lead.textContent = best.detectedLanguage === "und" ? "an unknown language" : nameOf(best.detectedLanguage);
+			$("found").append("Detected: ", lead, " (" + found.map(function (f) {
+				return f.detectedLanguage + " " + Math.round(f.confidence * 100) + "%";
+			}).join(", ") + ")");
+			detector.destroy();
+			if (best.detectedLanguage === "und") return;
+			var into = $("into").value;
+			var translator = await Translator.create({ sourceLanguage: best.detectedLanguage, targetLanguage: into });
+			for await (var piece of translator.translateStreaming(text)) $("out").textContent += piece;
+			translator.destroy();
+		} catch (e) {
+			$("out").textContent = e.name + ": " + e.message;
+		} finally {
+			$("go").disabled = false;
+		}
+	}
+
+	(async function () {
+		var answers = await Promise.all(pairs.map(function (p) {
+			return Translator.availability({ sourceLanguage: p[0], targetLanguage: p[1] });
+		}));
+		pairs.forEach(function (p, i) { row(nameOf(p[0]) + " → " + nameOf(p[1]), answers[i]); });
+		var detects = await LanguageDetector.availability();
+		row("Naming a text's language", detects);
+		if (answers.indexOf("available") < 0 && detects === "unavailable") {
+			say("off", "The browser answers “unavailable”.", " In light, turn the model on in light://config " +
+				"(under Experimental), with its Translator API and Language Detector API, then reload this page.");
+			return;
+		}
+		say("ready", "The browser has a model for this page.", answers.indexOf("available") < 0
+			? " Its languages must be downloaded first: the button asks for them."
+			: " What you type is translated by it, here.");
+		$("go").disabled = false;
+		if (detects === "available") measure();
+		else $("usage").textContent = "Input usage: measured once a detector is made";
+	})();
+
+	$("go").addEventListener("click", run);
+	$("text").addEventListener("input", function () { if (measured) measure(); });
+})();
+</script>
+</body>
+</html>
