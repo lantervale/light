@@ -3,19 +3,27 @@
 # archive, into what a release publishes: an SBOM of each archive (syft),
 # the source archive of HEAD, and the SHA-256 of them all in
 # light_<version>-checksums.txt. The version is read off the archives'
-# names, so a snapshot's are completed the same way.
+# names, so a snapshot's are completed the same way. syft reads no DMG:
+# a macOS archive comes with the SBOM bundle.sh made of the app inside.
 #
 #	tools/release/assemble.sh [dir]
 set -eu
 dir=${1:-dist}
 
-first=$(find "$dir" -maxdepth 1 -type f \( -name 'light_*.zip' -o -name 'light_*.tar.gz' \) | sort | head -1)
+first=$(find "$dir" -maxdepth 1 -type f \( -name 'light_*.zip' -o -name 'light_*.tar.gz' -o -name 'light_*.dmg' \) | sort | head -1)
 if [ -z "$first" ]; then
 	echo "assemble: no light_* archive in $dir" >&2
 	exit 1
 fi
-version=$(basename "$first" | sed -E 's/^light_(.*)_[a-z]+_[a-z0-9]+\.(zip|tar\.gz)$/\1/')
+version=$(basename "$first" | sed -E 's/^light_(.*)_[a-z]+_[a-z0-9]+\.(zip|tar\.gz|dmg)$/\1/')
 
+for archive in "$dir"/light_*.dmg; do
+	[ -f "$archive" ] || continue
+	if [ ! -f "$archive.sbom.json" ]; then
+		echo "assemble: $archive has no SBOM beside it; bundle.sh makes it from the app where syft is on PATH" >&2
+		exit 1
+	fi
+done
 for archive in "$dir"/light_*.zip "$dir"/light_*.tar.gz; do
 	[ -f "$archive" ] || continue
 	syft scan "file:$archive" --quiet --output "spdx-json=$archive.sbom.json"

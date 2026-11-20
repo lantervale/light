@@ -65,17 +65,23 @@ task wpt              # the web-platform-tests of tools/wpt/subset.txt (see "Web
 A tag `v*` pushed to GitHub runs `.github/workflows/release.yml`: each target is built on its own system (light is
 cgo, so nothing cross compiles between systems) by `goreleaser build`, whose post hook (`tools/release/bundle.sh`)
 packs the binary with `light-model` and the wgpu-native library, checked against
-`tools/release/wgpu-native.sha256`; the next job adds each archive's SBOM, the source archive and the checksums
-(`tools/release/assemble.sh`), and the last signs them and publishes the GitHub release, once every target built.
+`tools/release/wgpu-native.sha256`, into a `.dmg` holding `light.app` on macOS (its SBOM made there, from the app:
+syft reads no DMG), a `.tar.gz` on Linux and a `.zip` on Windows; the next job adds the other archives' SBOMs, the
+source archive and the checksums (`tools/release/assemble.sh`), and the last signs them and publishes the GitHub
+release, once every target built.
 Run by hand from the Actions tab, the workflow does the same as a snapshot and publishes nothing.
 
 It needs [GoReleaser](https://goreleaser.com) v2 (the open-source one), and syft for the SBOMs:
 `brew install goreleaser syft`.
 
 ```sh
-task release:snapshot   # this system's archive in dist/, as the workflow builds it
+task release:snapshot   # this system's archive in dist/, as the workflow builds it (a .dmg on a Mac)
 git tag v0.1.0 && git push origin v0.1.0
 ```
+
+The Homebrew cask, `brew install --cask lantervale/tap/light`, lives in
+[lantervale/homebrew-tap](https://github.com/lantervale/homebrew-tap): a workflow there reads light's latest release
+every hour and points the cask at its DMGs and their checksums, so a release needs nothing more.
 
 A release builds from `go.mod` and `go.sum` alone, without the workspace: `tools/release/preflight.sh` stops it
 early, saying so, while light needs an ember later than the one pinned.

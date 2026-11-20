@@ -1,9 +1,9 @@
 # Releases light: a tag v* builds each target on its own system (light is cgo: GLFW, the audio device and V8 do not
-# cross compile between systems), each job packing its archive with GoReleaser's build and tools/release/bundle.sh;
-# one job then gathers them and adds their SBOMs, the source archive and the checksums (tools/release/assemble.sh),
-# and the last signs the checksums with cosign (keyless) and publishes the GitHub release, only once every target
-# built. Run by hand (workflow_dispatch), it does the same as a snapshot up to the publishing, which it leaves out:
-# the files stay as the run's artifacts.
+# cross compile between systems), each job packing its archive with GoReleaser's build and tools/release/bundle.sh
+# (on macOS a DMG, and its SBOM made from the app); one job then gathers them and adds the other SBOMs, the source
+# archive and the checksums (tools/release/assemble.sh), and the last signs the checksums with cosign (keyless) and
+# publishes the GitHub release, only once every target built. Run by hand (workflow_dispatch), it does the same as a
+# snapshot up to the publishing, which it leaves out: the files stay as the run's artifacts.
 name: release
 
 on:
@@ -77,6 +77,10 @@ jobs:
             echo "CXX=$prefix/bin/clang++" >> "$GITHUB_ENV"
           fi
 
+      # bundle.sh makes the SBOM of light.app before packing it: syft reads no DMG.
+      - uses: anchore/sbom-action/download-syft@v0
+        if: runner.os == 'macOS'
+
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
@@ -91,6 +95,8 @@ jobs:
           path: |
             dist/light_*.zip
             dist/light_*.tar.gz
+            dist/light_*.dmg
+            dist/light_*.dmg.sbom.json
           if-no-files-found: error
           retention-days: 7
 
