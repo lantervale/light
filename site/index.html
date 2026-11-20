@@ -50,6 +50,8 @@ nav a:hover { color: var(--ink); }
 	transition: stroke-width .6s ease, transform .6s cubic-bezier(.3, 1.4, .5, 1), filter .6s ease; }
 :root.dark .mark .bulb { fill: #141b22; }
 :root.dark .mark .rays { stroke-width: 2.4; filter: drop-shadow(0 0 1.5px #ff8a55); }
+:root.notebook .mark .rays { visibility: hidden; }
+:root.notebook .mark .book { visibility: visible; }
 .switch { display: inline-flex; flex-direction: column; align-items: center; gap: 10px; }
 .logo { width: 92px; height: 92px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 22px;
 	box-shadow: 0 14px 60px rgba(255, 176, 92, .55); transition: box-shadow .6s ease, transform .15s ease; }
@@ -166,7 +168,7 @@ footer a:first-child { margin-left: 0; }
 <header>
 	<button class="brand mark" id="brand-switch" type="button" aria-pressed="false"
 		aria-label="Turn the light off"><svg viewBox="0 0 64 64" aria-hidden="true"><rect class="tile" width="64" height="64" rx="14" fill="#0e2a3f"/><circle class="bulb" fill="#fff"
-		cx="32" cy="32" r="23"/><path class="rays" fill="none" stroke="#f15a2b" stroke-width="1.4" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>light</button>
+		cx="32" cy="32" r="23"/><path class="rays" fill="none" stroke="#f15a2b" stroke-width="1.4" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/><g class="book" visibility="hidden"><rect x="22" y="18" width="20" height="28" rx="1.5" fill="#050608" stroke="#3b4048" stroke-width=".8"/><path d="M25 18.5v27" stroke="#2a2e35" stroke-width="1.2"/><path d="M41.5 20v24" stroke="#c9ccd1" stroke-width=".6"/></g></svg><span id="name">light</span></button>
 	<nav>
 		<a class="wide" href="#why">Why</a>
 		<a class="wide" href="#pages">Pages</a>
@@ -184,7 +186,7 @@ footer a:first-child { margin-left: 0; }
 	<span class="switch">
 		<button class="logo mark" id="switch" aria-pressed="false" aria-label="Turn the light off">
 			<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="tile" width="64" height="64" rx="14" fill="#0e2a3f"/><circle class="bulb" fill="#fff"
-			cx="32" cy="32" r="23"/><path class="rays" fill="none" stroke="#f15a2b" stroke-width="1.4" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/></svg>
+			cx="32" cy="32" r="23"/><path class="rays" fill="none" stroke="#f15a2b" stroke-width="1.4" d="M32 19.5v25M19.5 32h25M23.2 23.2l17.6 17.6M40.8 23.2L23.2 40.8"/><g class="book" visibility="hidden"><rect x="22" y="18" width="20" height="28" rx="1.5" fill="#050608" stroke="#3b4048" stroke-width=".8"/><path d="M25 18.5v27" stroke="#2a2e35" stroke-width="1.2"/><path d="M41.5 20v24" stroke="#c9ccd1" stroke-width=".6"/></g></svg>
 		</button>
 		<span class="hint" id="hint" aria-hidden="true">Turn the light off, or press <kbd>L</kbd></span>
 	</span>
@@ -383,17 +385,23 @@ document.getElementById("tour").addEventListener("click", function () {
 		hint.firstChild.nodeValue = say + ", or press ";
 	}
 	var dark = root.classList.contains("dark"), turning = null;
+	function shut(notebook) {
+		root.classList.toggle("notebook", notebook);
+		document.getElementById("name").textContent = notebook ? "yagami" : "light";
+	}
 	function flip(from) {
 		dark = !dark;
+		var notebook = dark && Math.random() < 1 / 6;
 		try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}
 		if (turning) turning.skipTransition();
 		if (turning || !document.startViewTransition || still.matches) {
 			shade(dark);
+			shut(notebook);
 			return;
 		}
 		var box = (from || button).getBoundingClientRect(), x = box.left + box.width / 2, y = box.top + box.height / 2;
 		var reach = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-		turning = document.startViewTransition(function () { shade(dark); });
+		turning = document.startViewTransition(function () { shade(dark); shut(notebook); });
 		turning.finished.finally(function () { turning = null; });
 		turning.ready.then(function () {
 			root.animate({ clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + reach + "px at " + x + "px " +
