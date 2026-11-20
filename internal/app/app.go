@@ -8,6 +8,7 @@ package app
 import (
 	_ "embed"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"net/netip"
 	"slices"
@@ -158,6 +159,12 @@ type Screen struct {
 	desk     desk
 	rendered rendered
 
+	// notebook says whether the start page's logo, setting the dark, lets
+	// it fall with a black notebook, one time in six, and noted whether
+	// the dark shown fell so.
+	notebook func() bool
+	noted    bool
+
 	// sought shows the search engine's mark in the address field while
 	// words are typed there.
 	sought *ui.Node
@@ -234,7 +241,8 @@ func New(win *platform.Window, opts Options) *Screen { return NewProfile(opts).S
 // screen is the screen of win, a window of light's, on address.
 func (p *Profile) screen(win *platform.Window, address string) *Screen {
 	s := &Screen{Profile: p, win: win, sessions: map[*tabs.Tab]*session{}, landed: make(chan func(), 64),
-		announced: map[int]downloads.State{}, archived: map[int]bool{}, dimAfter: dimAfter}
+		announced: map[int]downloads.State{}, archived: map[int]bool{}, dimAfter: dimAfter,
+		notebook: func() bool { return rand.IntN(6) == 0 }} //nolint:gosec // a chance of the start page's look, no secret
 	s.browser = tabs.NewBrowser(address)
 	for _, item := range p.saves.Items() {
 		s.announced[item.ID] = item.State
