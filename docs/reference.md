@@ -101,10 +101,11 @@ What does not, in short:
   ([the boundary and its limits](#scripts-in-frames)).
 - **Tabs in the title bar are macOS only.**
 
-light runs a subset of the [web-platform-tests](https://web-platform-tests.org) (`task wpt`): the whole of `dom/`
-but the tests that need what light does not have, `domxpath/`, and a few of `url`, `html`, `css` and `domparsing`. On
-19 November 2026, 461 of those 625 tests passed whole, and 122,244 of their 124,986 subtests
-([the result](#the-result-of-19-november-2026)): a figure of this subset, not of the web-platform-tests.
+light runs a subset of the [web-platform-tests](https://web-platform-tests.org) (`task wpt`): `dom/`,
+`domxpath/`, `url/`, `domparsing/` and `IndexedDB/` whole, and parts of `html`, `css`, `encoding` and `fetch`, but the
+tests that need what light does not have. On 20 November 2026, 2,876 of those 6,791 tests passed whole, and 147,240
+of their 204,204 subtests ([the result](#the-result-of-20-november-2026)): a figure of this subset, not of the
+web-platform-tests.
 
 The full lists are below: [What it does not do](#what-it-does-not-do) and
 [Limits of its JavaScript](#limits-of-its-javascript).
@@ -1116,8 +1117,8 @@ What does not:
     A tab that is not shown runs nothing, so it answers a `versionchange` only once shown or closed, and the
     upgrade it blocks waits (`blocked` is told as the standard says).
   - Not there: IndexedDB in workers (light has none), `IDBObjectStore.getAllRecords()` and the options form of
-    `getAll()` (later drafts), `storage.getDirectory()`. The next check is the `IndexedDB/` directory of the
-    web platform tests, which light has not been run against.
+    `getAll()` (later drafts), `storage.getDirectory()`. Of the `IndexedDB/` directory of the web platform tests,
+    172 of the 229 tests in a window pass ([the result](#the-result-of-20-november-2026)).
 - **Scrolling** from a script (`scrollTo`, `scrollX`…), `blur()`, `IntersectionObserver` and `ResizeObserver`
   (each tells once, as if everything were in view), and the observers of performance.
 - **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys.
@@ -1209,10 +1210,13 @@ Three more options are a test runner's, so they are `light drive`'s alone and un
 ### Web platform tests
 
 `task wpt` runs a subset of the [web-platform-tests](https://web-platform-tests.org) against light, with
-their own runner (`wpt run`) driving light over WebDriver. The subset (`tools/wpt/subset.txt`) is a few tests of
-`url`, `html`, `css` and `domparsing`, the whole of `domxpath/`, and the whole of `dom/` but the tests that need
-what light does not have (workers, shadow trees, custom elements, `Observable`, `OpaqueRange`, scrolling by script,
-touch and wheel input over WebDriver): the file names each test left out under its reason.
+their own runner (`wpt run`) driving light over WebDriver. The subset (`tools/wpt/subset.txt`) is the whole of
+`dom/`, `domxpath/`, `url/`, `domparsing/`, `IndexedDB/`, `cors/`, `console/` and `hr-time/`, most of `encoding/`
+and `html/syntax/`, parts of `html/semantics/`, `css/` and `fetch/api/`, and a few tests of `html/dom/` and
+`css/CSS2/`. Within those, a test is left out only when it needs what light does not have (workers, shadow trees,
+custom elements, `window.open`, audio and video, WebSockets, `document.write`, frames of `blob:` addresses,
+`Observable`, `OpaqueRange`, scrolling by script, touch and wheel input over WebDriver) or stops light: the file
+names each one under its reason, and what each directory takes and leaves out.
 
 ```sh
 task wpt                                          # the tests of tools/wpt/subset.txt
@@ -1226,38 +1230,62 @@ wpt.fyi reads), `raw.log` (every event, the screenshots of a failed reference te
 line a test, with its status and its subtests passed over all. No result fails the task yet: there is no list of
 expected results to compare with.
 
-#### The result of 19 November 2026
+#### The result of 20 November 2026
 
-`task wpt` on light `383208f`, ember `3f64950` and web-platform-tests `d6179d3` (the commit `wpt.lock` pins),
-on macOS 26.6 (arm64), took 20 minutes, `.wpt/` already set up. A test passes when its harness is OK and every
-subtest passes, or, for a reference test, when it matches its reference:
+`task wpt` on light `c02bb21` with this subset, ember `3f64950` and web-platform-tests `d6179d3` (the commit
+`wpt.lock` pins), on macOS 26.6 (arm64), took 81 minutes, `.wpt/` already set up. A test passes when its harness is
+OK and every subtest passes, or, for a reference test, when it matches its reference:
 
 | Directory | Tests passed | Subtests passed |
 |---|---|---|
-| `dom` | 408 / 566 | 61,256 / 63,983 |
+| `dom` | 408 / 566 | 61,233 / 63,966 |
 | `domxpath` | 30 / 35 | 1,158 / 1,171 |
-| `html` | 10 / 10 | 59,735 / 59,735 |
-| `css` | 7 / 7 | (reference tests, no subtests) |
-| `domparsing` | 3 / 4 | 84 / 86 |
-| `url` | 3 / 3 | 11 / 11 |
-| **Total** | **461 / 625 (74%)** | **122,244 / 124,986 (97.8%)** |
+| `html` | 560 / 1,686 | 67,946 / 74,690 |
+| `css` | 1,621 / 3,876 | 7,115 / 34,893 |
+| `url` | 8 / 50 | 3,341 / 10,185 |
+| `encoding` | 12 / 68 | 3,605 / 12,843 |
+| `domparsing` | 22 / 97 | 422 / 2,644 |
+| `fetch` | 29 / 133 | 856 / 1,683 |
+| `IndexedDB` | 172 / 229 | 1,245 / 1,601 |
+| `cors` | 9 / 26 | 254 / 414 |
+| `console` | 3 / 12 | 38 / 56 |
+| `hr-time` | 2 / 13 | 27 / 58 |
+| **Total** | **2,876 / 6,791 (42%)** | **147,240 / 204,204 (72.1%)** |
 
-Of the 625 tests, 544 ran to the end (OK), 8 reference tests passed, 23 stopped on an error and 50 timed out; a test
-that times out counts the subtests it reached. Read the figures for what they are:
+Of the 6,791 tests, 4,044 script tests ran to the end (OK), 1,446 reference tests passed and 960 failed, 149 tests
+stopped on an error and 192 timed out; a test that times out counts the subtests it reached. Read the figures for
+what they are:
 
-- They are this subset's, not a pass rate of the web-platform-tests: six directories, of which only `dom/` and
-  `domxpath/` are taken whole, and of `html`, `css`, `url` and `domparsing` only 24 tests. Nothing of the other
-  directories (`fetch`, `IndexedDB`, the rest of `css` and `html`…) is counted.
-- `dom/` leaves out 247 tests light cannot pass yet, each named with its reason in `tools/wpt/subset.txt`; the two
-  crash tests of `domxpath/` the subset lists are not run, as light's product runs only script and reference tests.
-- Subtests weigh unevenly: the ten `html/dom/reflection-*` tests are 59,735 of them, and a few `dom/ranges` tests
-  thousands each. Without `html`, 62,509 of 65,251 subtests pass (95.8%).
+- They are this subset's, not a pass rate of the web-platform-tests: twelve directories, most of them in part.
+  Nothing of the others (`xhr`, `webstorage`, `cookies`, `FileAPI`, `uievents`, `service-workers`, `websockets`,
+  `webaudio`…) is counted.
+- Directories or parts were added in this order of worth until a whole run took about 75 minutes (81, in the
+  end); the rest was left out for time alone, not for its results: `html/semantics/` `document-metadata`,
+  `links` and `embedded-content` (557 tests, many of them waiting out a timeout), `css/selectors/` (821), `xhr/`
+  (356), `webstorage/` (54), `cookies/` (89), `FileAPI/` (70), `uievents/` (74), and the 1,200 legacy
+  multi-byte tests of `encoding/` (a minute each). Also out: `html/semantics/` media, audio, video and canvas
+  (light has none of them), popovers, `interestfor`, `menu` and `permission-element`; `html/syntax/`
+  `speculative-parsing` (tentative); `css-grid/grid-lanes` (the masonry layout); `fetch/api/` but `abort`,
+  `basic`, `body`, `headers`, `request` and `response`.
+- Within what is run, 469 tests are left out by name for what light does not have (`dom/` 247, the others 222,
+  the 173 parser tests through `document.write` or a `blob:` frame among them), and the 1,023 variants of a test
+  that run in a worker are not listed. The two crash tests of `domxpath/` are listed and not run, as light's
+  product runs only script and reference tests.
+- One test is left out because it stops light: `html/semantics/forms/the-input-element/image-click-form-data.html`,
+  where light's WebDriver stops answering after the click on an image button in a frame and the runner has to
+  restart light.
+- Subtests weigh unevenly: the nine `html/dom/reflection-*` tests are 59,722 of them, a few `dom/ranges` tests
+  thousands each, `url/` and `encoding/` tables thousands more. Without `html/dom/reflection-*`, 87,518 of
+  144,482 subtests pass (60.6%).
 
-The figures, the commits and the command are kept in `tools/wpt/results/2026-11-19.json`, and the line a test of
-that run in `tools/wpt/results/2026-11-19.txt`. To run it again, check out those commits (ember beside light in the
+The figures, the commits and the command are kept in `tools/wpt/results/2026-11-20.json`, and the line a test of
+that run in `tools/wpt/results/2026-11-20.txt`. To run it again, check out those commits (ember beside light in the
 workspace) and run `task wpt`; a new dated result goes beside it.
 
-The first run sets up `.wpt/`, which git ignores (`task wpt:setup` alone does only that; about 250 MB, 375 MB with
+Earlier: on 19 November 2026, 461 of 625 tests and 122,244 of 124,986 subtests passed, on a subset of `dom/`,
+`domxpath/` and 24 other tests (`tools/wpt/results/2026-11-19.json`).
+
+The first run sets up `.wpt/`, which git ignores (`task wpt:setup` alone does only that; about 400 MB, 510 MB with
 the light it builds):
 
 - `.wpt/wpt`: a shallow clone of `github.com/web-platform-tests/wpt` at the commit `wpt.lock` pins, with only the

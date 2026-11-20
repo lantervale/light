@@ -1,0 +1,103 @@
+{
+  "date": "2026-11-20",
+  "started": "2026-11-20T01:07:17Z",
+  "finished": "2026-11-20T02:28:04Z",
+  "light": "c02bb21622ec837df20959a10ee32971af396db8",
+  "ember": "3f649508a1ef864eff91e5b9c47abe6b7dd81702",
+  "wpt": "d6179d36cdff2a6285822f3043edbdfa7bdf09e3",
+  "machine": "macOS 26.6.2, arm64, Go 1.27.0, light built with -tags v8, hidden (EMBER_HIDDEN=1)",
+  "command": "task wpt",
+  "subset": "tools/wpt/subset.txt",
+  "test_passed": "a script test whose harness is OK and every subtest PASS, a reference test that is PASS",
+  "listed_not_run": [
+    "/domxpath/variables-in-expression-crash.html",
+    "/domxpath/xpath-evaluate-crash.html"
+  ],
+  "listed_not_run_why": "crash tests: light's product for wptrunner runs only testharness and reftest",
+  "directories": {
+    "console": {
+      "tests": 12,
+      "tests_passed": 3,
+      "subtests": 56,
+      "subtests_passed": 38
+    },
+    "cors": {
+      "tests": 26,
+      "tests_passed": 9,
+      "subtests": 414,
+      "subtests_passed": 254
+    },
+    "css": {
+      "tests": 3876,
+      "tests_passed": 1621,
+      "subtests": 34893,
+      "subtests_passed": 7115
+    },
+    "dom": {
+      "tests": 566,
+      "tests_passed": 408,
+      "subtests": 63966,
+      "subtests_passed": 61233
+    },
+    "domparsing": {
+      "tests": 97,
+      "tests_passed": 22,
+      "subtests": 2644,
+      "subtests_passed": 422
+    },
+    "domxpath": {
+      "tests": 35,
+      "tests_passed": 30,
+      "subtests": 1171,
+      "subtests_passed": 1158
+    },
+    "encoding": {
+      "tests": 68,
+      "tests_passed": 12,
+      "subtests": 12843,
+      "subtests_passed": 3605
+    },
+    "fetch": {
+      "tests": 133,
+      "tests_passed": 29,
+      "subtests": 1683,
+      "subtests_passed": 856
+    },
+    "hr-time": {
+      "tests": 13,
+      "tests_passed": 2,
+      "subtests": 58,
+      "subtests_passed": 27
+    },
+    "html": {
+      "tests": 1686,
+      "tests_passed": 560,
+      "subtests": 74690,
+      "subtests_passed": 67946
+    },
+    "IndexedDB": {
+      "tests": 229,
+      "tests_passed": 172,
+      "subtests": 1601,
+      "subtests_passed": 1245
+    },
+    "url": {
+      "tests": 50,
+      "tests_passed": 8,
+      "subtests": 10185,
+      "subtests_passed": 3341
+    }
+  },
+  "total": {
+    "tests": 6791,
+    "tests_passed": 2876,
+    "subtests": 204204,
+    "subtests_passed": 147240
+  },
+  "total_without_html_dom_reflection": {
+    "tests": 6782,
+    "tests_passed": 2867,
+    "subtests": 144482,
+    "subtests_passed": 87518
+  }
+}
