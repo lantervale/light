@@ -87,8 +87,9 @@ Plenty. Many pages show well, many do not.
 - No extensions, sync, private window, password manager or printing.
 - One process: V8 isolates are the only wall between sites.
 
-Of the [web-platform-tests](https://web-platform-tests.org) light runs, 461 of 625 pass (19 November 2026): a
-subset, mostly `dom/` and `domxpath/`, not all of WPT ([per directory](docs/reference.md#web-platform-tests)).
+Of the [web-platform-tests](https://web-platform-tests.org) light runs, 2,876 of 6,791 pass (20 November 2026): a
+subset of `dom`, `html`, `css`, `url`, `encoding`, `fetch`, `IndexedDB` and a few more, not all of WPT
+([per directory](docs/reference.md#web-platform-tests)).
 
 The honest, full list is in the reference: [what works and what does not](docs/reference.md#what-works-and-what-does-not).
 
