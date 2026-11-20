@@ -129,6 +129,7 @@ func (s *Screen) switcher() *ui.Node {
 			if s.dark() {
 				other = config.AppearanceLight
 			}
+			s.noted = other == config.AppearanceDark && s.notebook()
 			s.configure(func(c *config.Config) { c.Appearance = other })
 		}))
 	s.fields = append(s.fields, func() { picture.SetAttr("src", s.logo()) })
