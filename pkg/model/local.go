@@ -121,26 +121,26 @@ type Local struct {
 	wake    chan struct{}
 	stopped chan struct{}
 
-	mu          sync.Mutex
-	settings    Settings
-	seq         uint64
-	state       State
-	reason      string
-	detail      string
-	loaded      bool
-	memory      int64
-	chosen      Chosen
-	caps        Capabilities
-	prefixes    [2]string
-	unusable    error
-	broken      error
-	interactive []*job
-	background  []*job
-	warm        bool
-	epoch       int
-	acks        []chan struct{}
-	closed      bool
-	ids         int
+	mu       sync.Mutex
+	settings Settings
+	seq      uint64
+	state    State
+	reason   string
+	detail   string
+	loaded   bool
+	memory   int64
+	chosen   Chosen
+	caps     Capabilities
+	prefixes [2]string
+	unusable error
+	broken   error
+	// waiting are the jobs that wait, a queue a Priority.
+	waiting [priorities][]*job
+	warm    bool
+	epoch   int
+	acks    []chan struct{}
+	closed  bool
+	ids     int
 	// live is the model and the embedding model the helper was started
 	// on.
 	live [2]string
@@ -325,14 +325,34 @@ func (l *Local) Status() Status {
 	defer l.mu.Unlock()
 	return Status{
 		Seq: l.seq, State: l.state, Reason: l.reason, Detail: l.detail, Loaded: l.loaded, Chosen: l.chosen,
-		Capabilities: l.caps, Memory: l.memory, Waiting: len(l.interactive) + len(l.background),
+		Capabilities: l.caps, Memory: l.memory, Waiting: l.queued(),
+	}
+}
+
+// queued is how many jobs wait, with the lock held.
+func (l *Local) queued() int {
+	n := 0
+	for _, queue := range l.waiting {
+		n += len(queue)
+	}
+	return n
+}
+
+// drop takes the jobs gone says of those that wait, with the lock held.
+func (l *Local) drop(gone func(*job) bool) {
+	for p := range l.waiting {
+		l.waiting[p] = slices.DeleteFunc(l.waiting[p], gone)
 	}
 }
 
 // queue adds a job to those that wait, or says why the model takes
 // none.
 func (l *Local) queue(ctx context.Context, priority Priority, command Command, held bool) (*job, error) {
+	if priority < Interactive || priority >= priorities {
+		return nil, fmt.Errorf("no priority %d", priority)
+	}
 	j := &job{priority: priority, command: command, stream: newStream(held)}
+	j.stream.resumes = priority == Page
 	j.unhook = context.AfterFunc(ctx, func() {
 		if j.stream.finish(Result{}, ctx.Err()) {
 			l.poke()
@@ -343,11 +363,7 @@ func (l *Local) queue(ctx context.Context, priority Priority, command Command, h
 	if err == nil {
 		l.ids++
 		j.command.ID, j.epoch = l.ids, l.epoch
-		if priority == Background {
-			l.background = append(l.background, j)
-		} else {
-			l.interactive = append(l.interactive, j)
-		}
+		l.waiting[priority] = append(l.waiting[priority], j)
 		l.seq++
 	}
 	l.mu.Unlock()
@@ -667,8 +683,7 @@ func (l *Local) step() bool {
 	l.mu.Lock()
 	closed, epoch := l.closed, l.epoch
 	keep := func(j *job) bool { return !j.stream.over() }
-	l.interactive = slices.DeleteFunc(l.interactive, func(j *job) bool { return !keep(j) })
-	l.background = slices.DeleteFunc(l.background, func(j *job) bool { return !keep(j) })
+	l.drop(func(j *job) bool { return !keep(j) })
 	l.mu.Unlock()
 	if closed {
 		l.halt(ErrClosed, epoch+1)
@@ -712,8 +727,7 @@ func (l *Local) halt(err error, epoch int) {
 		}
 		return false
 	}
-	l.interactive = slices.DeleteFunc(l.interactive, old)
-	l.background = slices.DeleteFunc(l.background, old)
+	l.drop(old)
 	l.loaded, l.memory, l.detail, l.warm, l.live = false, 0, "", false, [2]string{}
 	l.state = Off
 	l.refresh()
@@ -732,14 +746,17 @@ func (l *Local) end(result Result, err error) {
 }
 
 // supervise stops the job that runs when nobody waits for it any more,
-// or when somebody waits behind a background one.
+// or when a job of a higher priority waits behind it.
 func (l *Local) supervise() {
 	if l.cancelling {
 		return
 	}
 	over := l.job.stream.over()
 	l.mu.Lock()
-	preempt := !over && l.job.priority == Background && len(l.interactive) > 0
+	preempt := false
+	for p := range l.job.priority {
+		preempt = preempt || !over && len(l.waiting[p]) > 0
+	}
 	l.mu.Unlock()
 	if !over && !preempt {
 		return
@@ -754,11 +771,10 @@ func (l *Local) supervise() {
 func (l *Local) dispatch() {
 	l.mu.Lock()
 	var next *job
-	switch {
-	case len(l.interactive) > 0:
-		next = l.interactive[0]
-	case len(l.background) > 0:
-		next = l.background[0]
+	for _, queue := range l.waiting {
+		if next == nil && len(queue) > 0 {
+			next = queue[0]
+		}
 	}
 	warm := l.warm
 	l.mu.Unlock()
@@ -782,8 +798,7 @@ func (l *Local) dispatch() {
 
 func (l *Local) run(next *job) {
 	l.mu.Lock()
-	l.interactive = slices.DeleteFunc(l.interactive, func(j *job) bool { return j == next })
-	l.background = slices.DeleteFunc(l.background, func(j *job) bool { return j == next })
+	l.drop(func(j *job) bool { return j == next })
 	l.state, l.warm = Working, false
 	l.seq++
 	l.mu.Unlock()
@@ -961,7 +976,7 @@ func (l *Local) done(ev Event) {
 		again.stream.restart()
 		l.job, l.cancelling, l.requeue, l.deadline = nil, false, false, time.Time{}
 		l.set(func() {
-			l.background = slices.Insert(l.background, 0, again)
+			l.waiting[again.priority] = slices.Insert(l.waiting[again.priority], 0, again)
 			l.state, l.memory = Ready, ev.Memory
 		})
 		return

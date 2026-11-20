@@ -126,6 +126,13 @@ const (
 	// stopped for an Interactive request starts again afterwards, so
 	// its stream gives its text only once whole.
 	Background
+	// Page is a request a page's script made: it waits behind light's
+	// own, and one of those stops it as an Interactive request stops a
+	// Background one. Asked at Temperature 0 it starts over the same,
+	// so its stream gives its text as it comes, and skips, the second
+	// time, what it gave the first.
+	Page
+	priorities
 )
 
 // Request is one thing asked of the model. Its text is input only:

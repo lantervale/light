@@ -662,3 +662,52 @@ func TestWithNoHelperBesideLightTheModelFails(t *testing.T) {
 		t.Fatalf("with no helper the model is %v (%q)", got.State, got.Reason)
 	}
 }
+
+func TestAPageRequestWaitsBehindLightsOwnAndGivesItsTextOnce(t *testing.T) {
+	b := started(t, "ok", func(o *model.Options) { o.Env = append(o.Env, envPace+"=10") })
+	long := strings.TrimSpace(strings.Repeat("page ", 60))
+	page, err := b.Generate(context.Background(), model.Request{
+		Messages: []model.Message{{Role: model.User, Text: long}}, Priority: model.Page,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var given strings.Builder
+	eventually(t, "the page's request is being answered", func() bool {
+		text, _ := page.Take()
+		given.WriteString(text)
+		return text != ""
+	})
+	background, err := b.Generate(context.Background(), model.Request{
+		Messages: []model.Message{{Role: model.User, Text: "a category"}}, Priority: model.Background,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, err := background.Wait()
+	if err != nil || own.Text != "a category" {
+		t.Fatalf("light's own answer is %q, %v", own.Text, err)
+	}
+	select {
+	case <-page.Done():
+		t.Fatal("the page's answer ended before light's own")
+	default:
+	}
+	whole, err := page.Wait()
+	if err != nil || whole.Text != long {
+		t.Fatalf("the page's answer, started over, is %q, %v", whole.Text, err)
+	}
+	for {
+		text, done := page.Take()
+		if given.WriteString(text); done {
+			break
+		}
+	}
+	if given.String() != long {
+		t.Fatalf("the page was given %q as it came", given.String())
+	}
+	asked := b.helpers()[0].Asked
+	if want := []string{long, "a category", long}; !slices.Equal(asked, want) {
+		t.Fatalf("the helper was asked, in order, %d requests: %.40q", len(asked), asked)
+	}
+}
