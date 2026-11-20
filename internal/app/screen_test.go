@@ -52,6 +52,7 @@ func showWith(t *testing.T, opts Options) *shown {
 	}
 	win := Window(nil)
 	screen := New(win, opts)
+	screen.notebook = func() bool { return false }
 	win.Add(screen.Document())
 	w := ember.New().AddEntities(win).AddSystems(screen)
 	t.Cleanup(func() { _ = screen.Close() })
