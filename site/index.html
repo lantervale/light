@@ -391,7 +391,7 @@ document.getElementById("tour").addEventListener("click", function () {
 	}
 	function flip(from) {
 		dark = !dark;
-		var notebook = dark && Math.random() < 1 / 6;
+		var notebook = dark && (location.hash === "#yagami" || Math.random() < 1 / 6);
 		try { localStorage.setItem("appearance", dark ? "dark" : "light"); } catch (e) {}
 		if (turning) turning.skipTransition();
 		if (turning || !document.startViewTransition || still.matches) {
