@@ -1,4 +1,4 @@
-## light v0.2.2
+## light v0.2.3
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,14 +7,11 @@ ember's UI goes on real pages, not a browser to live in.
 
 ## What is new
 
-- **A page switching its theme by script switches whole**: a class set on the page's root is read at once by
-  `getComputedStyle`, so a light or dark switch no longer reads the colours it just left.
-- **A site that does not answer says so in words**: the page names the site and the seconds a page is given
-  (Request timeout, in the settings), in place of the error Go gave.
-- light runs a much wider part of the web-platform-tests: 2,876 of 6,791 pass
-  ([per directory](https://github.com/lantervale/light/blob/main/docs/reference.md#web-platform-tests)).
-- New in v0.2.1, the release before: links to a place in a page, Back and Forward keeping where a page was scrolled, and light's home
-  page, https://lantervale.github.io/light/
+- **macOS downloads are a disk image**: open it and drag `light.app` onto Applications, no zip to unpack.
+- **Homebrew**: `brew install --cask lantervale/tap/light` installs it on macOS, and `brew upgrade` keeps it current.
+- Now and then, turning the start page dark by its logo brings something else than the dark.
+- New in v0.2.2, the release before: a page switching its theme by script switches whole, and a site that does not
+  answer says so in words.
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
