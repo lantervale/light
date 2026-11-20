@@ -53,7 +53,18 @@ func homePage(s *Screen) []*ui.Node {
 	}
 	s.relist, s.relistMarks = fill, fill
 	fill()
-	return []*ui.Node{s.switcher(), ui.Div(ui.ID("wordmark"), ui.Text("light")),
+	word := ui.Div(ui.ID("wordmark"))
+	name := func() {
+		noted := s.dark() && s.noted
+		word.SetText("light")
+		if noted {
+			word.SetText("yagami")
+		}
+		toggle(word, "notebook", noted)
+	}
+	name()
+	s.fields = append(s.fields, name)
+	return []*ui.Node{s.switcher(), word,
 		ui.Div(ui.ID("search-box"), mark, search), held,
 		ui.P(ui.ID("project"), s.anchor(project, ui.ID("go-project"), ui.Text("light on GitHub")))}
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"strings"
 	"testing/fstest"
 
@@ -9,11 +10,13 @@ import (
 	"github.com/lantervale/light"
 )
 
-// logo is the name light's logo is drawn by, and darkLogo the name of
-// the one a dark page shows: its navy and its white swapped.
+// logo is the name light's logo is drawn by, darkLogo the name of the
+// one a dark page shows, its navy and its white swapped, and notebookLogo
+// the dark one with a black notebook in place of its rays.
 const (
-	logo     = "logo.svg"
-	darkLogo = "logo-dark.svg"
+	logo         = "logo.svg"
+	darkLogo     = "logo-dark.svg"
+	notebookLogo = "logo-notebook.svg"
 	// searchMark is the magnifier that stands for a search engine light
 	// has no picture of.
 	searchMark = "search.svg"
@@ -24,7 +27,16 @@ const (
 // address field show.
 func icons() fstest.MapFS {
 	swapped := strings.NewReplacer("#0e2a3f", "#fff", "#fff", "#0e2a3f").Replace(string(light.Logo))
-	files := fstest.MapFS{logo: &fstest.MapFile{Data: light.Logo}, darkLogo: &fstest.MapFile{Data: []byte(swapped)}}
+	disc := regexp.MustCompile(`\s*<circle [^>]*/>`)
+	rays := regexp.MustCompile(`<path [^>]*#f15a2b[^>]*/>`)
+	notebook := rays.ReplaceAllLiteralString(disc.ReplaceAllLiteralString(swapped, ""), `<g class="notebook">`+
+		`<rect x="17" y="18" width="20" height="28" rx="1.5" fill="#050608" stroke="#3b4048" stroke-width=".8"/>`+
+		`<path d="M20 18.5v27" stroke="#2a2e35" stroke-width="1.2"/>`+
+		`<path d="M36.5 20v24" stroke="#c9ccd1" stroke-width=".6"/></g><g class="pen">`+
+		`<path d="M42.5 42 48.6 19.4l3 .8L45.5 42.8z" fill="#23272e" stroke="#6b7078" stroke-width=".6"/>`+
+		`<path d="M42.5 42l3 .8-2.3 3.2z" fill="#c9ccd1"/></g>`)
+	files := fstest.MapFS{logo: &fstest.MapFile{Data: light.Logo}, darkLogo: &fstest.MapFile{Data: []byte(swapped)},
+		notebookLogo: &fstest.MapFile{Data: []byte(notebook)}}
 	for name, path := range map[string]string{
 		"back":     `<path d="M7 3.5 2.5 8 7 12.5M2.5 8h11"/>`,
 		"forward":  `<path d="M9 3.5 13.5 8 9 12.5M13.5 8h-11"/>`,

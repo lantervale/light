@@ -373,3 +373,29 @@ func TestAPageOfTheWebIsNotShaded(t *testing.T) {
 	}
 	s.clean()
 }
+
+func TestNowAndThenTheDarkFallsOnTheStartPageWithANotebook(t *testing.T) {
+	s := showWith(t, Options{Dir: t.TempDir(), Downloads: t.TempDir()})
+	s.notebook = func() bool { return true }
+	s.click("logo")
+	s.at(tabs.Home)
+	word := s.node("wordmark")
+	if !s.dark() || src(s.node("logo")) != notebookLogo || word.Text() != "yagami" || !word.HasClass("notebook") {
+		t.Fatalf("dark %v, the logo %q, the wordmark %q", s.dark(), src(s.node("logo")), word.Text())
+	}
+	s.click("logo")
+	if s.dark() || src(s.node("logo")) != logo || word.Text() != "light" || word.HasClass("notebook") {
+		t.Fatalf("back to light the logo is %q, the wordmark %q", src(s.node("logo")), word.Text())
+	}
+	s.notebook = func() bool { return false }
+	s.click("logo")
+	if src(s.node("logo")) != darkLogo || word.Text() != "light" {
+		t.Fatalf("without the notebook the logo is %q, the wordmark %q", src(s.node("logo")), word.Text())
+	}
+	if notebook := string(icons()[notebookLogo].Data); strings.Contains(notebook, "#f15a2b") ||
+		strings.Contains(notebook, "<circle") || !strings.Contains(notebook, `class="notebook"`) ||
+		!strings.Contains(notebook, `class="pen"`) {
+		t.Fatalf("the notebook's logo is %s", notebook)
+	}
+	s.clean()
+}

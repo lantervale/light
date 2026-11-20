@@ -126,6 +126,9 @@ func (s *Screen) shade() {
 
 // logo is the logo the start page shows, by the appearance.
 func (s *Screen) logo() string {
+	if s.dark() && s.noted {
+		return notebookLogo
+	}
 	if s.dark() {
 		return darkLogo
 	}
