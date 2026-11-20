@@ -105,5 +105,7 @@ func (r *Runtime) table() map[string]op {
 		"document": r.documents,
 		// the site's databases (indexeddb.go)
 		"idb": r.idb,
+		// the Translator and LanguageDetector APIs (translator.go)
+		"assistant": r.assistant,
 	}
 }

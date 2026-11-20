@@ -89,7 +89,7 @@ define(window, {
     },
   },
   visualViewport: undefined, name: "", closed: false, opener: null,
-  isSecureContext: here.protocol === "https:", origin: host("origin"), crossOriginIsolated: false, event: undefined, status: "",
+  isSecureContext: secureContext, origin: host("origin"), crossOriginIsolated: false, event: undefined, status: "",
   alert: asks("alert", () => undefined, undefined),
   confirm: asks("confirm", (ok) => ok, false),
   prompt: asks("prompt", (ok, text) => (ok ? text : null), null),
@@ -140,6 +140,7 @@ define(window, {
   HTMLDataElement, HTMLPictureElement, HTMLSourceElement, HTMLObjectElement, HTMLEmbedElement, HTMLSlotElement,
   HTMLOptGroupElement, HTMLOutputElement, HTMLMenuElement, HTMLFontElement,
 });
+if (secureContext) define(window, { Translator, LanguageDetector, CreateMonitor });
 for (const name of ["setImmediate", "visualViewport", "event", "Audio"]) delete window[name];
 Object.defineProperty(window, "event", {
   get() { return currentEvent; },
@@ -219,6 +220,7 @@ const calls = {
   fonts: fontsMoved,
   answered,
   arrived,
+  assisted,
   // event fires an event at a node, the window or the document, and
   // says whether its default was prevented.
   event(ref, type, init) {

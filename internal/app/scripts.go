@@ -303,7 +303,7 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 			}
 		})
 	}
-	return dom.Host{
+	host := dom.Host{
 		Console: func(m dom.Message) {
 			session.said.Add(console.Line{Level: console.Level(m.Level), Text: m.Text, Source: m.Source, Line: m.Line,
 				Stack: m.Stack, Depth: m.Depth, At: m.At})
@@ -364,6 +364,8 @@ func (s *Screen) scriptHost(tab *tabs.Tab, session *session, live *running) dom.
 		Window:    func() dom.Window { return s.around(live.page.Doc.Zoom()) },
 		Budget:    s.opts.ScriptBudget,
 	}
+	s.pageModel(&host)
+	return host
 }
 
 // fetchFor fetches what a page's script asked for, off the frame, as

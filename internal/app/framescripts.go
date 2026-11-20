@@ -624,7 +624,9 @@ func (s *Screen) frameHost(f *frame, live *running) dom.Host {
 		Windows:   &windows{s: s, set: set, by: f},
 		Loading:   func() bool { return set.loading(f) },
 		Kin:       live.kin, Self: f.id,
+		Allows: f.frameAllows,
 	}
+	s.pageModel(&host)
 	if !opaque {
 		within := district{origin: origin}
 		if f.crossed() {

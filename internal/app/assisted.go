@@ -32,7 +32,8 @@ func features() []feature {
 		{pickedFeature, "Actions on selected text"},
 		{findFeature, "Find by meaning"}, {filingFeature, "Bookmark suggestions"},
 		{summariesFeature, "Page summaries"}, {sortingFeature, sortedTitle},
-		{recallFeature, recallLabel}}
+		{recallFeature, recallLabel}, {translatorFeature, "Translator API"},
+		{detectorFeature, "Language Detector API"}}
 }
 
 // inquiry is something asked of the model about a text of a page, and
