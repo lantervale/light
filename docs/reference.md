@@ -94,8 +94,7 @@ What does not, in short:
 - **No PDF viewer, no AVIF**: they are downloaded. An animated WebP is not drawn.
 - **No extensions, no sync, no private window, no password manager, no autofill, no printing.**
 - **CSS is a subset.** ember's guide lists what is missing:
-  [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md). `@import` in a
-  page's sheet is not followed.
+  [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
 - **One process.** Every tab and frame runs in one process, and V8 isolates are the only wall between origins.
   Downloads are not scanned. Do not keep in light what a hostile page must never reach
   ([the boundary and its limits](#scripts-in-frames)).
@@ -186,11 +185,11 @@ A tab that shows a page keeps showing it while the next one loads: no empty page
   the place its address names, else the top. What is kept is the page's own scroll: not that of a box that
   scrolls inside it, nor of a frame's document, which Back takes to the place its address names; and it is kept
   for the run, not across a restart.
-- **What a browser does with places that light does not.** `:target` styles nothing (ember's ui does not read
-  it), and for scripts (`querySelector`) matches an element by its `id` only; `location.hash` set by a script
-  tells `hashchange` without `popstate`; a script's `scrollIntoView()` scrolls by the least that shows the
-  element whatever its arguments, where a browser brings it to the top; and a place of the shown page is no
-  visit of `light://history`.
+- **What a browser does with places that light does not.** `:target` styles the element the address names, by
+  its `id` or an `a`'s `name`, but for scripts (`querySelector`) matches an element by its `id` only;
+  `location.hash` set by a script tells `hashchange` without `popstate`; a script's `scrollIntoView()` scrolls by
+  the least that shows the element whatever its arguments, where a browser brings it to the top; and a place of
+  the shown page is no visit of `light://history`.
 - **Where there is no page to hold** (a new tab opened on an address, a tab's first load): the page area is
   light's own surface, light or dark as the settings say, with the same line and spinner; Stop then leaves the
   page that says the load was stopped.
@@ -799,7 +798,8 @@ not given one keeps them in memory.
   shows its default weight, no bold or italic is made up from a regular face, colour fonts and collections are
   not read, and an icon font that writes its icons as words (ligatures, as Material Icons) shows the words. A font
   of another site is used whatever its `Access-Control-Allow-Origin`, where a browser refuses it without one.
-  The fonts of a sheet reached by `@import` are not fetched, as the sheet is not. light keeps its own
+  A sheet an `@import` names is fetched as the page shows, asked by the sheet that imports it, and taken when it
+  is served as `text/css` or as no type; the page shows without it until it lands. light keeps its own
   `User-Agent`, which names no other browser: Google Fonts answers it with TrueType files of whole families, where it gives browsers WOFF2 cut
   by `unicode-range`.
 - It sends a form with a GET or a POST, as `application/x-www-form-urlencoded` or `text/plain`, in the page's
@@ -825,14 +825,16 @@ not given one keeps them in memory.
 - It follows redirects (301, 302, 303, 307, 308) and a refresh of 0 seconds, as many in a row as the settings say,
   to `http` and `https` only. A refresh that waits is left alone.
 - It reads gzip, deflate and, over https, Brotli. No zstd, and it does not ask for it.
+- A page's `Content-Language` header, when it names one language, is the page's language: what `:lang()` reads
+  where no `lang` attribute says one. A `<meta http-equiv="content-language">` is not read.
 - It holds a page's answer in memory, 64 MB at most, and lays out the first 512 kB of a text. A download is
   streamed to its file instead.
 - It decodes PNG, JPEG, GIF, WebP (lossy and lossless, with alpha; an animated one is not drawn) and SVG. AVIF and
   BMP are downloaded.
-- An `img` shows one picture of its `srcset`, or of its `<picture>`'s first `<source>` light draws: the smallest
-  that fills the slot `sizes` gives in the view, at one pixel a point (`img.currentSrc` reads it). It is chosen as
-  the page is built and when a script changes the `img`, not again on a resize; a `media` other than `min-width`
-  and `max-width` does not hold, and a `<source>` a script changes is not looked at again.
+- An `img` shows the picture ember's ui chooses as Chrome does, of its `srcset` or of its `<picture>`'s first
+  `<source>` whose `media` holds and whose `type` light draws, for the slot `sizes` gives and the screen's pixels
+  a point (`img.currentSrc` reads it); it is chosen again when the view, the attributes or the sources change.
+  Lazy loading is not done.
 - **Local network**: a page asks only addresses as public as the one it came from. One that came from the
   Internet reaches neither the network around this machine (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
   `169.254.0.0/16`, `100.64.0.0/10`, `fc00::/7`, `fe80::/10` and the other addresses the Internet does not route)
@@ -956,8 +958,7 @@ What does not:
 - **Cookies**: `document.cookie` reads and sets the browser's cookies for the page, those marked `HttpOnly` kept
   from it, and `navigator.cookieEnabled` says whether the setting is on. A script reads no `Set-Cookie` header of
   what it fetched.
-- **Styles**: the page's `@import` rules are not followed, and a rule ember's ui does not read applies nothing,
-  whoever inserted it. A stylesheet moved among the others is read again, and what scripts inserted in it kept.
+- **Styles**: a rule ember's ui does not read applies nothing, whoever inserted it. A stylesheet moved among the others is read again, and what scripts inserted in it kept.
   `getComputedStyle` answers what ui computed: lengths in px, colours as `rgb()` when they were written in
   hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element a script
   put in the page since then is styled and laid out at once when its style is read. A rule's `style` is its text read again: no `CSSKeyframeRule`,

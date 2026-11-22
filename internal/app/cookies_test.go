@@ -97,11 +97,23 @@ func cookied(t *testing.T) *hosts {
 	})
 }
 
+// pictured runs frames until the page's sheet and pictures were asked
+// for and every request of the tab ended, and one more for what shows
+// the requests to list them as they ended.
 func (s *shown) pictured(n *hosts) {
 	s.t.Helper()
-	s.until("the page's pictures were asked for", func() bool {
-		return n.came("site.test/map.png") && n.came("tracker.test/pixel.png") && n.came("site.test/site.css")
+	s.until("the page's pictures were asked for and their requests ended", func() bool {
+		if !n.came("site.test/map.png") || !n.came("tracker.test/pixel.png") || !n.came("site.test/site.css") {
+			return false
+		}
+		for _, r := range s.session().log.Rows() {
+			if !r.Done {
+				return false
+			}
+		}
+		return true
 	})
+	s.frame()
 }
 
 func TestACookieAPageSetsIsSentAfterItAndKeptForTheNextRun(t *testing.T) {

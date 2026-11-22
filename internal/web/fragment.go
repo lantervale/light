@@ -19,11 +19,24 @@ func Indicated(doc *ui.Document, address string) *ui.Node {
 	if fragment == "" {
 		return root
 	}
-	names := []string{fragment}
-	if plain, err := url.PathUnescape(fragment); err == nil && plain != fragment {
-		names = append(names, plain)
+	if n := placeOf(doc, fragment); n != nil {
+		return n
 	}
-	for _, name := range names {
+	if names := namesOf(fragment); strings.EqualFold(names[len(names)-1], "top") {
+		return root
+	}
+	return nil
+}
+
+// placeOf is the element of doc a fragment names: the first whose id is
+// the fragment, else the first a of that name, by the fragment as
+// written, then with its escapes read; nil for none.
+func placeOf(doc *ui.Document, fragment string) *ui.Node {
+	if fragment == "" {
+		return nil
+	}
+	root := doc.Body().Parent()
+	for _, name := range namesOf(fragment) {
 		if n := doc.ByID(name); n != nil {
 			return n
 		}
@@ -31,10 +44,17 @@ func Indicated(doc *ui.Document, address string) *ui.Node {
 			return n
 		}
 	}
-	if strings.EqualFold(names[len(names)-1], "top") {
-		return root
-	}
 	return nil
+}
+
+// namesOf are the names a fragment is looked for by: as written, then
+// with its escapes read when that differs.
+func namesOf(fragment string) []string {
+	names := []string{fragment}
+	if plain, err := url.PathUnescape(fragment); err == nil && plain != fragment {
+		names = append(names, plain)
+	}
+	return names
 }
 
 // anchored is the first a element under root with that name.
@@ -51,10 +71,18 @@ func anchored(root *ui.Node, name string) *ui.Node {
 	return found
 }
 
-// Reveal scrolls doc so the element address names after its "#" is at
-// the top of its view, once it is laid out, and leaves it where it is
-// for one that names nothing.
+// Target makes the element address names after its "#" doc's target,
+// the one :target matches: none for an address without a fragment, at
+// the top of the page or naming nothing.
+func Target(doc *ui.Document, address string) {
+	doc.SetTarget(placeOf(doc, Fragment(address)))
+}
+
+// Reveal makes the element address names after its "#" doc's target
+// and scrolls doc so it is at the top of its view, once it is laid out,
+// leaving it where it is for one that names nothing.
 func Reveal(doc *ui.Document, address string) {
+	Target(doc, address)
 	if n := Indicated(doc, address); n != nil {
 		doc.ScrollToStart(n)
 	}

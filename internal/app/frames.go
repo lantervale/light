@@ -470,15 +470,12 @@ func (f *frame) documents() []*url.URL {
 }
 
 // frameLoader is the loader of the settings as f's documents are
-// loaded: with their scripts unless its sandbox runs none, at their
-// frame's size, and let in only where they do not refuse the documents
-// f is in.
+// loaded: with their scripts unless its sandbox runs none, and let in
+// only where they do not refuse the documents f is in.
 func (s *Screen) frameLoader(f *frame) *web.Loader {
 	loader := *s.current()
 	above, documents := f.above(), f.documents()
-	width, height := s.frameSize(f)
 	loader.Scripts, loader.Zoom = loader.Scripts && f.sandbox.Runs(), 0
-	loader.Viewport = func() (float32, float32) { return width, height }
 	loader.Frame = &web.Frame{
 		Top: f.set.top.Base, Chain: documents[:len(documents)-1], Opaque: f.sandbox.Opaque(),
 		NoForms: !f.sandbox.Submits(),

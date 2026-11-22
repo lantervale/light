@@ -3,6 +3,8 @@
 package dom_test
 
 import (
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +21,17 @@ import (
 )
 
 const address = "https://site.test/dir/page.html?q=1#top"
+
+// walled refuses every request that would leave this machine: no test
+// reaches the Internet.
+type walled struct{}
+
+func (walled) RoundTrip(r *http.Request) (*http.Response, error) {
+	if host := r.URL.Hostname(); host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return nil, errors.New(host + " is not reached from a test")
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
 
 // scripted is a page of markup with its scripts running, and what they
 // asked of the browser.
@@ -38,7 +51,9 @@ type scripted struct {
 	// stopped, by address.
 	answers map[string]dom.Response
 	stopped []string
-	stores  map[string]dom.Storage
+	// at is the page's address, address when it is "".
+	at     string
+	stores map[string]dom.Storage
 }
 
 func run(t *testing.T, markup string) *scripted {
@@ -50,14 +65,18 @@ func run(t *testing.T, markup string) *scripted {
 
 func (s *scripted) start(markup string, host dom.Host) {
 	s.t.Helper()
-	loader := &web.Loader{Client: fetch.New(nil), Scripts: true}
+	loader := &web.Loader{Client: fetch.New(walled{}), Scripts: true}
 	open := func(to string) { s.opened = append(s.opened, to) }
 	post := func(by string) func(web.Submission) {
 		return func(sent web.Submission) {
 			s.posted = append(s.posted, by+sent.Address+" "+sent.Form.Type+" "+string(sent.Form.Body))
 		}
 	}
-	s.page = loader.Local(address, markup, web.Links{Open: open, Over: func(string) {}, Post: post("")})
+	at := s.at
+	if at == "" {
+		at = address
+	}
+	s.page = loader.Local(at, markup, web.Links{Open: open, Over: func(string) {}, Post: post("")})
 	if s.page.Err != nil {
 		s.t.Fatal(s.page.Err)
 	}

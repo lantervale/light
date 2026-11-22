@@ -41,9 +41,6 @@ const (
 	schemeHTTPS = "https"
 )
 
-// drawn are the types of the pictures light draws.
-const drawn = "image/png, image/jpeg, image/gif, image/webp, image/svg+xml"
-
 // asking is ctx for one request of the page ctx is for, by what it is
 // for.
 func asking(ctx context.Context, dest identity.Destination) context.Context {
@@ -61,9 +58,6 @@ type Loader struct {
 	// Scripts keeps a page's scripts, fetched with it, and builds it as
 	// they need it (tree.go).
 	Scripts bool
-	// Viewport is the size of the view pages show in, which an img's
-	// srcset is chosen for; a common one without it.
-	Viewport func() (width, height float32)
 	// Frame is the frame the pages are loaded for, nil for a tab's own.
 	Frame *Frame
 	// Exact draws the pages' text at its exact coverage, without stem
@@ -322,12 +316,25 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	b.load(ctx, root)
 	timing.Mark(Gathered)
 	page.Title, page.Doc = titleOf(root), b.document(ctx, root)
+	if lang := language(answer.Header.Get("Content-Language")); lang != "" {
+		page.Doc.SetLanguage(lang)
+	}
 	timing.Mark(Built)
 	page.Icon = <-icon
 	page.Scripts, page.Tree, page.Frames, page.Base = b.ordered(), b.tree, b.frames, b.base
 	if err = ctx.Err(); err != nil {
 		page.Err = err
 	}
+}
+
+// language is the language a Content-Language header gives a page,
+// what :lang() reads where no lang attribute says one: its tag when it
+// names one alone, "" otherwise.
+func language(header string) string {
+	if strings.Contains(header, ",") {
+		return ""
+	}
+	return strings.TrimSpace(header)
 }
 
 // parse reads an answer into its tree: by XML's rules for a document

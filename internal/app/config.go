@@ -100,7 +100,7 @@ func (s *Screen) apply() {
 	s.loader.Store(&web.Loader{
 		Client:     s.client.Load(),
 		NoPictures: !c.Pictures, NoRefresh: !c.MetaRefresh, Zoom: float32(c.Zoom) / 100, Scripts: s.scripting(),
-		Viewport: s.viewport, Exact: s.opts.ExactText,
+		Exact: s.opts.ExactText,
 	})
 	s.browser.Start = c.StartPage
 	if s.doc != nil {

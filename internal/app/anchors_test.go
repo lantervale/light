@@ -250,6 +250,52 @@ func TestReloadKeepsWhereThePageIsScrolled(t *testing.T) {
 	}
 }
 
+// target is the id of the target of the shown page of the web, "" for
+// none.
+func (s *shown) target() string {
+	s.t.Helper()
+	page := s.session().pages[s.browser.Tab().Current()]
+	if page == nil || page.Doc == nil {
+		s.t.Fatal("no page of the web is shown")
+	}
+	if n := page.Doc.Target(); n != nil {
+		return n.ID()
+	}
+	return ""
+}
+
+func TestThePlaceAnAddressNamesIsThePagesTarget(t *testing.T) {
+	srv, _ := glossary(t)
+	s := show(t)
+	s.visit(srv.URL + "/#low")
+	if got := s.target(); got != "low" {
+		t.Fatalf("opened at #low the page's target is #%s", got)
+	}
+	s.clickAt(s.inPage("lower"))
+	s.at(srv.URL + "/#named")
+	if got := s.target(); got != "by-name" {
+		t.Fatalf("after a link to #named the target is #%s", got)
+	}
+	s.Open(srv.URL + "/#missing")
+	if got := s.target(); got != "" {
+		t.Fatalf("at a fragment that names nothing the target is #%s", got)
+	}
+	s.click("back")
+	s.at(srv.URL + "/#named")
+	if got := s.target(); got != "by-name" {
+		t.Fatalf("back at #named the target is #%s", got)
+	}
+	s.click("back")
+	s.at(srv.URL + "/#low")
+	if got := s.target(); got != "low" {
+		t.Fatalf("back at #low the target is #%s", got)
+	}
+	s.visit(srv.URL + "/other")
+	if got := s.target(); got != "" {
+		t.Fatalf("another page without a fragment has the target #%s", got)
+	}
+}
+
 func TestAFragmentNamesTheTopAnAnchorOrNothing(t *testing.T) {
 	srv, _ := glossary(t)
 	s := show(t)

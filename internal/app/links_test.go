@@ -297,6 +297,7 @@ func TestACommandClickWhileAFieldHasTheKeyboard(t *testing.T) {
 	if got, want := s.opened(), "["+srv.URL+"/] "+srv.URL+"/vaults"; got != want {
 		t.Fatalf("the tabs are %s, want %s", got, want)
 	}
+	s.until("the page opened behind is in the history", func() bool { return s.Profile.visits.Len() == 2 })
 	s.Open(tabs.Home)
 	s.frame()
 	s.frame()

@@ -27,9 +27,9 @@ var tested = map[string]func(t *testing.T){
 	"overlay scrollbars":  theScrollbarTakesNoWidth,
 	"system fonts":        theMachinesFontsAreNamed,
 	"page fonts":          TestAPagesFontsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem,
+	"imported sheets":     TestAPagesImportedSheetsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem,
 	"svg pictures":        svgPicturesAreDrawn,
 	"svg elements":        anSvgElementIsAPicture,
-	"chosen pictures":     TestAnImgShowsTheCandidateOfItsSrcsetOrOfItsPicturesSource,
 	"linked sheets":       onlyScreenSheetsAreFetched,
 	"elements left out":   scriptsAndTheLikeBuildNothing,
 	"scripts":             scriptsAreKeptOnlyWhenTheyRun,
@@ -377,7 +377,7 @@ func scriptsAndTheLikeBuildNothing(t *testing.T) {
 	markup := map[string]string{
 		"head": `<head id="gone-head"><title>lost</title></head><body><p id="kept">kept</p>`,
 		"meta": `<meta id="gone-meta" name="lost">`, "link": `<link id="gone-link" rel="lost" href="/lost">`,
-		"source": `<source id="gone-source" src="lost.ogg">`, "embed": `<embed id="gone-embed" src="lost.swf">`,
+		"embed": `<embed id="gone-embed" src="lost.swf">`,
 		"style": `<style id="gone-style">p { top: 0 }</style>`, "script": `<script id="gone-script">lost()</script>`,
 	}
 	page := markup["head"]
@@ -390,7 +390,7 @@ func scriptsAndTheLikeBuildNothing(t *testing.T) {
 		}
 	}
 	doc, _ := built(t, page+`<picture><source srcset="a.webp"><img id="shown" alt="shown"></picture>`, nil)
-	if len(droppedNames()) != 13 {
+	if len(droppedNames()) != 12 {
 		t.Errorf("%d elements are left out: %v", len(droppedNames()), droppedNames())
 	}
 	for _, tag := range droppedNames() {
@@ -556,12 +556,13 @@ func aFormIsSentWithAGet(t *testing.T) {
 
 func handlersAndTheLikeAreNotCopied(t *testing.T) {
 	doc, _ := built(t, `<body onload="go()"><div id="d" class="a b" title="kept" data-x="1" onclick="go()" tabindex="3"
-		href="/nowhere" style="top: 1px"></div><input id="i" autofocus name="q"><img id="m" srcset="a.png 2x" alt="map">
+		href="/nowhere" style="top: 1px"></div><input id="i" autofocus name="q">
+		<img id="m" srcset="a.png 2x" sizes="50vw" alt="map">
 		<a id="a" href="/vaults" onmouseover="go()">vaults</a>`, nil)
 	for id, want := range map[string]map[string]bool{
 		"d": {"title": true, "data-x": true, "onclick": false, "tabindex": false, "href": false},
 		"i": {"name": true, "autofocus": false},
-		"m": {"alt": true, "srcset": false},
+		"m": {"alt": true, "srcset": true, "sizes": true},
 		"a": {"href": true, "onmouseover": false},
 	} {
 		for name, kept := range want {

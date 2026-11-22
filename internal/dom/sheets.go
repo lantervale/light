@@ -325,10 +325,10 @@ func (r *Runtime) sheetOps() {
 	}
 }
 
-// shownSrc is the address of the picture an img shows, the one chosen
+// shownSrc is the address of the picture an img shows, the one ui chose
 // among those of its srcset and its picture's sources.
 func shownSrc(n *ui.Node, _ arguments) (any, error) {
-	src, _ := n.Attr("src")
+	src, _ := ui.PictureOf(n)
 	return src, nil
 }
 
