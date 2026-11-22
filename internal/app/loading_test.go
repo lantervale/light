@@ -92,6 +92,23 @@ func (site *heldSite) gaveUp() int {
 	return site.left
 }
 
+// holds reports whether the site holds a request for path.
+func (site *heldSite) holds(path string) bool {
+	site.Lock()
+	defer site.Unlock()
+	return site.asked[path] > 0
+}
+
+// reached runs frames until the shown tab's load of address has reached
+// the step m.
+func (s *shown) reached(address string, m web.Mark) {
+	s.t.Helper()
+	s.until("the load reached "+m.String(), func() bool {
+		l := s.session().loads[address]
+		return l != nil && l.timing.Reached() >= m
+	})
+}
+
 // drawn reports whether the page area shows something: a page of
 // light's with elements, or a page of the web whose Document has some.
 func (s *shown) drawn() bool {
@@ -197,7 +214,7 @@ func TestAClickOnThePageHeldStartsAnotherMoveAndEndsTheFirst(t *testing.T) {
 	s := show(t)
 	old := s.visit(site.URL + "/first")
 	s.Open(site.URL + "/slow")
-	s.frame()
+	s.until("the slow page is asked for", func() bool { return site.holds("/slow") })
 	s.clickAt(s.inPage("quick"))
 	s.committed(site.URL + "/quick")
 	if s.showing() != "quick" || old == s.doc.Frame(s.host) {
@@ -440,7 +457,7 @@ func TestTheLineFillsAsTheLoadGoesAndNeverMovesThePage(t *testing.T) {
 	s.visit(site.URL + "/first")
 	before, _ := s.doc.BoxOf(s.view)
 	s.Open(site.URL + "/slow")
-	s.frame()
+	s.reached(site.URL+"/slow", web.Connected)
 	first := s.lineAt
 	for range 30 {
 		s.frame()
