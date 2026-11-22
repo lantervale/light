@@ -104,14 +104,6 @@ var adaptations = []adaptation{
 			"inside it, and what ember's svg reader doesn't draw is a warning.",
 	},
 
-	{
-		name: "chosen pictures",
-		what: "An img shows one picture, chosen when it is built and when a script changes it, for the view's " +
-			"width at one pixel a point: the candidate of its srcset that fills the slot its sizes gives, or of " +
-			"the first source of its picture whose type light draws and whose media holds (min-width and " +
-			"max-width; any other condition does not). It is not chosen again when the window is resized.",
-	},
-
 	// The page's elements: linked, dropped, build, link and skipped below.
 	{
 		name: "linked sheets",
@@ -140,7 +132,7 @@ var adaptations = []adaptation{
 	},
 	{
 		name: "unknown elements",
-		what: "An element ui has none for (a custom element, picture, nobr…) is a div with its attributes " +
+		what: "An element ui has none for (a custom element, nobr…) is a div with its attributes " +
 			"and children.",
 	},
 	{
@@ -162,7 +154,7 @@ var adaptations = []adaptation{
 	},
 	{
 		name: "attributes left out",
-		what: "on… handlers, autofocus, tabindex, srcset and sizes aren't copied, nor an href on anything but an a.",
+		what: "on… handlers, autofocus and tabindex aren't copied, nor an href on anything but an a.",
 	},
 	{
 		name: "refresh",
@@ -200,7 +192,6 @@ var dropped = map[atom.Atom]bool{
 	atom.Head: true, atom.Script: true, atom.Style: true, atom.Link: true, atom.Meta: true,
 	atom.Template: true, atom.Object: true,
 	atom.Embed: true, atom.Video: true, atom.Audio: true, atom.Canvas: true, atom.Dialog: true,
-	atom.Source: true, atom.Picture: false,
 }
 
 func droppedNames() []string {
@@ -268,11 +259,10 @@ func (b *builder) link(a *ui.Node, n *html.Node) {
 }
 
 // skipped reports whether an attribute stays off the element built: a
-// script's handler, what would move light's focus, the pictures an img
-// chooses among (chosen), and href, which link sets on an a alone.
+// script's handler, what would move light's focus, and href, which link
+// sets on an a alone.
 func skipped(key string) bool {
-	return strings.HasPrefix(key, "on") || key == "autofocus" || key == attrSrcset || key == attrSizes ||
-		key == "tabindex" || key == "href"
+	return strings.HasPrefix(key, "on") || key == "autofocus" || key == "tabindex" || key == "href"
 }
 
 // cut is text up to what is read of a page or a sheet.

@@ -829,10 +829,10 @@ not given one keeps them in memory.
   streamed to its file instead.
 - It decodes PNG, JPEG, GIF, WebP (lossy and lossless, with alpha; an animated one is not drawn) and SVG. AVIF and
   BMP are downloaded.
-- An `img` shows one picture of its `srcset`, or of its `<picture>`'s first `<source>` light draws: the smallest
-  that fills the slot `sizes` gives in the view, at one pixel a point (`img.currentSrc` reads it). It is chosen as
-  the page is built and when a script changes the `img`, not again on a resize; a `media` other than `min-width`
-  and `max-width` does not hold, and a `<source>` a script changes is not looked at again.
+- An `img` shows the picture ember's ui chooses as Chrome does, of its `srcset` or of its `<picture>`'s first
+  `<source>` whose `media` holds and whose `type` light draws, for the slot `sizes` gives and the screen's pixels
+  a point (`img.currentSrc` reads it); it is chosen again when the view, the attributes or the sources change.
+  Lazy loading is not done.
 - **Local network**: a page asks only addresses as public as the one it came from. One that came from the
   Internet reaches neither the network around this machine (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
   `169.254.0.0/16`, `100.64.0.0/10`, `fc00::/7`, `fe80::/10` and the other addresses the Internet does not route)

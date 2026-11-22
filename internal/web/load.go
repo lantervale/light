@@ -41,9 +41,6 @@ const (
 	schemeHTTPS = "https"
 )
 
-// drawn are the types of the pictures light draws.
-const drawn = "image/png, image/jpeg, image/gif, image/webp, image/svg+xml"
-
 // asking is ctx for one request of the page ctx is for, by what it is
 // for.
 func asking(ctx context.Context, dest identity.Destination) context.Context {
@@ -61,9 +58,6 @@ type Loader struct {
 	// Scripts keeps a page's scripts, fetched with it, and builds it as
 	// they need it (tree.go).
 	Scripts bool
-	// Viewport is the size of the view pages show in, which an img's
-	// srcset is chosen for; a common one without it.
-	Viewport func() (width, height float32)
 	// Frame is the frame the pages are loaded for, nil for a tab's own.
 	Frame *Frame
 	// Exact draws the pages' text at its exact coverage, without stem

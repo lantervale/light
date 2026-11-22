@@ -111,6 +111,7 @@ var elements = map[string]func(...ui.Arg) *ui.Node{
 	"s": ui.S, "small": ui.Small, "big": ui.Big, "sub": ui.Sub, "sup": ui.Sup, "abbr": ui.Abbr,
 	"cite": ui.Cite, "q": ui.Q, "mark": ui.Mark, "time": ui.Time, "var": ui.Var, "font": ui.Font,
 	"del": ui.Del, "ins": ui.Ins, "dfn": ui.Dfn, "bdi": ui.Bdi, "bdo": ui.Bdo, "data": ui.Data,
+	"picture": ui.Picture, "source": ui.Source,
 }
 
 // stylesheet is a sheet's text and the address it came from.
@@ -438,14 +439,6 @@ func (b *builder) attributes(n *html.Node, e *ui.Node) {
 // attribute sets on e, the element built for n, an attribute of n's,
 // unless it is one that stays off it.
 func (b *builder) attribute(n *html.Node, e *ui.Node, key, value string) {
-	if n.DataAtom == atom.Img && (key == "src" || key == attrSrcset || key == attrSizes) {
-		if address, ok := b.chosen(n); ok {
-			e.SetAttr("src", address)
-		} else {
-			e.RemoveAttr("src")
-		}
-		return
-	}
 	if key == "id" || key == "class" || key == "style" || !b.skips(n, key) {
 		e.SetAttr(key, value)
 	}

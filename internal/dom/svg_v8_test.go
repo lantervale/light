@@ -68,13 +68,14 @@ func TestAScriptReadsAndChangesThePictureAnImgChose(t *testing.T) {
 		t.Errorf("the script reads %s", got)
 	}
 	s.eval(`pic.sizes = "100vw"; plain.srcset = "b.png 1x"`)
-	if got := s.eval(`[pic.currentSrc, plain.currentSrc, pic.getAttribute("src")].join()`); got !=
-		"https://site.test/dir/big.png,https://site.test/dir/b.png,small.png" {
-		t.Errorf("after the change the script reads %s", got)
-	}
+	s.frames("the imgs choosing again", func() bool {
+		return s.eval(`[pic.currentSrc, plain.currentSrc, pic.getAttribute("src")].join()`) ==
+			"https://site.test/dir/big.png,https://site.test/dir/b.png,small.png"
+	})
 	s.eval(`pic.removeAttribute("srcset")`)
-	if got, _ := s.byID("pic").Attr("src"); got != "small.png" {
-		t.Errorf("without its srcset the img shows %q", got)
-	}
+	s.frames("the img showing its src without its srcset", func() bool {
+		got, _ := ui.PictureOf(s.byID("pic"))
+		return got == "small.png"
+	})
 	s.quiet()
 }

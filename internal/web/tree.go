@@ -574,8 +574,6 @@ func (t *Tree) unset(n *html.Node, name string) {
 	u := t.shown[n]
 	switch {
 	case u == nil:
-	case n.DataAtom == atom.Img && (name == "src" || name == attrSrcset || name == attrSizes):
-		t.b.attribute(n, u, name, "")
 	case name == "id" || name == "class" || name == "style":
 		u.SetAttr(name, "")
 	default:
