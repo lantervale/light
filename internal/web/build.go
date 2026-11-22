@@ -310,7 +310,8 @@ func (b *builder) document(ctx context.Context, root *html.Node) *ui.Document {
 	if b.loader.Zoom > 0 {
 		opts = append(opts, ui.Zoom(b.loader.Zoom))
 	}
-	doc := ui.NewDocument(append(opts, ui.FetchImages(b.pictures(ctx)), ui.FetchFonts(b.fonts(ctx)))...)
+	doc := ui.NewDocument(append(opts, ui.FetchImages(b.pictures(ctx)), ui.FetchFonts(b.fonts(ctx)),
+		ui.FetchSheets(b.imports(ctx)))...)
 	b.doc = doc
 	if b.tree != nil {
 		b.style(doc)

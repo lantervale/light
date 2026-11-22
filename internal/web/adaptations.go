@@ -88,6 +88,12 @@ var adaptations = []adaptation{
 			"needs them (ui.FetchFonts), each asked by its sheet, " + megabytes(maxFont) + " at most; the text " +
 			"shows in the next family until they land.",
 	},
+	{
+		name: "imported sheets",
+		what: "The sheets of the page's @import rules are fetched through light's loader (ui.FetchSheets), each " +
+			"asked by the sheet importing it, those served as text/css or as no type taken; the page shows " +
+			"without one until it lands.",
+	},
 
 	{
 		name: "svg pictures",

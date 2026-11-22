@@ -27,6 +27,7 @@ var tested = map[string]func(t *testing.T){
 	"overlay scrollbars":  theScrollbarTakesNoWidth,
 	"system fonts":        theMachinesFontsAreNamed,
 	"page fonts":          TestAPagesFontsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem,
+	"imported sheets":     TestAPagesImportedSheetsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem,
 	"svg pictures":        svgPicturesAreDrawn,
 	"svg elements":        anSvgElementIsAPicture,
 	"linked sheets":       onlyScreenSheetsAreFetched,

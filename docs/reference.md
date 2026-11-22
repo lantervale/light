@@ -94,8 +94,7 @@ What does not, in short:
 - **No PDF viewer, no AVIF**: they are downloaded. An animated WebP is not drawn.
 - **No extensions, no sync, no private window, no password manager, no autofill, no printing.**
 - **CSS is a subset.** ember's guide lists what is missing:
-  [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md). `@import` in a
-  page's sheet is not followed.
+  [What is missing](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
 - **One process.** Every tab and frame runs in one process, and V8 isolates are the only wall between origins.
   Downloads are not scanned. Do not keep in light what a hostile page must never reach
   ([the boundary and its limits](#scripts-in-frames)).
@@ -799,7 +798,8 @@ not given one keeps them in memory.
   shows its default weight, no bold or italic is made up from a regular face, colour fonts and collections are
   not read, and an icon font that writes its icons as words (ligatures, as Material Icons) shows the words. A font
   of another site is used whatever its `Access-Control-Allow-Origin`, where a browser refuses it without one.
-  The fonts of a sheet reached by `@import` are not fetched, as the sheet is not. light keeps its own
+  A sheet an `@import` names is fetched as the page shows, asked by the sheet that imports it, and taken when it
+  is served as `text/css` or as no type; the page shows without it until it lands. light keeps its own
   `User-Agent`, which names no other browser: Google Fonts answers it with TrueType files of whole families, where it gives browsers WOFF2 cut
   by `unicode-range`.
 - It sends a form with a GET or a POST, as `application/x-www-form-urlencoded` or `text/plain`, in the page's
@@ -956,8 +956,7 @@ What does not:
 - **Cookies**: `document.cookie` reads and sets the browser's cookies for the page, those marked `HttpOnly` kept
   from it, and `navigator.cookieEnabled` says whether the setting is on. A script reads no `Set-Cookie` header of
   what it fetched.
-- **Styles**: the page's `@import` rules are not followed, and a rule ember's ui does not read applies nothing,
-  whoever inserted it. A stylesheet moved among the others is read again, and what scripts inserted in it kept.
+- **Styles**: a rule ember's ui does not read applies nothing, whoever inserted it. A stylesheet moved among the others is read again, and what scripts inserted in it kept.
   `getComputedStyle` answers what ui computed: lengths in px, colours as `rgb()` when they were written in
   hexadecimal and as written otherwise, a width and a height as laid out at the last frame; an element a script
   put in the page since then is styled and laid out at once when its style is read. A rule's `style` is its text read again: no `CSSKeyframeRule`,
