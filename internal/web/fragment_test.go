@@ -51,3 +51,24 @@ func TestAPlaceOfAPageIsItsAddressWithAFragment(t *testing.T) {
 		}
 	}
 }
+
+func TestTheElementAFragmentNamesIsTheTargetOfItsPage(t *testing.T) {
+	doc := (&Loader{Frame: &Frame{}}).Local("https://site.test/", `<p id="first">one</p>
+		<a id="named" name="notes">notes</a><p id="two words">two</p>`, Links{}).Doc
+	for _, c := range []struct{ address, want string }{
+		{"https://site.test/#first", "first"}, {"https://site.test/#notes", "named"},
+		{"https://site.test/#two%20words", "two words"}, {"https://site.test/#missing", ""},
+		{"https://site.test/#first", "first"}, {"https://site.test/#top", ""},
+		{"https://site.test/#first", "first"}, {"https://site.test/#", ""},
+		{"https://site.test/#first", "first"}, {"https://site.test/", ""},
+	} {
+		Reveal(doc, c.address)
+		got := ""
+		if n := doc.Target(); n != nil {
+			got = n.ID()
+		}
+		if got != c.want {
+			t.Errorf("at %s the target is #%s, want #%s", c.address, got, c.want)
+		}
+	}
+}

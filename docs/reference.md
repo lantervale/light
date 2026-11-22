@@ -185,11 +185,11 @@ A tab that shows a page keeps showing it while the next one loads: no empty page
   the place its address names, else the top. What is kept is the page's own scroll: not that of a box that
   scrolls inside it, nor of a frame's document, which Back takes to the place its address names; and it is kept
   for the run, not across a restart.
-- **What a browser does with places that light does not.** `:target` styles nothing (ember's ui does not read
-  it), and for scripts (`querySelector`) matches an element by its `id` only; `location.hash` set by a script
-  tells `hashchange` without `popstate`; a script's `scrollIntoView()` scrolls by the least that shows the
-  element whatever its arguments, where a browser brings it to the top; and a place of the shown page is no
-  visit of `light://history`.
+- **What a browser does with places that light does not.** `:target` styles the element the address names, by
+  its `id` or an `a`'s `name`, but for scripts (`querySelector`) matches an element by its `id` only;
+  `location.hash` set by a script tells `hashchange` without `popstate`; a script's `scrollIntoView()` scrolls by
+  the least that shows the element whatever its arguments, where a browser brings it to the top; and a place of
+  the shown page is no visit of `light://history`.
 - **Where there is no page to hold** (a new tab opened on an address, a tab's first load): the page area is
   light's own surface, light or dark as the settings say, with the same line and spinner; Stop then leaves the
   page that says the load was stopped.

@@ -62,6 +62,7 @@ func (s *Screen) restore(tab *tabs.Tab, from string) {
 		return
 	}
 	if was, kept := session.left[tab.At()]; kept && was.address == at {
+		web.Target(page.Doc, at)
 		page.Doc.SetScroll(page.Doc.HTML(), was.scroll)
 		session.put = page
 		return
