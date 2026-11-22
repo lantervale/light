@@ -556,7 +556,8 @@ func aFormIsSentWithAGet(t *testing.T) {
 
 func handlersAndTheLikeAreNotCopied(t *testing.T) {
 	doc, _ := built(t, `<body onload="go()"><div id="d" class="a b" title="kept" data-x="1" onclick="go()" tabindex="3"
-		href="/nowhere" style="top: 1px"></div><input id="i" autofocus name="q"><img id="m" srcset="a.png 2x" sizes="50vw" alt="map">
+		href="/nowhere" style="top: 1px"></div><input id="i" autofocus name="q">
+		<img id="m" srcset="a.png 2x" sizes="50vw" alt="map">
 		<a id="a" href="/vaults" onmouseover="go()">vaults</a>`, nil)
 	for id, want := range map[string]map[string]bool{
 		"d": {"title": true, "data-x": true, "onclick": false, "tabindex": false, "href": false},

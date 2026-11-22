@@ -12,7 +12,7 @@ import (
 func TestAPagesImportedSheetsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem(t *testing.T) {
 	for _, scripts := range []bool{false, true} {
 		t.Run(map[bool]string{false: "without scripts", true: "with scripts"}[scripts], func(t *testing.T) {
-			srv, seen := answers(t, map[string]answer{
+			srv, _ := answers(t, map[string]answer{
 				"/": typed("text/html", `<link rel="stylesheet" href="css/site.css">
 					<style>@import "css/inline.css"; #plain { width: 10px }</style>
 					<div id="wide"></div><div id="tall"></div><div id="plain"></div>`),
@@ -43,26 +43,7 @@ func TestAPagesImportedSheetsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem(t
 				"/css/inline.css": srv.URL + "/",
 			}
 			for path, referrer := range referrers {
-				var row *netlog.Row
-				for _, r := range log.Rows() {
-					if strings.HasSuffix(r.Address, path) {
-						row = &r
-					}
-				}
-				if row == nil {
-					t.Errorf("%s is not in the network log; the server saw %v", path, seen.paths)
-					continue
-				}
-				if row.Initiator != "stylesheet" || row.Type != netlog.Stylesheet || row.Status != http.StatusOK {
-					t.Errorf("%s is recorded as %q %q %d, want stylesheet stylesheet 200", path, row.Initiator, row.Type,
-						row.Status)
-				}
-				if accept := row.Request.Get("Accept"); accept != "text/css,*/*;q=0.1" {
-					t.Errorf("%s was asked for with Accept: %s", path, accept)
-				}
-				if got := row.Request.Get("Referer"); got != referrer {
-					t.Errorf("%s was asked for with Referer: %q, want %q", path, got, referrer)
-				}
+				askedBySheet(t, log, path, referrer)
 			}
 			var warned bool
 			for _, w := range doc.Warnings() {
@@ -72,5 +53,28 @@ func TestAPagesImportedSheetsAreFetchedThroughTheLoaderAsTheirSheetAsksForThem(t
 				t.Errorf("a sheet served as HTML is no warning: %v", doc.Warnings())
 			}
 		})
+	}
+}
+
+// askedBySheet fails t unless the sheet at path is in log, asked for as
+// a sheet by the one at referrer.
+func askedBySheet(t *testing.T, log *netlog.Log, path, referrer string) {
+	t.Helper()
+	var row *netlog.Row
+	for _, r := range log.Rows() {
+		if strings.HasSuffix(r.Address, path) {
+			row = &r
+		}
+	}
+	switch {
+	case row == nil:
+		t.Errorf("%s is not in the network log", path)
+	case row.Initiator != "stylesheet" || row.Type != netlog.Stylesheet || row.Status != http.StatusOK:
+		t.Errorf("%s is recorded as %q %q %d, want stylesheet stylesheet 200", path, row.Initiator, row.Type,
+			row.Status)
+	case row.Request.Get("Accept") != "text/css,*/*;q=0.1":
+		t.Errorf("%s was asked for with Accept: %s", path, row.Request.Get("Accept"))
+	case row.Request.Get("Referer") != referrer:
+		t.Errorf("%s was asked for with Referer: %q, want %q", path, row.Request.Get("Referer"), referrer)
 	}
 }
