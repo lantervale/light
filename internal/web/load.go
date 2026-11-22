@@ -316,12 +316,25 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	b.load(ctx, root)
 	timing.Mark(Gathered)
 	page.Title, page.Doc = titleOf(root), b.document(ctx, root)
+	if lang := language(answer.Header.Get("Content-Language")); lang != "" {
+		page.Doc.SetLanguage(lang)
+	}
 	timing.Mark(Built)
 	page.Icon = <-icon
 	page.Scripts, page.Tree, page.Frames, page.Base = b.ordered(), b.tree, b.frames, b.base
 	if err = ctx.Err(); err != nil {
 		page.Err = err
 	}
+}
+
+// language is the language a Content-Language header gives a page,
+// what :lang() reads where no lang attribute says one: its tag when it
+// names one alone, "" otherwise.
+func language(header string) string {
+	if strings.Contains(header, ",") {
+		return ""
+	}
+	return strings.TrimSpace(header)
 }
 
 // parse reads an answer into its tree: by XML's rules for a document

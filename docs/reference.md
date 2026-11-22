@@ -825,6 +825,8 @@ not given one keeps them in memory.
 - It follows redirects (301, 302, 303, 307, 308) and a refresh of 0 seconds, as many in a row as the settings say,
   to `http` and `https` only. A refresh that waits is left alone.
 - It reads gzip, deflate and, over https, Brotli. No zstd, and it does not ask for it.
+- A page's `Content-Language` header, when it names one language, is the page's language: what `:lang()` reads
+  where no `lang` attribute says one. A `<meta http-equiv="content-language">` is not read.
 - It holds a page's answer in memory, 64 MB at most, and lays out the first 512 kB of a text. A download is
   streamed to its file instead.
 - It decodes PNG, JPEG, GIF, WebP (lossy and lossless, with alpha; an animated one is not drawn) and SVG. AVIF and
