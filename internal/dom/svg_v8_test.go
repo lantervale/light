@@ -3,6 +3,11 @@
 package dom_test
 
 import (
+	"bytes"
+	"image"
+	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -60,17 +65,27 @@ func TestAnSvgAScriptChangesIsDrawnAgain(t *testing.T) {
 }
 
 func TestAScriptReadsAndChangesThePictureAnImgChose(t *testing.T) {
-	s := &scripted{t: t}
+	var pixel bytes.Buffer
+	if err := png.Encode(&pixel, image.NewNRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pixel.Bytes())
+	}))
+	t.Cleanup(site.Close)
+	dir := site.URL + "/dir/"
+	s := &scripted{t: t, at: dir + "page.html"}
 	s.start(`<img id="pic" src="small.png" srcset="mid.png 600w, big.png 1200w" sizes="40vw"><img id="plain" src="a.png">`,
 		dom.Host{})
-	if got := s.eval(`[pic.currentSrc, pic.src, plain.currentSrc].join()`); got != "https://site.test/dir/mid.png,"+
-		"https://site.test/dir/small.png,https://site.test/dir/a.png" {
+	if got := s.eval(`[pic.currentSrc, pic.src, plain.currentSrc].join()`); got != dir+"mid.png,"+
+		dir+"small.png,"+dir+"a.png" {
 		t.Errorf("the script reads %s", got)
 	}
 	s.eval(`pic.sizes = "100vw"; plain.srcset = "b.png 1x"`)
 	s.frames("the imgs choosing again", func() bool {
 		return s.eval(`[pic.currentSrc, plain.currentSrc, pic.getAttribute("src")].join()`) ==
-			"https://site.test/dir/big.png,https://site.test/dir/b.png,small.png"
+			dir+"big.png,"+dir+"b.png,small.png"
 	})
 	s.eval(`pic.removeAttribute("srcset")`)
 	s.frames("the img showing its src without its srcset", func() bool {
