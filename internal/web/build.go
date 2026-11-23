@@ -144,6 +144,8 @@ type builder struct {
 	encode func(text string) string
 	// frames are the iframe elements built.
 	frames *Frames
+	// pressed is the submitter last clicked, until ui submits its form.
+	pressed *ui.Node
 }
 
 func newBuilder(l *Loader, base *url.URL, links Links) *builder {

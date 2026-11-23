@@ -154,9 +154,11 @@ var adaptations = []adaptation{
 	},
 	{
 		name: "forms",
-		what: "A form is sent by a click on its submit button or by Enter in one of its fields, when its method " +
-			"is GET: the tab opens its action, from the page's address, with the names and values of its controls " +
-			"as the query, in the page's encoding. A form with another method is not sent.",
+		what: "A form is sent by a click on its submit button or by Enter in one of its fields, which clicks its " +
+			"first submit button or, without one, sends a form of that field alone, once ui finds its fields " +
+			"valid (unless novalidate): a GET opens its action, from the page's address, with the names and " +
+			"values of its controls as the query, in the page's encoding, a POST carries them. A form of " +
+			"multipart/form-data is not sent.",
 	},
 	{
 		name: "attributes left out",

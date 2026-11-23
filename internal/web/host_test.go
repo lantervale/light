@@ -55,6 +55,8 @@ type shown struct {
 	// address is the page shown, or the one a click on a link asked for,
 	// saved what a click on a download link asked to save.
 	address, saved string
+	// posted is each address a form was posted to.
+	posted []string
 	// scripts loads the pages visited with their scripts.
 	scripts bool
 }
@@ -107,6 +109,7 @@ func (s *shown) visit(address string) *ui.Document {
 		Open: func(to string) { s.address = to },
 		Over: func(over string) { s.status.address = over },
 		Save: func(from, name string) { s.saved = from + " as " + name },
+		Post: func(sent Submission) { s.posted = append(s.posted, sent.Address) },
 	})
 	if s.page.Err != nil {
 		s.t.Fatalf("%s: %v", address, s.page.Err)

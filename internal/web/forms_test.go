@@ -2,9 +2,15 @@ package web //nolint:testpackage // asks the builder what a form sends, which on
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/ui"
 )
 
 // consent is a page that asks for a choice as such pages are written:
@@ -128,5 +134,38 @@ func TestEachButtonOfAConsentPageSendsItsOwnForm(t *testing.T) {
 	got, err := b.submission(b.doc.ByID("language"), b.doc.ByID("change"))
 	if err != nil || got.Form != nil || got.Address != "https://www.site.test/ml?hl=fr&oldhl=fr" {
 		t.Errorf("the language is sent as %v, %v", got, err)
+	}
+}
+
+func TestEachWayOfSendingAFormSendsItOnce(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<form method="post" action="/save"><input name="q" id="q"><input name="r">
+			<button id="go">Go</button></form>`))
+	}))
+	t.Cleanup(srv.Close)
+	for _, c := range []struct {
+		name string
+		send func(s *shown, doc *ui.Document)
+	}{
+		{"its button", func(s *shown, doc *ui.Document) { s.click(doc.ByID("go")) }},
+		{"Enter in a field", func(s *shown, _ *ui.Document) {
+			s.in.SetKey(input.KeyEnter, true)
+			s.frame()
+			s.in.SetKey(input.KeyEnter, false)
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := show(t)
+			doc := s.visit(srv.URL + "/")
+			s.click(doc.ByID("q"))
+			c.send(s, doc)
+			for range 5 {
+				s.frame()
+			}
+			if want := []string{srv.URL + "/save"}; !slices.Equal(s.posted, want) {
+				t.Fatalf("the form was posted to %q", s.posted)
+			}
+		})
 	}
 }

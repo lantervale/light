@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/identity"
@@ -585,8 +586,11 @@ func (t *Tree) unset(n *html.Node, name string) {
 // and an a that follows its href as it is when clicked.
 func (b *builder) make(tag string) *ui.Node {
 	e := build(tag)
-	if tag == tagInput || tag == tagButton {
-		b.submits(e, tag)
+	switch tag {
+	case tagInput, tagButton:
+		b.submits(e)
+	case tagForm:
+		b.sent(e)
 	}
 	if b.tree == nil {
 		return e
@@ -601,7 +605,15 @@ func (b *builder) make(tag string) *ui.Node {
 }
 
 // heard has what ui tells field's handlers told to the page's scripts.
+// Enter in a one-line field is theirs before ui submits its form, so a
+// keydown they prevent keeps it unsent.
 func (b *builder) heard(field *ui.Node) {
+	ui.OnKey(func(e ui.Event) {
+		if (e.Key == input.KeyEnter || e.Key == input.KeyPadEnter) && b.tree.Heard != nil && submitsImplicitly(field) {
+			e.PreventDefault()
+			b.tree.Heard(field, typeSubmit)
+		}
+	}).Apply(field)
 	for _, told := range []struct {
 		event ui.EventType
 		name  string
