@@ -8,7 +8,8 @@ import (
 
 // fontWatch is what scripts were last told of the fonts the page's
 // text waits for: how many were on their way, and whether a script
-// still waits for one.
+// still waits for one, or saw one on its way, which the next frame
+// tells it the end of though no frame saw it.
 type fontWatch struct {
 	loading int
 	waited  bool
@@ -16,7 +17,11 @@ type fontWatch struct {
 
 // fontOps are the operations document.fonts is made of.
 func (r *Runtime) fontOps() {
-	r.ops["fontsLoading"] = func(arguments) (any, error) { return r.doc.FontsLoading(), nil }
+	r.ops["fontsLoading"] = func(arguments) (any, error) {
+		loading := r.doc.FontsLoading()
+		r.fonts.waited = r.fonts.waited || loading > 0
+		return loading, nil
+	}
 	r.ops["fontsCheck"] = func(a arguments) (any, error) {
 		f, err := fontOf(a.text(0))
 		if err != nil {
