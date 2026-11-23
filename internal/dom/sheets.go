@@ -479,9 +479,13 @@ func (r *Runtime) computed(n *ui.Node, a arguments) (any, error) {
 // since the last layout, and lays out what a script made, moved or
 // restyled since.
 func (r *Runtime) reflow(n *ui.Node) {
-	if !r.connected(n) {
-		return
+	if r.connected(n) {
+		r.layout()
 	}
+}
+
+// layout has ui style and lay the page out in its viewport.
+func (r *Runtime) layout() {
 	var size geom.Vec2
 	if r.host.Viewport != nil {
 		size.X, size.Y = r.host.Viewport()

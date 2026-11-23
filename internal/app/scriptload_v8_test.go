@@ -2,7 +2,11 @@
 
 package app //nolint:testpackage // the screen is driven by what it holds: its elements, its tabs, its sessions
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+	"time"
+)
 
 func TestAScriptThePageNamesTellsItsElementItRanOrCouldNot(t *testing.T) {
 	_, transport := framingOf(t, map[string]answer{
@@ -24,4 +28,22 @@ func TestAScriptThePageNamesTellsItsElementItRanOrCouldNot(t *testing.T) {
 	s.running("")
 	s.gives("", map[string]string{`log.join(", ")`: "now ran, now load number, missing error, inline, " +
 		"late ran, late load number, last ran, last load truefalse"})
+}
+
+func TestTheWindowLoadsOnceThePicturesOfItsPageLanded(t *testing.T) {
+	_, transport := framingOf(t, map[string]answer{
+		"site.test/": html(`<body style="margin: 0"><img id="pic" src="/pic.png"><img id="gone" src="/gone.png">
+			<script>addEventListener("load", () => { window.seen = pic.offsetWidth + "x" + pic.offsetHeight; });</script>`),
+		"site.test/pic.png": typed("image/png", string(picture(t, 30, 20))),
+	})
+	late := roundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/pic.png" {
+			time.Sleep(300 * time.Millisecond)
+		}
+		return transport.RoundTrip(r)
+	})
+	s := showWith(t, Options{Transport: late, Downloads: t.TempDir()})
+	s.visit("https://site.test/")
+	s.running("")
+	s.becomes("", `document.readyState + " " + window.seen`, "complete 30x20")
 }

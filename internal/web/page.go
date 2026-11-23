@@ -64,6 +64,15 @@ type Page struct {
 	// Err is why there is no page; the other fields but Address are then
 	// unset.
 	Err error
+	// pictures is what became of those ui asked for.
+	pictures *pictureWatch
+}
+
+// PicturesLoading reports whether a picture the page's Document asked
+// for is on its way, or came and has yet to show, as a browser holds
+// the window's load for its images. It is asked on the frame.
+func (p *Page) PicturesLoading() bool {
+	return p.pictures != nil && p.Doc != nil && p.pictures.loading(p.Doc)
 }
 
 // Links is what a page's links and forms do: open an address, name it

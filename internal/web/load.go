@@ -322,6 +322,7 @@ func (l *Loader) build(ctx context.Context, page *Page, answer *fetch.Answer, li
 	timing.Mark(Built)
 	page.Icon = <-icon
 	page.Scripts, page.Tree, page.Frames, page.Base = b.ordered(), b.tree, b.frames, b.base
+	page.pictures = b.watch
 	if err = ctx.Err(); err != nil {
 		page.Err = err
 	}

@@ -146,10 +146,12 @@ type builder struct {
 	frames *Frames
 	// pressed is the submitter last clicked, until ui submits its form.
 	pressed *ui.Node
+	// watch is what became of the pictures ui asked the page for.
+	watch *pictureWatch
 }
 
 func newBuilder(l *Loader, base *url.URL, links Links) *builder {
-	b := &builder{loader: l, base: base, links: links, frames: &Frames{}}
+	b := &builder{loader: l, base: base, links: links, frames: &Frames{}, watch: &pictureWatch{}}
 	if l.Scripts {
 		b.tree = &Tree{b: b, shown: map[*html.Node]*ui.Node{}, of: map[*ui.Node]*html.Node{},
 			contents: map[*html.Node]*html.Node{}, head: ui.Div()}
@@ -312,7 +314,7 @@ func (b *builder) document(ctx context.Context, root *html.Node) *ui.Document {
 	if b.loader.Zoom > 0 {
 		opts = append(opts, ui.Zoom(b.loader.Zoom))
 	}
-	doc := ui.NewDocument(append(opts, ui.FetchImages(b.pictures(ctx)), ui.FetchFonts(b.fonts(ctx)),
+	doc := ui.NewDocument(append(opts, ui.FetchImages(b.watch.watched(b.picture(ctx))), ui.FetchFonts(b.fonts(ctx)),
 		ui.FetchSheets(b.imports(ctx)))...)
 	b.doc = doc
 	if b.tree != nil {
@@ -346,7 +348,7 @@ var errNoPictures = errors.New("light is set not to load pictures")
 // its load: an http or https address as it is, anything else as a
 // reference from the page's address. They are recorded where ctx says,
 // and outlive it.
-func (b *builder) pictures(ctx context.Context) ui.ImageFetcher {
+func (b *builder) picture(ctx context.Context) ui.ImageFetcher {
 	detached := context.WithoutCancel(ctx)
 	return func(ref string) ([]byte, error) {
 		if b.loader.NoPictures {

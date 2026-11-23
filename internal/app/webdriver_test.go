@@ -306,6 +306,28 @@ func TestANavigationIsTheUsersOwn(t *testing.T) {
 	}
 }
 
+func TestANavigationEndsOnceThePicturesOfThePageShow(t *testing.T) {
+	pic := picture(t, 30, 20)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pic.png" {
+			time.Sleep(300 * time.Millisecond)
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(pic)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<body style="margin: 0"><img id="pic" src="/pic.png">`))
+	}))
+	t.Cleanup(srv.Close)
+	d := drive(t)
+	d.begin("{}")
+	d.open(srv.URL + "/")
+	doc := d.session().pages[srv.URL+"/"].Doc
+	if got, _ := doc.BoxOf(doc.ByID("pic")); got.W != 30 || got.H != 20 {
+		t.Fatalf("Navigate To answered with the picture laid out %v by %v, want 30 by 20", got.W, got.H)
+	}
+}
+
 func TestAPageThatFailsOrNeverEndsIsAnErrorAndLightGoesOn(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
