@@ -77,9 +77,10 @@ func TestEnterSendsAFormAsHTMLsImplicitSubmissionAndItsFieldsAllow(t *testing.T)
 		sent       bool
 	}{
 		{"one field and no button", `<form action="/found" method="post"><input name="q" id="q"></form>`, true},
-		{"two fields and no button", `<form action="/found" method="post"><input name="q" id="q"><input name="r"></form>`, false},
-		{"a required field left empty", `<form action="/found" method="post"><input name="q" id="q"><input name="r" id="r" required>
-			<button>Go</button></form>`, false},
+		{"two fields and no button", `<form action="/found" method="post"><input name="q" id="q">
+			<input name="r"></form>`, false},
+		{"a required field left empty", `<form action="/found" method="post"><input name="q" id="q">
+			<input name="r" id="r" required><button>Go</button></form>`, false},
 		{"a required field left empty in a form of novalidate", `<form action="/found" method="post" novalidate>
 			<input name="q" id="q"><input name="r" required><button>Go</button></form>`, true},
 	} {

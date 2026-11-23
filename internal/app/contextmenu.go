@@ -19,11 +19,11 @@ import (
 // a request of the developer tools and a text field, else a link, a
 // picture and selected text in any combination, else the page.
 type target struct {
-	tab       int
-	request   *netlog.Row
-	field     *ui.Node
-	link      string
-	picture   string
+	tab     int
+	request *netlog.Row
+	field   *ui.Node
+	link    string
+	picture string
 	// selection is the text selected, markup the same as HTML.
 	selection, markup string
 	// archive is whether the click is on what saves the requests of the
