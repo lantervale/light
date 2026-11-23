@@ -941,8 +941,8 @@ What does not:
   shadow trees, custom elements, canvas contexts, WebGL, media: absent, or answering with
   nothing. An `svg` is in the tree and scripts change it:
   it is drawn as one picture, again the frame after a change, with `currentColor` the colour of its text, but the
-  page's rules do not reach the shapes inside it (`svg path { fill: … }`), and filters, `foreignObject` and
-  `textPath` are not drawn; scripts run once the whole page is read, so `document.write` writes nothing.
+  page's rules do not reach the shapes inside it (`svg path { fill: … }`), and `foreignObject` and animations
+  are not drawn; scripts run once the whole page is read, so `document.write` writes nothing.
 - **Requests**: an answer's bytes reach a script as they came (`arrayBuffer()`, `bytes()`, `blob()`, an
   `XMLHttpRequest` of type `arraybuffer` or `blob`), and are decoded where it asks for text: as UTF-8 by `text()`
   and `json()` whatever the answer says of its encoding, by the answer's charset (or `overrideMimeType`'s) for

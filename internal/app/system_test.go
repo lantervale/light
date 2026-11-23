@@ -61,17 +61,21 @@ func TestTheLanguagesAreThoseTheSystemSaysAndFollowThem(t *testing.T) {
 	}
 }
 
+// glide is how many frames a scroll by the wheel or the keys takes to
+// land, as Chrome glides them: 12 at most, and one to start.
+const glide = 14
+
 // wheeled turns the wheel by lines at a point of the window, and is how
-// far up what y measures went.
+// far up what y measures went once the page glided there.
 func (s *shown) wheeled(at geom.Vec2, lines float32, y func() float32) float32 {
 	s.t.Helper()
 	s.in.SetMouse(at)
 	s.frame()
 	before := y()
 	s.in.AddWheel(geom.V2(0, lines))
-	s.frame()
-	s.frame()
-	s.frame()
+	for range glide {
+		s.frame()
+	}
 	return before - y()
 }
 

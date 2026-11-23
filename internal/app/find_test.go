@@ -283,9 +283,9 @@ func TestTheFindFollowsThePageAsItScrollsZoomsAndInTheDark(t *testing.T) {
 	s.clean()
 	s.in.SetMouse(s.inPage("moved"))
 	s.in.AddWheel(geom.V2(0, 2))
-	s.frame()
-	s.frame()
-	s.frame()
+	for range glide {
+		s.frame()
+	}
 	_, after := s.findMarks()
 	if len(after) != 1 || after[0].Y >= before[0].Y || s.under(page, after[0]) != "cancelled" {
 		t.Fatalf("once the page scrolled the mark went from %v to %v", before, after)

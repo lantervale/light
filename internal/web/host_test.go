@@ -16,6 +16,10 @@ import (
 	"github.com/lantervale/light/pkg/fetch"
 )
 
+// glide is how many frames a scroll by the wheel takes to land, as
+// Chrome glides it: 12 at most, and one to start.
+const glide = 14
+
 func testLoader() *Loader { return &Loader{Client: fetch.New(nil)} }
 
 // load is the page at address, its links doing nothing.
