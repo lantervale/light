@@ -1,4 +1,4 @@
-## light v0.2.3
+## light v0.2.4
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,11 +7,18 @@ ember's UI goes on real pages, not a browser to live in.
 
 ## What is new
 
-- **macOS downloads are a disk image**: open it and drag `light.app` onto Applications, no zip to unpack.
-- **Homebrew**: `brew install --cask lantervale/tap/light` installs it on macOS, and `brew upgrade` keeps it current.
-- Now and then, turning the start page dark by its logo brings something else than the dark.
-- New in v0.2.2, the release before: a page switching its theme by script switches whole, and a site that does not
-  answer says so in words.
+- **Pages move**: CSS animations and `@keyframes`, transitions of every property as Chrome interpolates them, and
+  `@starting-style`.
+- **Effects**: `filter`, `backdrop-filter`, `mix-blend-mode`, CSS masks and `clip-path`, drawn on the GPU.
+- **Layout**: container queries and their units, the `grid` shorthand, subgrid and named grid lines,
+  `column-span: all`, `::first-line` and `::first-letter`, and right-to-left text by `direction` and `dir`.
+- **Selectors and colours**: `:has()`, `:target`, `:lang()`, the form pseudo-classes, `color-scheme` and
+  `light-dark()`.
+- **Pictures**: several background layers, `srcset` and `<picture>` choosing the picture that fits, list markers
+  of `@counter-style` and pictures, and SVG clip paths, masks, patterns and text.
+- A page's fragment (`#name`) is its `:target`, its `@import` rules are fetched, and `Content-Language` sets the
+  language `:lang()` reads.
+- New in v0.2.3, the release before: a disk image on macOS and a Homebrew cask.
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
