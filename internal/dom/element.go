@@ -122,9 +122,11 @@ func (r *Runtime) focus(n *ui.Node, _ arguments) (any, error) {
 	return nothing()
 }
 
-// blur is asked to take the focus off n, which ui has no way to do
-// but by giving it to another element.
-func (r *Runtime) blur(*ui.Node, arguments) (any, error) {
+// blur takes the focus off n when n has it, to no element.
+func (r *Runtime) blur(n *ui.Node, _ arguments) (any, error) {
+	if r.doc.Focused(n) {
+		r.doc.Blur()
+	}
 	return nothing()
 }
 

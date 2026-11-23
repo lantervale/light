@@ -1122,7 +1122,7 @@ What does not:
   - Not there: IndexedDB in workers (light has none), `IDBObjectStore.getAllRecords()` and the options form of
     `getAll()` (later drafts), `storage.getDirectory()`. Of the `IndexedDB/` directory of the web platform tests,
     172 of the 229 tests in a window pass ([the result](#the-result-of-20-november-2026)).
-- **Scrolling** from a script (`scrollTo`, `scrollX`…), `blur()`, `IntersectionObserver` and `ResizeObserver`
+- **Scrolling** from a script (`scrollTo`, `scrollX`…), `IntersectionObserver` and `ResizeObserver`
   (each tells once, as if everything were in view), and the observers of performance.
 - **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys.
 - A script that runs long is not stopped in a person's light, which [asks](#a-page-that-is-slow); in a hidden or
