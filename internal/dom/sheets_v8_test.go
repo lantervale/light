@@ -95,6 +95,22 @@ func TestThePagesOwnStyleElementIsEditedAndRemovedByAScript(t *testing.T) {
 	s.quiet()
 }
 
+func TestANestedRuleIsOneRuleOfItsSheet(t *testing.T) {
+	s := run(t, `<head><style id="own">body { margin: 0; .box { width: 120px; } }</style></head>
+		<body><div id="box" class="box">box</div>`)
+	s.wide(120, "a rule nested in the page's own")
+	if got := s.eval(`own.sheet.cssRules.length + " " + own.sheet.cssRules[0].selectorText`); got != "1 body" {
+		t.Errorf("the sheet's rules are %q", got)
+	}
+	s.eval(`own.sheet.insertRule("#box { & { width: 60px; } }", 1)`)
+	s.wide(60, "a nested rule inserted")
+	if got := s.eval(`own.sheet.cssRules.length`); got != "2" {
+		t.Errorf("with a nested rule inserted the sheet has %s rules", got)
+	}
+	s.eval(`own.sheet.deleteRule(1)`)
+	s.wide(120, "the nested rule deleted")
+}
+
 //nolint:lll // a script is one line of its table
 func TestRulesAreInsertedAndDeletedThroughASheet(t *testing.T) {
 	s := run(t, styledPage+`<script>var sheet = own.sheet;</script>`)
