@@ -568,6 +568,24 @@ func TestPointerActionsClickThroughTheWindowsInput(t *testing.T) {
 	}
 }
 
+func TestAWheelActionScrollsByItsPixelsAtOnce(t *testing.T) {
+	srv, _ := answers(t, map[string]answer{
+		"/": typed("text/html", `<body style="margin: 0"><div id="tall" style="height: 5000px"></div>`),
+	})
+	d := drive(t)
+	d.begin("{}")
+	d.open(srv.URL + "/")
+	d.frame()
+	page := d.session().pages[srv.URL+"/"].Doc
+	for _, step := range []struct{ delta, at float32 }{{130, 130}, {-50, 80}} {
+		d.ok("POST", "/{s}/actions", `{"actions":[{"type":"wheel","id":"wheel","actions":[
+			{"type":"scroll","x":20,"y":20,"deltaX":0,"deltaY":`+string(mustJSON(t, step.delta))+`}]}]}`)
+		if got := page.Scroll(page.HTML()); got != geom.V2(0, step.at) {
+			t.Fatalf("once a scroll of %v is performed the page is scrolled to %v, want %v", step.delta, got, step.at)
+		}
+	}
+}
+
 // painted is a capture of a window that draws its page's view in one
 // colour on a window of another, at two pixels a point.
 func painted(view func() geom.Rect, page color.Color) func(*platform.Window, func(shot, error)) step {
