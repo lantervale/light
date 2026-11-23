@@ -3,6 +3,7 @@
 package app //nolint:testpackage // the screen is driven by what it holds: its elements, its tabs, its sessions
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/lantervale/ember/input"
@@ -65,6 +66,9 @@ func TestAScriptHearsACommandClickAndMayPreventIt(t *testing.T) {
 		t.Fatalf("the page heard a click of the middle button: %q", got)
 	}
 
+	if runtime.GOOS == macOS {
+		return // a Control click is a context click on a Mac, whatever light's system says (ember's decision 0142)
+	}
 	s.system = "linux"
 	s.clickHolding(s.inPage("routed"), input.KeyLeftControl)
 	if got := s.pageText("heard"); got != "routed ctrl button 0" || len(s.browser.Tabs) != 5 {
