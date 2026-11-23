@@ -431,3 +431,13 @@ func TestSizesAreReadAsLaidOutAtOnce(t *testing.T) {
 	}
 	s.quiet()
 }
+
+func TestAComputedStyleWorksItsMathFunctionsOut(t *testing.T) {
+	s := run(t, `<body><div id="box" style="opacity: calc(log(1) + 0.5); z-index: round(up, 2.1);
+		margin-left: calc(1px * pow(2, 3))">box</div>`)
+	if got := s.eval(`(cs => [cs.opacity, cs.zIndex, cs.marginLeft, cs.getPropertyValue("opacity")].join(" "))(
+		getComputedStyle(box))`); got != "0.5 3 8px 0.5" {
+		t.Errorf("the computed style reads %q", got)
+	}
+	s.quiet()
+}
