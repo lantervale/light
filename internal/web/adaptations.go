@@ -98,8 +98,8 @@ var adaptations = []adaptation{
 	{
 		name: "svg pictures",
 		what: "An SVG picture in an img or a url() is drawn, at the size it shows at (light imports " +
-			"ui/svg); what it uses that ember's svg reader doesn't draw (text, clipping, masks, filters, " +
-			"patterns…) is a warning naming the file.",
+			"ui/svg), its text, clip paths, masks and patterns too; what it uses that ember's svg reader " +
+			"doesn't draw (filters, foreignObject, textPath…) is a warning naming the file.",
 	},
 
 	{
