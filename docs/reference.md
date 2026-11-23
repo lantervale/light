@@ -792,11 +792,13 @@ not given one keeps them in memory.
   family of its list.
 - **Fonts**: a page's `@font-face` fonts are fetched when its text first needs them, TrueType, OpenType, WOFF and
   WOFF2, and each is a row of the Network panel asked by its stylesheet, sent with the sheet's address as its
-  `Referer` (the site alone to another site) and the cookies of its address. Until one lands the text shows in the
-  next family, then the page is laid out again: `font-display` is always `swap`, and an icon shows as nothing
-  meanwhile. A font is 16 MB at most and has 30 s to come; one that fails is a warning of the page. A variable font
-  shows its default weight, no bold or italic is made up from a regular face, colour fonts and collections are
-  not read, and an icon font that writes its icons as words (ligatures, as Material Icons) shows the words. A font
+  `Referer` (the site alone to another site) and the cookies of its address. Until one lands the text is laid out
+  in the next family and hidden as its `font-display` says, as in Chrome (up to 3 s for `auto` and `block`, never
+  for `swap`), then the page is laid out again; an icon shows as nothing meanwhile. A font is 16 MB at most and has
+  30 s to come; one that fails is a warning of the page. A variable font shows the weight and width its text asks
+  for, a bold or italic the family lacks is made up from the face it has, the font's OpenType features and
+  ligatures apply (an icon font that writes its icons as words, as Material Icons, shows the icons), and colour
+  fonts and collections are not read. A font
   of another site is used whatever its `Access-Control-Allow-Origin`, where a browser refuses it without one.
   A sheet an `@import` names is fetched as the page shows, asked by the sheet that imports it, and taken when it
   is served as `text/css` or as no type; the page shows without it until it lands. light keeps its own

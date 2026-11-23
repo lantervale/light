@@ -85,8 +85,8 @@ var adaptations = []adaptation{
 	{
 		name: "page fonts",
 		what: "The fonts of the page's @font-face rules are fetched through light's loader when text first " +
-			"needs them (ui.FetchFonts), each asked by its sheet, " + megabytes(maxFont) + " at most; the text " +
-			"shows in the next family until they land.",
+			"needs them (ui.FetchFonts), each asked by its sheet, " + megabytes(maxFont) + " at most; until they " +
+			"land the text is laid out in the next family, hidden as its font-display says.",
 	},
 	{
 		name: "imported sheets",
