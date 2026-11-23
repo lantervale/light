@@ -118,6 +118,32 @@ func TestTheTranslationPageTranslatesWhatIsTypedOnceTypingStops(t *testing.T) {
 	}
 }
 
+func TestATranslationReadsInTheDirectionOfItsText(t *testing.T) {
+	s, fake := translator(t)
+	s.desked()
+	s.writes("Bonjour")
+	s.pauses()
+	s.until("the model is asked", func() bool { return len(fake.Asked()) == 2 })
+	s.replied(fake)
+	if got, _ := s.doc.ComputedValue(s.node("translate-out").Children()[0], "direction"); got != "ltr" {
+		t.Fatalf("an English translation reads %s", got)
+	}
+	fake.Reply = func(r model.Request) (string, error) {
+		if r.Grammar != "" {
+			return "French", nil
+		}
+		return "שלום עולם", nil
+	}
+	s.writes(" le monde")
+	s.pauses()
+	s.until("the model is asked again", func() bool { return len(fake.Asked()) > 2 })
+	s.replied(fake)
+	if got, _ := s.doc.ComputedValue(s.node("translate-out").Children()[0], "direction"); got != "rtl" ||
+		s.node("translate-out").Text() != "שלום עולם" {
+		t.Fatalf("the Hebrew translation %q reads %s", s.node("translate-out").Text(), got)
+	}
+}
+
 func TestTheTranslationPageFitsItsWindowDarkAndLight(t *testing.T) {
 	s, fake := translator(t)
 	s.desked()

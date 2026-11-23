@@ -180,13 +180,16 @@ func svgPicturesAreDrawn(t *testing.T) {
 		wide = `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 1"><rect width="4" ` +
 			`height="1"/></svg>`
 		label = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="12"><text y="10">Abc</text></svg>`
+		blur  = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><filter id="f"><feGaussianBlur ` +
+			`stdDeviation="1"/></filter><rect width="8" height="8" filter="url(#f)"/></svg>`
 	)
 	seen := &asked{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen.Lock()
 		seen.paths = append(seen.paths, r.URL.Path)
 		seen.Unlock()
-		files := map[string]string{"/art/star.svg": star, "/icon": star, "/wide": wide, "/label.svg": label}
+		files := map[string]string{"/art/star.svg": star, "/icon": star, "/wide": wide, "/label.svg": label,
+			"/blur.svg": blur}
 		svg := files[r.URL.Path]
 		switch {
 		case svg != "":
@@ -197,7 +200,7 @@ func svgPicturesAreDrawn(t *testing.T) {
 			_, _ = w.Write([]byte(`<style>body { margin: 0; width: 200px; }
 				#panel { height: 40px; background: url(art/star.svg) no-repeat left bottom; background-size: 101%; }</style>
 				<div id="panel"></div><div><img id="icon" src="/icon"></div><div><img id="wide" src="/wide"></div>
-				<img id="label" src="label.svg">`))
+				<img id="label" src="label.svg"><img id="blur" src="blur.svg">`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -214,9 +217,9 @@ func svgPicturesAreDrawn(t *testing.T) {
 		return r.W == 200 && r.H == 50
 	})
 	s.until("the background was asked for", func() bool { return seen.has("/art/star.svg") })
-	s.until("the text of label.svg is reported", func() bool {
+	s.until("the filter of blur.svg is reported", func() bool {
 		return slices.ContainsFunc(doc.Warnings(), func(err error) bool {
-			return strings.Contains(err.Error(), "label.svg: image/svg+xml is not drawn: text")
+			return strings.Contains(err.Error(), "blur.svg: image/svg+xml is not drawn: filter")
 		})
 	})
 	if r := box(t, doc, "label"); r.W != 40 || r.H != 12 {
@@ -226,7 +229,8 @@ func svgPicturesAreDrawn(t *testing.T) {
 		s.frame()
 	}
 	for _, err := range doc.Warnings() {
-		if strings.Contains(err.Error(), "image ") && !strings.Contains(err.Error(), "label.svg") {
+		if strings.Contains(err.Error(), "image ") && !strings.Contains(err.Error(), "blur.svg") ||
+			strings.Contains(err.Error(), "label.svg") {
 			t.Errorf("a picture warns: %v", err)
 		}
 	}
