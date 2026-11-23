@@ -474,11 +474,12 @@ func (r *Runtime) computed(n *ui.Node, a arguments) (any, error) {
 	return resolved(name, value), nil
 }
 
-// reflow has ui style and lay the page out at once when it has not
-// styled n, an element of the page a script made or moved since the
-// last frame: a script reads the style of what it just put there.
+// reflow has ui style and lay the page out at once, as a browser does
+// when a script reads a size: ui keeps the boxes when nothing changed
+// since the last layout, and lays out what a script made, moved or
+// restyled since.
 func (r *Runtime) reflow(n *ui.Node) {
-	if _, styled := r.doc.ComputedValue(n, "display"); styled || !r.connected(n) {
+	if !r.connected(n) {
 		return
 	}
 	var size geom.Vec2

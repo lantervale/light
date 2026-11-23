@@ -410,3 +410,24 @@ func TestThePagesOwnLinksAreEditedAndRemovedByAScript(t *testing.T) {
 		t.Errorf("a link that is no stylesheet any more leaves the box %v high, want 10", got)
 	}
 }
+
+func TestSizesAreReadAsLaidOutAtOnce(t *testing.T) {
+	s := run(t, `<head><style>body { margin: 0 } .half { width: 50vw; height: 10vh }</style></head>
+		<body><div id="box" style="width: 100px; height: 20px">box</div>`)
+	for _, c := range []struct{ name, script, want string }{
+		{"an element a script made", `(e => { document.body.appendChild(e); e.className = "half";
+			return getComputedStyle(e).width + " " + e.offsetWidth })(document.createElement("div"))`, "400px 400"},
+		{"markup a script set", `document.body.innerHTML = '<div id="made" style="width: 30px; height: 5px"></div>';
+			getComputedStyle(made).width + " " + made.offsetHeight`, "30px 5"},
+		{"a style a script changed", `made.style.width = "70px"; getComputedStyle(made).width + " " + made.offsetWidth`,
+			"70px 70"},
+		{"a sheet a script added", `document.head.appendChild(Object.assign(document.createElement("style"),
+			{ textContent: "#made { height: 9px !important }" }));
+			getComputedStyle(made).height + " " + made.offsetHeight`, "9px 9"},
+	} {
+		if got := s.eval(c.script); got != c.want {
+			t.Errorf("%s: read %q, want %q", c.name, got, c.want)
+		}
+	}
+	s.quiet()
+}

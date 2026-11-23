@@ -149,12 +149,16 @@ func (r *Runtime) active(arguments) (any, error) { return r.refOf(r.holder()), n
 
 // box is where n is in the page's view: left, top, width and height.
 func (r *Runtime) box(n *ui.Node, _ arguments) (any, error) {
+	r.fresh()
+	r.reflow(n)
 	b := n.Box()
 	return []float32{b.X, b.Y, b.W, b.H}, nil
 }
 
 // laid reports whether n is laid out: shown, whatever its size.
 func (r *Runtime) laid(n *ui.Node, _ arguments) (any, error) {
+	r.fresh()
+	r.reflow(n)
 	_, shown := r.doc.BoxOf(n)
 	return shown, nil
 }
