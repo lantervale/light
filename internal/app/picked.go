@@ -212,7 +212,7 @@ func (s *Screen) fillPicked() {
 		}
 		p.root.Append(sheetHead(s.siteTile(p.address, "big"), "picked", title, sub, robot))
 		if text := s.pickedText(); shows && text != "" {
-			said := ui.Div(ui.ID("picked-text"), ui.Class("inset"))
+			said := ui.Div(ui.ID("picked-text"), ui.Class("inset"), ui.Attr("dir", "auto"))
 			if p.asked.err != nil {
 				said.Append(ui.P(ui.Text(text)))
 			} else {

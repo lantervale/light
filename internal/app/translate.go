@@ -152,7 +152,7 @@ func (s *Screen) writeDesk() {
 	d.count, d.stands, d.acts = ui.Span(ui.ID("translate-count")), ui.Span(ui.ID("translate-stands")), ui.Span()
 	d.from = ui.Div(ui.ID("translate-from"), ui.Class("langs"))
 	d.into = ui.Div(ui.ID("translate-into"), ui.Class("langs"))
-	d.out = ui.Div(ui.ID("translate-out"), ui.Attr("aria-live", "polite"))
+	d.out = ui.Div(ui.ID("translate-out"), ui.Attr("aria-live", "polite"), ui.Attr("dir", "auto"))
 	d.swap = ui.Button(ui.ID("translate-swap"), ui.Attr("aria-label", "Swap the languages"),
 		ui.Svg(swapArrows, ui.Attr("viewBox", "0 0 24 24"), ui.Attr("aria-hidden", "true")), ui.OnClick(s.swapDesk))
 	d.root.Append(

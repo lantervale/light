@@ -323,6 +323,21 @@ func TestATranslationIsIntoTheLanguageChosenAndTheChoiceIsKept(t *testing.T) {
 	}
 }
 
+func TestTheTranslationOfASelectionReadsInTheDirectionOfItsText(t *testing.T) {
+	s, fake, page := reading(t)
+	fake.Reply = func(model.Request) (string, error) { return "הסירה.", nil }
+	s.picks(page, "cost")
+	s.click("picked-translate")
+	s.until("the model is asked", func() bool { return len(fake.Asked()) == 1 })
+	fake.Finish()
+	s.frame()
+	s.frame()
+	if got, _ := s.doc.ComputedValue(s.node("picked-text"), "direction"); got != "rtl" ||
+		s.node("picked-text").Text() != "הסירה." {
+		t.Fatalf("the Hebrew translation %q reads %s", s.node("picked-text").Text(), got)
+	}
+}
+
 func TestASelectionIsGivenInMarkdownAndItsAnswerShownInItsShapeWithinTheStage(t *testing.T) {
 	srv, _ := answers(t, map[string]answer{"/": typed("text/html", `<title>Not supported</title>
 		<body style="user-select: text"><div id="all"><h2>Browser not supported</h2>
