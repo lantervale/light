@@ -4,6 +4,7 @@ package script_test
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -139,7 +140,13 @@ func TestEveryImportCallOfALargeBundleAsksTheImporter(t *testing.T) {
 	if texts != bundled {
 		t.Errorf("what only looks like an import() reads %v, want %s", texts, bundled)
 	}
-	if took := time.Since(began); took > 10*time.Second {
+	// V8 compiles this bundle in 3 s on an M1 Max and in 12 s on a GitHub Windows runner: the bound there still
+	// tells a scan that goes once through it from one that starts over at each import().
+	limit := 10 * time.Second
+	if runtime.GOOS == "windows" {
+		limit = 30 * time.Second
+	}
+	if took := time.Since(began); took > limit {
 		t.Errorf("it took %s", took)
 	}
 }
