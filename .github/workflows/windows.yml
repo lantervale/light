@@ -45,3 +45,6 @@ jobs:
 
       - name: Test the engine and the DOM
         run: go test -tags v8 ./pkg/script/... ./internal/dom/...
+
+      - name: Test the rest
+        run: go test -tags v8 $(go list ./... | grep -v -e /pkg/script -e /internal/dom)
