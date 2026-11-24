@@ -74,8 +74,10 @@ task model:test       # its vet and tests
 task wpt              # the web-platform-tests of tools/wpt/subset.txt (see "Web platform tests")
 ```
 
-`.github/workflows/windows.yml` builds light with the `v8` tag on Windows and runs the tests of `pkg/script` and
-`internal/dom` there, on every pull request to `main`.
+`.github/workflows/windows.yml` builds light with the `v8` tag on Windows and runs every test there, those of
+`pkg/script` and `internal/dom` first, on every pull request to `main`. Windows' clock moves every 15.6 ms: what light
+records is timed by `pkg/instant`, whose instants come in the order things happened, and a test that measures a
+step holds it longer than a tick. A path in a test is built from `t.TempDir()` with `filepath`, never written out.
 
 - With the `v8` tag, every `go` command needs `CGO_CXXFLAGS=-nostdinc++`; the Taskfile sets it. By hand:
   `CGO_CXXFLAGS=-nostdinc++ go test -tags v8 ./...`.
