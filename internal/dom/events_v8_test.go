@@ -372,10 +372,10 @@ func TestWhatFieldsTellUIIsToldToScripts(t *testing.T) {
 			if (window.hold) e.preventDefault();
 		});</script>`)
 	s.page.Doc.SetValue(s.byID("name"), "Ann")
-	s.page.Tree.Heard(s.byID("name"), "input")
-	s.page.Tree.Heard(s.byID("agree"), "change")
-	s.page.Tree.Heard(s.byID("name"), "submit")
-	s.page.Tree.Heard(s.byID("alone"), "submit")
+	s.page.Tree.Heard(s.byID("name"), "input", dom.Keys{})
+	s.page.Tree.Heard(s.byID("agree"), "change", dom.Keys{})
+	s.page.Tree.Heard(s.byID("name"), "submit", dom.Keys{})
+	s.page.Tree.Heard(s.byID("alone"), "submit", dom.Keys{})
 	if got := s.eval(`seen.join()`); got != "" {
 		t.Fatalf("scripts ran while ui told of its fields: %q", got)
 	}
@@ -384,7 +384,7 @@ func TestWhatFieldsTellUIIsToldToScripts(t *testing.T) {
 		t.Errorf("the page saw %q", got)
 	}
 	s.eval(`seen.length = 0; window.hold = true`)
-	s.page.Tree.Heard(s.byID("alone"), "submit")
+	s.page.Tree.Heard(s.byID("alone"), "submit", dom.Keys{})
 	s.rt.Frame()
 	if got := s.eval(`seen.join()`); got != "key Enter" {
 		t.Errorf("with Enter prevented the page saw %q", got)
@@ -402,18 +402,34 @@ func TestWhatFieldsTellUIIsToldToScripts(t *testing.T) {
 	}
 }
 
+func TestKeysCarryTheModifiersHeldWithThem(t *testing.T) {
+	s := run(t, `<script>var seen = [];
+		for (const type of ["keydown", "keyup"]) {
+			document.addEventListener(type, (e) => seen.push([type, e.key, e.shiftKey, e.altKey, e.ctrlKey, e.metaKey,
+				e.getModifierState("Shift"), e.getModifierState("Control")].join(" ")));
+		}</script>`)
+	s.rt.Key("ArrowDown", "ArrowDown", dom.Keys{Shift: true, Ctrl: true})
+	s.rt.Key("x", "KeyX", dom.Keys{Alt: true, Meta: true})
+	s.rt.Frame()
+	want := "keydown ArrowDown true false true false true true,keyup ArrowDown true false true false true true," +
+		"keydown x false true false true false false,keyup x false true false true false false"
+	if got := s.eval(`seen.join()`); got != want {
+		t.Errorf("the page saw %q\n    want %q", got, want)
+	}
+}
+
 func TestKeysAreToldToTheFocusedElement(t *testing.T) {
 	s := run(t, `<input id="name"><input id="other"><script>var seen = [];
 		for (const type of ["keydown", "keyup"]) {
 			document.addEventListener(type, (e) => seen.push([type, e.target.id || e.target.tagName, e.key, e.code].join(" ")));
 		}</script>`)
-	s.rt.Key("a", "KeyA")
+	s.rt.Key("a", "KeyA", dom.Keys{})
 	s.rt.Frame()
 	frame := s.window()
 	s.page.Doc.Focus(s.byID("name"))
 	frame()
 	s.rt.Frame()
-	s.rt.Key("Enter", "Enter")
+	s.rt.Key("Enter", "Enter", dom.Keys{})
 	s.rt.Frame()
 	want := "keydown BODY a KeyA,keyup BODY a KeyA,keydown name Enter Enter,keyup name Enter Enter"
 	if got := s.eval(`seen.join()`); got != want {

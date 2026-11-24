@@ -1125,7 +1125,10 @@ What does not:
     172 of the 229 tests in a window pass ([the result](#the-result-of-20-november-2026)).
 - **Scrolling** from a script (`scrollTo`, `scrollX`…), `IntersectionObserver` and `ResizeObserver`
   (each tells once, as if everything were in view), and the observers of performance.
-- **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys.
+- **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys. A key event
+  says the modifiers held with it (`shiftKey`, `altKey`, `ctrlKey`, `metaKey`, `getModifierState()`), so a page
+  that sends on Enter lets Shift+Enter break a textarea's line. Cmd+Enter (Ctrl+Enter off macOS) in a textarea
+  submits its form, as ember's field does, unless a script prevents its keydown.
 - A script that runs long is not stopped in a person's light, which [asks](#a-page-that-is-slow); in a hidden or
   a driven run it is stopped after 2 seconds (`--script-budget` of `light drive`) and reported in the Console. A
   page's timers get 8 ms a frame; what is left waits for the next. A page holds 500,000 nodes at most.

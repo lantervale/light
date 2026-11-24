@@ -264,8 +264,10 @@ type Runtime struct {
 	// activation is the click a script was told of last (events.go).
 	activation activation
 	// breaking is the textarea whose line ui breaks for an Enter scripts
-	// let be, until the input it makes is told to them (events.go).
+	// let be, until the input it makes is told to them, and broke the
+	// keys held with it (events.go).
 	breaking *ui.Node
+	broke    Keys
 	// bases is the page's use of its site's databases (indexeddb.go).
 	bases  bases
 	closed bool
@@ -518,9 +520,10 @@ func (r *Runtime) frame() bool {
 	r.activation = activation{}
 	waiting := r.waiting
 	r.waiting = nil
-	if broke := r.breaking; broke != nil {
+	if field := r.breaking; field != nil {
 		r.breaking = nil
-		waiting = append(waiting, func() { r.Fire(broke, "keyup", enter()) })
+		held := r.broke
+		waiting = append(waiting, func() { r.Fire(field, "keyup", enter(held)) })
 	}
 	for _, run := range waiting {
 		run()

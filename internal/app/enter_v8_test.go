@@ -1,10 +1,11 @@
-//go:build v8 && cgo && (darwin || linux) && (amd64 || arm64)
+//go:build v8 && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
 
 package app //nolint:testpackage // drives the Screen through its unexported parts
 
 import (
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"slices"
 	"sync"
 	"testing"
@@ -46,10 +47,10 @@ func searchSite(t *testing.T, field, script string) (*httptest.Server, func() []
 	}
 }
 
-// typeIn types text in the page's field id, clicked first.
-func (s *shown) typeIn(id, text string) {
-	s.clickAt(s.inPage(id))
-	for _, r := range text {
+// typeCats types "cats" in the page's field q, clicked first.
+func (s *shown) typeCats() {
+	s.clickAt(s.inPage("q"))
+	for _, r := range "cats" {
 		s.in.AddText(r)
 	}
 	s.frame()
@@ -94,7 +95,7 @@ func TestEnterInASearchFieldSendsItsForm(t *testing.T) {
 			s := show(t)
 			s.visit(srv.URL + "/")
 			s.until("the page's scripts run", func() bool { return s.session().scripts != nil })
-			s.typeIn("q", "cats")
+			s.typeCats()
 			s.press(input.KeyEnter)
 			s.until("the search was sent", func() bool { return len(asked()) > 0 })
 			s.until("the results show", func() bool { return s.title(srv.URL+"/search?q=cats") == "Results" })
@@ -127,7 +128,7 @@ func TestEnterInATextareaBreaksItsLineUnlessAScriptPreventsIt(t *testing.T) {
 			s := show(t)
 			s.visit(srv.URL + "/")
 			s.until("the page's scripts run", func() bool { return s.session().scripts != nil })
-			s.typeIn("q", "cats")
+			s.typeCats()
 			s.press(input.KeyEnter)
 			s.settle()
 			page := s.session().pages[srv.URL+"/"]
@@ -142,6 +143,80 @@ func TestEnterInATextareaBreaksItsLineUnlessAScriptPreventsIt(t *testing.T) {
 			}
 			if said := s.said(); said != "" {
 				t.Errorf("the console says %s", said)
+			}
+		})
+	}
+}
+
+func TestEnterTellsScriptsTheModifiersHeldWithIt(t *testing.T) {
+	const script = `q.addEventListener("keydown", (e) => {
+		said.textContent = [e.key, e.shiftKey, e.altKey, e.ctrlKey, e.metaKey].join(" ");
+		if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
+	});`
+	for _, c := range []struct {
+		name  string
+		held  input.Key
+		value string
+		said  string
+	}{
+		{"Shift, which the script lets add a line", input.KeyLeftShift, "cats\n", "Enter true false false false"},
+		{"Alt, which it keeps from that", input.KeyLeftAlt, "cats", "Enter false true false false"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv, _ := searchSite(t, `<textarea id="q" name="q"></textarea>`, script)
+			s := show(t)
+			s.visit(srv.URL + "/")
+			s.until("the page's scripts run", func() bool { return s.session().scripts != nil })
+			s.typeCats()
+			s.in.SetKey(c.held, true)
+			s.frame()
+			s.press(input.KeyEnter)
+			s.in.SetKey(c.held, false)
+			s.settle()
+			page := s.session().pages[srv.URL+"/"]
+			if got := page.Doc.Value(page.Doc.ByID("q")); got != c.value {
+				t.Errorf("the textarea holds %q, want %q", got, c.value)
+			}
+			if got := s.pageText("said"); got != c.said {
+				t.Errorf("the page says %q, want %q", got, c.said)
+			}
+		})
+	}
+}
+
+func TestTheShortcutEnterInATextareaSubmitsItsFormWithItsKeys(t *testing.T) {
+	command, name := input.KeyLeftControl, "ctrlKey"
+	if runtime.GOOS == "darwin" {
+		command, name = input.KeyLeftSuper, "metaKey"
+	}
+	for _, c := range []struct {
+		name, script, said string
+		asked              []string
+	}{
+		{"heard by no script", "", "none", []string{"q=cats"}},
+		{"prevented by a script that reads its keys", `q.addEventListener("keydown", (e) => {
+				if (e.key === "Enter" && e.` + name + `) { said.textContent = "kept"; e.preventDefault(); }
+			});`, "kept", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv, asked := searchSite(t, `<textarea id="q" name="q"></textarea>`, c.script)
+			s := show(t)
+			s.visit(srv.URL + "/")
+			s.until("the page's scripts run", func() bool { return s.session().scripts != nil })
+			s.typeCats()
+			s.in.SetKey(command, true)
+			s.frame()
+			s.press(input.KeyEnter)
+			s.in.SetKey(command, false)
+			s.settle()
+			if c.asked != nil {
+				s.until("the search was sent", func() bool { return len(asked()) > 0 })
+				s.settle()
+			} else if got := s.pageText("said"); got != c.said {
+				t.Errorf("the page says %q, want %q", got, c.said)
+			}
+			if got := asked(); !slices.Equal(got, c.asked) {
+				t.Errorf("the site was asked %q, want %q", got, c.asked)
 			}
 		})
 	}

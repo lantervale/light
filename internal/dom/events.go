@@ -55,8 +55,8 @@ func (r *Runtime) fire(n *html.Node, kind string, init map[string]any) bool {
 	return prevented
 }
 
-// Keys are the keys held with a click.
-type Keys struct{ Ctrl, Shift, Alt, Meta bool }
+// Keys are the modifier keys held with a key or a click.
+type Keys = web.Keys
 
 // Click tells the page's scripts the pointer was pressed and released
 // on n, at a place of the page's view, with keys held. A link under it
@@ -69,8 +69,7 @@ func (r *Runtime) Click(n *ui.Node, x, y float32, held Keys) bool {
 }
 
 func (r *Runtime) clicked(n *ui.Node, x, y float32, held Keys) bool {
-	at := map[string]any{"clientX": x, "clientY": y, button: 0, "detail": 1, "ctrlKey": held.Ctrl,
-		"shiftKey": held.Shift, "altKey": held.Alt, "metaKey": held.Meta}
+	at := with(held, map[string]any{"clientX": x, "clientY": y, button: 0, "detail": 1})
 	r.Fire(n, "mousedown", at)
 	r.Fire(n, "mouseup", at)
 	prevented := r.Fire(n, "click", at)
@@ -168,12 +167,13 @@ func (r *Runtime) submitForm(form *ui.Node, a arguments) (any, error) {
 // next frame. A submit is Enter pressed in the field: scripts hear the
 // key, then, unless they prevented it, the submit of the field's form
 // when it has one.
-func (r *Runtime) heard(field *ui.Node, event string) {
+func (r *Runtime) heard(field *ui.Node, event string, held Keys) {
 	if event == "input" && r.breaking == field {
 		r.breaking = nil
+		broke := r.broke
 		r.waiting = append(r.waiting, func() {
 			r.Fire(field, event, map[string]any{"inputType": insertLineBreak})
-			r.Fire(field, "keyup", enter())
+			r.Fire(field, "keyup", enter(broke))
 		})
 		return
 	}
@@ -182,8 +182,8 @@ func (r *Runtime) heard(field *ui.Node, event string) {
 			r.Fire(field, event, nil)
 			return
 		}
-		prevented := r.Fire(field, "keydown", enter())
-		r.Fire(field, "keyup", enter())
+		prevented := r.Fire(field, "keydown", enter(held))
+		r.Fire(field, "keyup", enter(held))
 		if prevented {
 			return
 		}
@@ -204,38 +204,46 @@ func (r *Runtime) heard(field *ui.Node, event string) {
 // beforeinput, each once no script prevented the one before. It reports
 // whether one did; the keyup comes after the input of the line break,
 // at the next frame.
-func (r *Runtime) breakLine(field *ui.Node) bool {
+func (r *Runtime) breakLine(field *ui.Node, held Keys) bool {
 	prevented := false
 	r.whenFree(func() {
-		pressed := enter()
+		pressed := enter(held)
 		pressed["charCode"] = '\r'
-		prevented = r.fired(field, "keydown", enter()) || r.fired(field, "keypress", pressed) ||
+		prevented = r.fired(field, "keydown", enter(held)) || r.fired(field, "keypress", pressed) ||
 			r.fired(field, "beforeinput", map[string]any{"inputType": insertLineBreak})
 	})
 	if !prevented {
-		r.breaking = field
+		r.breaking, r.broke = field, held
 		return false
 	}
-	r.waiting = append(r.waiting, func() { r.Fire(field, "keyup", enter()) })
+	r.waiting = append(r.waiting, func() { r.Fire(field, "keyup", enter(held)) })
 	return true
 }
 
 // insertLineBreak is the inputType of a line Enter breaks.
 const insertLineBreak = "insertLineBreak"
 
-// enter is what the events of Enter carry.
-func enter() map[string]any { return map[string]any{"key": "Enter", "code": "Enter"} }
+// enter is what the events of Enter carry, with the keys held.
+func enter(held Keys) map[string]any {
+	return with(held, map[string]any{"key": "Enter", "code": "Enter"})
+}
+
+// with is init with the keys held.
+func with(held Keys, init map[string]any) map[string]any {
+	init["ctrlKey"], init["shiftKey"], init["altKey"], init["metaKey"] = held.Ctrl, held.Shift, held.Alt, held.Meta
+	return init
+}
 
 // Key tells scripts, at the next frame, of a key pressed and released
-// while the page had the keyboard: it goes to the element that has the
-// focus, the body with none.
-func (r *Runtime) Key(key, code string) {
+// with the keys held while the page had the keyboard: it goes to the
+// element that has the focus, the body with none.
+func (r *Runtime) Key(key, code string, held Keys) {
 	r.waiting = append(r.waiting, func() {
 		target := r.holder()
 		if target == nil {
 			target = r.doc.Body()
 		}
-		init := map[string]any{"key": key, "code": code}
+		init := with(held, map[string]any{"key": key, "code": code})
 		r.Fire(target, "keydown", init)
 		r.Fire(target, "keyup", init)
 	})

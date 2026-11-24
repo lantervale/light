@@ -215,9 +215,10 @@ class UIEvent extends Event {
     this.detail = detail | 0;
   }
 }
+const modifierOf = { Control: "ctrlKey", Shift: "shiftKey", Alt: "altKey", Meta: "metaKey" };
 const modifiers = (event, init) => {
   for (const key of ["ctrlKey", "shiftKey", "altKey", "metaKey"]) event[key] = Boolean(init[key]);
-  event.getModifierState = () => false;
+  event.getModifierState = (key) => Boolean(event[modifierOf[key]]);
 };
 class MouseEvent extends UIEvent {
   constructor(type, init) {

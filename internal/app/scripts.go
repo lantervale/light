@@ -265,12 +265,13 @@ func (s *Screen) keys(set *framed) {
 		if !live.keyboard || live.rt.Closed() {
 			continue
 		}
+		held := s.held()
 		for _, r := range in.Text() {
-			live.rt.Key(string(r), codeOf(r))
+			live.rt.Key(string(r), codeOf(r), held)
 		}
 		for _, k := range silent() {
 			if in.Pressed(k.key) {
-				live.rt.Key(k.name, k.name)
+				live.rt.Key(k.name, k.name, held)
 			}
 		}
 	}
