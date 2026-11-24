@@ -63,17 +63,18 @@ func (a *Answer) OK() bool { return ok(a.Status) }
 func ok(status int) bool { return status >= http.StatusOK && status < http.StatusMultipleChoices }
 
 // Text is the body decoded to UTF-8 by the charset its Content-Type
-// names, else the one its first bytes show, as a browser sniffs it.
+// names, else the one its first bytes show, as a browser sniffs it,
+// without the byte order mark that names it.
 func (a *Answer) Text() string {
 	r, err := charset.NewReader(bytes.NewReader(a.Body), a.Header.Get("Content-Type"))
 	if err != nil {
-		return string(a.Body)
+		return strings.TrimPrefix(string(a.Body), "\ufeff")
 	}
 	text, err := io.ReadAll(r)
 	if err != nil {
-		return string(a.Body)
+		return strings.TrimPrefix(string(a.Body), "\ufeff")
 	}
-	return string(text)
+	return strings.TrimPrefix(string(text), "\ufeff")
 }
 
 // Code is the body of a script or a sheet decoded to UTF-8: by the
