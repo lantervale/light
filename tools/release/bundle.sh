@@ -110,12 +110,10 @@ licences() {
 			break
 		done
 	done
-	# V8 is linked in where light runs scripts: macOS and Linux.
-	if [ "$goos" != windows ]; then
-		v8=$(go list -m -f '{{.Dir}}' "github.com/tommie/v8go/deps/${goos}_${goarch}")
-		cp "$v8/LICENSE" "$1/LICENSE-v8"
-		chmod u+w "$1/LICENSE-v8"
-	fi
+	# V8 is linked into light on every target a release builds.
+	v8=$(slashes "$(go list -m -f '{{.Dir}}' "github.com/tommie/v8go/deps/${goos}_${goarch}")")
+	cp "$v8/LICENSE" "$1/LICENSE-v8"
+	chmod u+w "$1/LICENSE-v8"
 }
 
 # minos is the macOS version the Mach-O file $1 says it needs.

@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 env:
-  # What the libc++ headers V8 is built with ask for (AppleClang 21 or Clang 21).
+  # What the libc++ headers V8 is built with ask for (AppleClang 21 or Clang 21; on Windows LLVM's MSVC-target clang).
   CLANG_VERSION: '21'
 
 jobs:
@@ -76,6 +76,10 @@ jobs:
             echo "CC=$prefix/bin/clang" >> "$GITHUB_ENV"
             echo "CXX=$prefix/bin/clang++" >> "$GITHUB_ENV"
           fi
+
+      - name: Clang for V8 (MSVC target, LLD)
+        if: runner.os == 'Windows'
+        run: sh tools/release/llvm-windows.sh
 
       # bundle.sh makes the SBOM of light.app before packing it: syft reads no DMG.
       - uses: anchore/sbom-action/download-syft@v0

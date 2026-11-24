@@ -19,7 +19,10 @@ fi
 # Go splits CC on spaces, so clang is named, not given by its path: LLVM's
 # folder comes first on PATH.
 echo "$llvm" >> "$GITHUB_PATH"
+# GLFW's cgo flags put its copy of mingw-w64's DirectInput and XInput
+# headers before the Windows SDK's, and its xinput.h names mingw's WINBOOL.
 {
 	echo "CC=clang -fuse-ld=lld"
 	echo "CXX=clang++ -fuse-ld=lld"
+	echo "CGO_CFLAGS=-O2 -g -DWINBOOL=BOOL"
 } >> "$GITHUB_ENV"
