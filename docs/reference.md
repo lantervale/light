@@ -42,7 +42,7 @@ Cmd is Command on macOS and Control elsewhere.
 | Cmd++, Cmd+-, Cmd+0 | Zoom in, zoom out, the actual size |
 | Cmd+Alt+U on macOS, Ctrl+U elsewhere | The page's source, in a new tab |
 | F12, or Cmd+Alt+I on macOS, Ctrl+Shift+I elsewhere | The developer tools |
-| Alt+Up and Alt+Down, or Ctrl+P and Ctrl+N, in the console's line | What was typed before, and after |
+| Alt+Up and Alt+Down (Ctrl+P and Ctrl+N too, on macOS), in the console's line | What was typed before, and after |
 | Right click | The menu of what is under the pointer; arrows, Enter and Escape work in it |
 | Cmd+click or a middle click on a link | The link in a new tab, behind the shown one |
 | Cmd+Shift+click or Shift with a middle click on a link | The link in a new tab, shown |
@@ -332,7 +332,7 @@ unless you scrolled up:
   too, unless Preserve log is checked.
 - The line at the bottom evaluates in the page: Enter runs it, its value comes back under it (a string in its
   quotes) or the error it threw, and `$_` is the last value. A `let` or a `const` a line begins with stays for the
-  next lines. Alt+Up and Alt+Down (or Ctrl+P and Ctrl+N) walk what was typed before in the tab. A page without a
+  next lines. Alt+Up and Alt+Down (and Ctrl+P and Ctrl+N on macOS) walk what was typed before in the tab. A page without a
   script gets its scripts' context the first time a line is run.
 - The text selects and copies as a page's does.
 - In a build without the engine, or with JavaScript off in the settings, the tab says so and its line takes nothing.
@@ -1366,6 +1366,7 @@ the connection it opened; a connection to this machine is never in a pool a page
 | `pkg/har` | Plain Go: a tab's requests as a HAR 1.2 file, sanitized or not, and the check that a file is one. |
 | `pkg/script` | The JavaScript engine's boundary: V8 with the `v8` tag, nothing without. No ember. |
 | `pkg/console` | Plain Go: what a tab's scripts said, capped, a line said again counted, filtered by level and text. |
+| `pkg/instant` | Plain Go: the clock the console, the requests and the loads are timed by, each instant after the last, so they sort in the order they happened on a coarse clock. |
 | `pkg/storage` | Plain Go: what pages keep by origin, and its file. |
 | `pkg/idb` | Plain Go: the IndexedDB databases by site: keys and their order, stores, indexes, cursors, transactions and their scheduling, connections and upgrades, the quota, and their files. |
 | `pkg/cookies` | Plain Go: the cookie jar, its rules, the transport that applies them, and its file. |

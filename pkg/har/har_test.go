@@ -358,7 +358,8 @@ func TestValidateSaysWhatIsNotTheFormat(t *testing.T) {
 
 // TestTheArchiveOfRealRequests goes through the transport: a gzipped
 // answer is its text with both sizes, each hop of a redirect an entry,
-// and the steps add up.
+// and the steps add up. The answer is held longer than a tick of
+// Windows' clock (15.6 ms), so that its wait is seen.
 func TestTheArchiveOfRealRequests(t *testing.T) {
 	plain := strings.Repeat("the lower vaults stay wet. ", 100)
 	mux := http.NewServeMux()
@@ -366,6 +367,7 @@ func TestTheArchiveOfRealRequests(t *testing.T) {
 		http.Redirect(w, r, "/wet?a=1", http.StatusFound)
 	})
 	mux.HandleFunc("/wet", func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(20 * time.Millisecond)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Encoding", "gzip")
 		zip := gzip.NewWriter(w)

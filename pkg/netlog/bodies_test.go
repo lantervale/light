@@ -251,9 +251,12 @@ func TestEachHopOfARedirectedPOSTKeepsWhatItCarried(t *testing.T) {
 	}
 }
 
+// TestTheStepsOfARequestAddUpToWhatItTook holds the answer long enough
+// that its wait is seen whole but a tick of Windows' clock (15.6 ms).
 func TestTheStepsOfARequestAddUpToWhatItTook(t *testing.T) {
+	const held, tick = 40 * time.Millisecond, 15625 * time.Microsecond
 	srv := served(t, map[string]http.HandlerFunc{"/": func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(held)
 		_, _ = io.WriteString(w, "late")
 	}})
 	l, ctx := keeping(t, netlog.BodyCap, netlog.BodyBudget)
@@ -280,8 +283,8 @@ func TestTheStepsOfARequestAddUpToWhatItTook(t *testing.T) {
 			rows[0].Reused, !rows[1].Reused, !rows[1].Idle)
 	}
 	for i, timing := range []netlog.Timing{first, again} {
-		if timing.Wait < 20*time.Millisecond || timing.Send < 0 || timing.Receive < 0 {
-			t.Fatalf("request %d took %+v, and the server waited 20 ms", i, timing)
+		if timing.Wait < held-tick || timing.Send < 0 || timing.Receive < 0 {
+			t.Fatalf("request %d took %+v, and the server waited %v", i, timing, held)
 		}
 		sum := timing.Blocked + max(0, timing.DNS) + max(0, timing.Connect) + timing.Send + timing.Wait + timing.Receive
 		if off := sum - rows[i].Took; off < -time.Millisecond || off > time.Millisecond {

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lantervale/light/pkg/instant"
 )
 
 // Level is how much a line matters.
@@ -97,7 +99,7 @@ func (l *Lines) Add(line Line) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if line.At.IsZero() {
-		line.At = time.Now()
+		line.At = instant.Now()
 	}
 	l.version++
 	if last := len(l.lines) - 1; last >= 0 && l.lines[last].again(line) {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lantervale/light/pkg/instant"
 )
 
 // PreviewCap is how much of an answer's body a row keeps to be looked at.
@@ -297,7 +299,7 @@ func (l *Log) Refuse(id int, why string) {
 func (l *Log) Block(method, address, initiator string, wanted Type, why string) {
 	l.add(Row{
 		Address: address, Method: method, Type: wanted, Initiator: initiator, Blocked: true, Err: why, Done: true,
-		Started: time.Now(),
+		Started: instant.Now(),
 	}, nil)
 }
 
