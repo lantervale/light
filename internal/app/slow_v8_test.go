@@ -1,4 +1,4 @@
-//go:build v8 && cgo && (darwin || linux) && (amd64 || arm64)
+//go:build v8 && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
 
 package app //nolint:testpackage // the bar is checked with the screens that show it and the scripts that run long
 

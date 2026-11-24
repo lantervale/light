@@ -24,6 +24,29 @@ task app                       # macOS: dist/light.app, as a release ships it, t
 `task run` is `CGO_CXXFLAGS=-nostdinc++ go run -tags v8 ./cmd/light`: V8's headers need their own libc++. Without
 the tag light builds on every system and runs no script; `light://config` then says no engine is built in.
 
+### On Windows
+
+The V8 light links on Windows (x86-64) is built for the MSVC ABI, so light is compiled there with LLVM's clang,
+which targets MSVC, linking with LLD, and not with mingw-w64. You need:
+
+- [LLVM](https://github.com/llvm/llvm-project/releases) 21 or later, from its Windows installer
+  (`LLVM-<version>-win64.exe`), its `bin` folder on `PATH`: Go splits `CC` on spaces, so clang is named, not given
+  by its path;
+- the Microsoft C runtime and the Windows SDK, which the Visual Studio Build Tools install (the "Desktop
+  development with C++" workload);
+- Git Bash, or another POSIX shell, for Task and the release scripts.
+
+```sh
+export CGO_ENABLED=1 CC="clang -fuse-ld=lld" CXX="clang++ -fuse-ld=lld" CGO_CXXFLAGS=-nostdinc++
+export CGO_CFLAGS="-O2 -g -DWINBOOL=BOOL -D_CRT_SECURE_NO_WARNINGS" CGO_LDFLAGS="-O2 -g -luser32 -lshell32 -ladvapi32"
+go run -tags v8 ./cmd/light
+```
+
+`-fuse-ld=lld` must be in `CC`, for Go to pass the linker flags LLD takes. GLFW is written for mingw-w64: its own
+copy of mingw's XInput header names `WINBOOL`, and it leaves out the system libraries mingw links by default, hence
+`CGO_CFLAGS` and `CGO_LDFLAGS`. `tools/release/llvm-windows.sh` sets the same for the `windows` and `release`
+workflows. On Windows on arm64 V8 is not built in: light builds there without the tag, and runs no script.
+
 ## Driving it
 
 `light drive` serves [W3C WebDriver](https://www.w3.org/TR/webdriver2/), the protocol the web-platform-tests
@@ -50,6 +73,9 @@ task model:build      # light-model, the helper that runs the model, into dist/ 
 task model:test       # its vet and tests
 task wpt              # the web-platform-tests of tools/wpt/subset.txt (see "Web platform tests")
 ```
+
+`.github/workflows/windows.yml` builds light with the `v8` tag on Windows and runs the tests of `pkg/script` and
+`internal/dom` there, on every pull request to `main`.
 
 - With the `v8` tag, every `go` command needs `CGO_CXXFLAGS=-nostdinc++`; the Taskfile sets it. By hand:
   `CGO_CXXFLAGS=-nostdinc++ go test -tags v8 ./...`.

@@ -23,6 +23,7 @@ fi
 case "$(go env GOOS)" in
 	darwin) tags=v8 ;;
 	linux) tags=v8,vulkan ;;
+	windows) tags=v8 ;;
 	*) tags= ;;
 esac
 log=$(mktemp)

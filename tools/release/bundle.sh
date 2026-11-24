@@ -110,12 +110,10 @@ licences() {
 			break
 		done
 	done
-	# V8 is linked in where light runs scripts: macOS and Linux.
-	if [ "$goos" != windows ]; then
-		v8=$(go list -m -f '{{.Dir}}' "github.com/tommie/v8go/deps/${goos}_${goarch}")
-		cp "$v8/LICENSE" "$1/LICENSE-v8"
-		chmod u+w "$1/LICENSE-v8"
-	fi
+	# V8 is linked into light on every target a release builds.
+	v8=$(slashes "$(go list -m -f '{{.Dir}}' "github.com/tommie/v8go/deps/${goos}_${goarch}")")
+	cp "$v8/LICENSE" "$1/LICENSE-v8"
+	chmod u+w "$1/LICENSE-v8"
 }
 
 # minos is the macOS version the Mach-O file $1 says it needs.
@@ -220,6 +218,15 @@ mkdir -p "$stage"
 licences "$stage"
 cp "$src" "$stage/$lib"
 if [ "$goos" = windows ]; then
+	# The PE subsystem, at 68 in the optional header after the 24 bytes of
+	# the signature and the file header: 2 is a windowed program, 3 one that
+	# opens a console.
+	pe=$(od -An -t u4 -j 60 -N 4 "$bin" | tr -d ' ')
+	subsystem=$(od -An -t u2 -j $((pe + 24 + 68)) -N 2 "$bin" | tr -d ' ')
+	if [ "$subsystem" != 2 ]; then
+		echo "bundle: $bin is not a windowed program (PE subsystem $subsystem): a console would open with it" >&2
+		exit 1
+	fi
 	cp "$bin" "$stage/light.exe"
 	helper "$stage/light-model.exe"
 	out=$name.zip

@@ -80,7 +80,8 @@ IndexedDB; `postMessage`, `MessageChannel` and `BroadcastChannel`; XPath 1.0; XH
 
 What does not, in short:
 
-- **No JavaScript on Windows**, and none in a build without the `v8` tag.
+- **No JavaScript in a build without the `v8` tag**, nor on a system V8 is not built for (it is for macOS and Linux,
+  x86-64 and arm64, and Windows x86-64).
 - **No canvas**: `getContext()` answers `null`, for 2D and WebGL alike. No audio or video: media files are
   downloaded.
 - **No workers, no service workers, no WebSockets, no EventSource.**

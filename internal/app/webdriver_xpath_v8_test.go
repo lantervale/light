@@ -1,4 +1,4 @@
-//go:build v8 && cgo && (darwin || linux) && (amd64 || arm64)
+//go:build v8 && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
 
 package app //nolint:testpackage // the driver is checked against the screens it drives: their tabs, their windows
 

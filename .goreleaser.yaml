@@ -58,21 +58,31 @@ builds:
     ldflags: *ldflags
     hooks: *hooks
 
-  # No v8 tag: the V8 the binding ships for Windows is built for the MSVC ABI, and GLFW and ember build with mingw-w64.
+  # The V8 the binding ships for Windows is built for the MSVC ABI: light is compiled there with LLVM's MSVC-target
+  # clang, linking with LLD (tools/release/llvm-windows.sh puts it on PATH), not mingw-w64. Go splits CC on spaces,
+  # hence clang by name and -fuse-ld=lld in it, for Go to know its linker.
   - id: light-windows
     main: ./cmd/light
     binary: light
     goos: [windows]
     goarch: [amd64]
+    tags: [v8]
     env:
       - CGO_ENABLED=1
-      - CC={{ if eq .Runtime.Goos "windows" }}gcc{{ else }}x86_64-w64-mingw32-gcc{{ end }}
+      - CGO_CXXFLAGS=-nostdinc++
+      - CC=clang -fuse-ld=lld
+      - CXX=clang++ -fuse-ld=lld
+      # GLFW's cgo flags put its copy of mingw-w64's XInput header first, which names mingw's WINBOOL, and it leaves
+      # out the system libraries mingw-w64 links by default (tools/release/llvm-windows.sh says the same).
+      - CGO_CFLAGS=-O2 -g -DWINBOOL=BOOL -D_CRT_SECURE_NO_WARNINGS
+      - CGO_LDFLAGS=-O2 -g -luser32 -lshell32 -ladvapi32
     flags: *flags
     mod_timestamp: *mod_timestamp
     ldflags:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }}
-      # A windowed program: no console opens with it.
-      - -H=windowsgui
+      # A windowed program: no console opens with it. Go asks clang for one with -mwindows, which the MSVC target
+      # ignores, so LLD is told itself; Go's entry point is main, not WinMain.
+      - -H=windowsgui -extldflags=-Wl,-subsystem:windows,-entry:mainCRTStartup
     hooks: *hooks
 
 gomod:

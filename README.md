@@ -66,7 +66,7 @@ Take the archive of your system from the [releases](https://github.com/lanterval
 |---|---|
 | macOS 13+, Apple silicon or Intel | yes |
 | Linux x86-64 or arm64 (glibc 2.35+) | yes |
-| Windows 10+, x86-64 | **no**: pages show without their scripts |
+| Windows 10+, x86-64 | yes |
 
 - **macOS**: `brew install --cask lantervale/tap/light`, or open the `.dmg` and drag `light.app` onto
   Applications. It is not notarized, so from the `.dmg` the first launch is refused: choose **Open Anyway** in

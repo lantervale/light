@@ -1,4 +1,4 @@
-//go:build v8 && cgo && (darwin || linux) && (amd64 || arm64)
+//go:build v8 && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
 
 package script //nolint:testpackage // what the tests read of the engine that nothing else needs
 
