@@ -1,4 +1,4 @@
-## light v0.2.4
+## light v0.2.5
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,18 +7,27 @@ not a browser to live in.
 
 ## What is new
 
-- **Pages move**: CSS animations and `@keyframes`, transitions of every property as Chrome interpolates them, and
-  `@starting-style`.
-- **Effects**: `filter`, `backdrop-filter`, `mix-blend-mode`, CSS masks and `clip-path`, drawn on the GPU.
-- **Layout**: container queries and their units, the `grid` shorthand, subgrid and named grid lines,
-  `column-span: all`, `::first-line` and `::first-letter`, and right-to-left text by `direction` and `dir`.
-- **Selectors and colours**: `:has()`, `:target`, `:lang()`, the form pseudo-classes, `color-scheme` and
-  `light-dark()`.
-- **Pictures**: several background layers, `srcset` and `<picture>` choosing the picture that fits, list markers
-  of `@counter-style` and pictures, and SVG clip paths, masks, patterns and text.
-- A page's fragment (`#name`) is its `:target`, its `@import` rules are fetched, and `Content-Language` sets the
-  language `:lang()` reads.
-- New in v0.2.3, the release before: a disk image on macOS and a Homebrew cask.
+- **JavaScript on Windows**: the Windows build runs scripts in V8, as on macOS and Linux.
+- **Text**: shaped with the face's OpenType tables as Chrome shapes it, Arabic joined, Hebrew, Thai, Hangul and the
+  Indic scripts; CJK line breaking and spacing (`line-break`, `text-spacing-trim`, `text-autospace`); colour and
+  variable fonts; `text-wrap: balance` and `pretty`, soft hyphens, `line-clamp` and drop caps (`initial-letter`).
+- **Vertical writing and right to left**: `writing-mode`, `text-orientation` and `text-combine-upright`, laid out,
+  selected and scrolled; right-to-left scrollers, carets, selections and selects that start from the right.
+- **Scrolling**: smooth scrolls and scroll snapping, `::-webkit-scrollbar` and `scrollbar-color`, a held click on a
+  scrollbar's track paging on, and precise wheel turns on Windows and Wayland.
+- **Forms and controls**: a `select` with `multiple` or a `size` is a listbox, `optgroup`, type-ahead in selects,
+  resizable textareas, `appearance: none` and controls styled part by part, the `popover` attribute.
+- **Layout and drawing**: anchor positioning, `translate`, `rotate` and `scale`, transforms that hold fixed boxes
+  and turn their overflow, columns cutting tables, grids and flex boxes, `@property`, CSS nesting and `@scope`,
+  every colour space and `color-mix()`, animated GIF and WebP pictures, lazy pictures.
+- **Keys and copies**: Enter in a search box sends it, also where the page's script listens for the key on a
+  textarea; Shift, Alt, Control and Meta reach a page's key events, so Shift+Enter adds a line where Enter sends;
+  Ctrl+N opens a window on Windows and Linux; a copy on macOS and Windows carries the page's markup and styles,
+  as Chrome's does.
+- A page counts as loaded once its pictures show; its scripts read sizes as the page is laid out now, computed
+  styles with their math functions worked out, and a `document.fonts.ready` that settles.
+- New in v0.2.4, the release before: CSS animations and transitions, filters, masks and blend modes, container
+  queries and `:has()`.
 
 > [!WARNING]
 > A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
@@ -79,6 +88,7 @@ runs them on your machine only.
 - No cache, no sign-in prompt (401, 407), no file upload or `multipart/form-data` form, no AVIF, and
   `window.open` opens nothing.
 - It draws what ember's UI draws: many pages look right, many do not.
+- On Linux a copy is text only: its markup does not reach the clipboard.
 - Only the macOS app (Apple silicon) was started by hand before this release; the other archives were built and
   packed by the release workflow and not run.
 
