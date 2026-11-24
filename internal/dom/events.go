@@ -169,14 +169,21 @@ func (r *Runtime) submitForm(form *ui.Node, a arguments) (any, error) {
 // key, then, unless they prevented it, the submit of the field's form
 // when it has one.
 func (r *Runtime) heard(field *ui.Node, event string) {
+	if event == "input" && r.breaking == field {
+		r.breaking = nil
+		r.waiting = append(r.waiting, func() {
+			r.Fire(field, event, map[string]any{"inputType": insertLineBreak})
+			r.Fire(field, "keyup", enter())
+		})
+		return
+	}
 	r.waiting = append(r.waiting, func() {
 		if event != submit {
 			r.Fire(field, event, nil)
 			return
 		}
-		enter := map[string]any{"key": "Enter", "code": "Enter"}
-		prevented := r.Fire(field, "keydown", enter)
-		r.Fire(field, "keyup", enter)
+		prevented := r.Fire(field, "keydown", enter())
+		r.Fire(field, "keyup", enter())
 		if prevented {
 			return
 		}
@@ -191,6 +198,33 @@ func (r *Runtime) heard(field *ui.Node, event string) {
 		}
 	})
 }
+
+// breakLine is Enter pressed in a textarea, told to scripts before ui
+// breaks its line, as a browser tells them: keydown, keypress, then
+// beforeinput, each once no script prevented the one before. It reports
+// whether one did; the keyup comes after the input of the line break,
+// at the next frame.
+func (r *Runtime) breakLine(field *ui.Node) bool {
+	prevented := false
+	r.whenFree(func() {
+		pressed := enter()
+		pressed["charCode"] = '\r'
+		prevented = r.fired(field, "keydown", enter()) || r.fired(field, "keypress", pressed) ||
+			r.fired(field, "beforeinput", map[string]any{"inputType": insertLineBreak})
+	})
+	if !prevented {
+		r.breaking = field
+		return false
+	}
+	r.waiting = append(r.waiting, func() { r.Fire(field, "keyup", enter()) })
+	return true
+}
+
+// insertLineBreak is the inputType of a line Enter breaks.
+const insertLineBreak = "insertLineBreak"
+
+// enter is what the events of Enter carry.
+func enter() map[string]any { return map[string]any{"key": "Enter", "code": "Enter"} }
 
 // Key tells scripts, at the next frame, of a key pressed and released
 // while the page had the keyboard: it goes to the element that has the
