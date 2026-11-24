@@ -33,8 +33,20 @@ const absolute = (reference) => {
   const parsed = host("url", String(reference), document.baseURI);
   return parsed ? parsed.href : String(reference);
 };
-// formOf is the form a control is in.
-const formOf = { get() { return this.closest("form"); }, configurable: true };
+// formOwner is the form a listed control belongs to: the one its form
+// attribute names while it is in a document, else the form it is in.
+const formOwner = (control) => {
+  const id = ownAttr(control, "form");
+  if (id !== null && control.isConnected) {
+    const named = id === "" ? null : control.ownerDocument.getElementById(id);
+    return named instanceof HTMLFormElement ? named : null;
+  }
+  const parent = control.parentElement;
+  return parent ? parent.closest("form") : null;
+};
+const formOf = { get() { return formOwner(this); }, configurable: true };
+// listedControls are the controls a form's elements are.
+const listedControls = "button, fieldset, input, object, output, select, textarea";
 
 class HTMLAnchorElement extends HTMLElement {
   toString() { return this.href; }
@@ -158,13 +170,30 @@ class HTMLOptionElement extends HTMLElement {
     else this.toggleAttribute("selected", Boolean(on));
   }
 }
-accessors(HTMLOptionElement.prototype, { form: formOf });
+accessors(HTMLOptionElement.prototype, {
+  form: {
+    get() {
+      let select = this.parentElement;
+      if (select instanceof HTMLOptGroupElement) select = select.parentElement;
+      return select instanceof HTMLSelectElement ? select.form : null;
+    },
+    configurable: true,
+  },
+});
+
+// owned are the controls whose form owner form is, in the order of its
+// tree: those it holds, and those a form attribute gives it from
+// elsewhere in its document.
+const owned = (form) => {
+  const id = ownAttr(form, "id");
+  const far = id && form.isConnected && foundIn(form.ownerDocument, `[form="${CSS.escape(id)}"]`).length > 0;
+  return foundIn(far ? form.ownerDocument : form, listedControls)
+    .filter((n) => formOwner(n) === form && !(n[TAG] === "input" && ownAttr(n, "type") === "image"));
+};
 
 class HTMLFormElement extends HTMLElement {
   get elements() {
-    return keptList(this, "elements", () => liveList(HTMLFormControlsCollection, () =>
-      foundIn(this, "input, select, textarea, button, fieldset, object, output")
-        .filter((n) => !(n[TAG] === "input" && ownAttr(n, "type") === "image"))));
+    return keptList(this, "elements", () => liveList(HTMLFormControlsCollection, () => owned(this)));
   }
   get length() { return this.elements.length; }
   submit() { host("submit", this[REF], 0); }
@@ -191,7 +220,15 @@ class HTMLLabelElement extends HTMLElement {
     return id ? document.getElementById(id) : this.querySelector("input, select, textarea, button");
   }
 }
-accessors(HTMLLabelElement.prototype, { form: formOf });
+accessors(HTMLLabelElement.prototype, {
+  form: {
+    get() {
+      const control = this.control;
+      return control && control.matches(listedControls) ? formOwner(control) : null;
+    },
+    configurable: true,
+  },
+});
 
 class HTMLTemplateElement extends HTMLElement {
   get content() { return wrap(host("content", this[REF])); }
@@ -269,6 +306,17 @@ const [HTMLDivElement, HTMLSpanElement, HTMLParagraphElement, HTMLHeadingElement
   "HTMLPictureElement", "HTMLSourceElement", "HTMLObjectElement", "HTMLEmbedElement", "HTMLSlotElement",
   "HTMLOptGroupElement", "HTMLOutputElement", "HTMLMenuElement", "HTMLFontElement");
 withHandlers(HTMLBodyElement.prototype, [...windowHandled]);
+for (const Class of [HTMLFieldSetElement, HTMLObjectElement, HTMLOutputElement]) accessors(Class.prototype, { form: formOf });
+accessors(HTMLFieldSetElement.prototype, {
+  type: { get() { return "fieldset"; } },
+  elements: {
+    get() { return keptList(this, "elements", () => liveList(HTMLCollection, () => foundIn(this, listedControls))); },
+  },
+});
+accessors(HTMLOutputElement.prototype, { type: { get() { return "output"; } } });
+accessors(HTMLLegendElement.prototype, {
+  form: { get() { return this.parentElement instanceof HTMLFieldSetElement ? this.parentElement.form : null; } },
+});
 
 const classes = {
   a: HTMLAnchorElement, img: HTMLImageElement, input: HTMLInputElement, textarea: HTMLTextAreaElement,

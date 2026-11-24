@@ -147,3 +147,30 @@ func (s *scripted) press(id string) {
 	s.rt.Click(n, 1, 1, dom.Keys{})
 	s.page.Tree.Submit(web.FormOf(n), n)
 }
+
+func TestAControlsFormIsTheOneItsFormAttributeNames(t *testing.T) {
+	s := run(t, `<!DOCTYPE html><body><form id="f1"><input id="before"></form><form id="f2"><input id="i1">
+		<input id="i2" form="f1"><fieldset id="set"><legend id="leg">l</legend><output id="out"></output></fieldset>
+		<label id="lab" for="i2">x</label><select id="sel"><optgroup><option id="opt">o</option></optgroup></select>
+		<input id="empty" form=""><input id="none" form="nowhere"><object id="obj"></object></form>
+		<input id="far" form="f2"><label id="bare">y</label><span id="F1"></span>`)
+	const tools = `const $ = (id) => document.getElementById(id), owner = (e) => (e.form || {}).id ?? "null",
+		formOf = (id) => owner($(id)), ids = (list) => [...list].map((e) => e.id).join(" ");`
+	for _, c := range []struct{ script, want string }{
+		{`["i1", "i2", "set", "leg", "out", "lab", "opt", "empty", "none", "obj", "far", "bare"].map(formOf).join()`,
+			"f2,f1,f2,f2,f2,f1,f2,null,null,f2,f2,null"},
+		{`[ids($("f1").elements), ids($("f2").elements), $("f2").length, ids($("set").elements), $("set").type,
+			$("out").type].join("|")`, "before i2|i1 set out sel obj far|6|out|fieldset|output"},
+		{`const f = $("f1"); f.id = "F1"; const named = [formOf("i2"), formOf("lab")]; f.id = "f1"; named.join()`,
+			"null,null"},
+		{`const i = $("i2"); i.remove(); const loose = owner(i); $("f1").append(i); i.removeAttribute("form");
+			[loose, owner(i)].join()`, "null,f1"},
+		{`const d = document.createElement("form"), c = document.createElement("input"); c.setAttribute("form", "f2");
+			d.append(c); c.form === d`, "true"},
+	} {
+		if got := s.eval(tools + c.script); got != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.script, got, c.want)
+		}
+	}
+	s.quiet()
+}
