@@ -114,6 +114,15 @@ func crypt(t *testing.T) (*httptest.Server, *asked) {
 	})
 }
 
+// resize sizes the window as its system would at a pixel a point: SetSize
+// alone keeps the framebuffer the window was made with, and a page then
+// lays out at a fraction of a device pixel a point, where its line
+// heights floor to that pixel's layout unit.
+func (s *shown) resize(size geom.Vec2) {
+	s.win.SetSize(size)
+	s.win.Sync(size, size, s.win.Focused())
+}
+
 func (s *shown) press(k input.Key) {
 	s.in.SetKey(k, true)
 	s.frame()

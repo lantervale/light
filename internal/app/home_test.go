@@ -306,7 +306,7 @@ func TestTheStartPageIsAColumnInTheMiddleOfAWideWindow(t *testing.T) {
 
 func TestTheStartPageHasTheSizesOfItsMockup(t *testing.T) {
 	s, _ := seeded(t)
-	s.win.SetSize(geom.V2(1200, 920))
+	s.resize(geom.V2(1200, 920))
 	s.frame()
 	s.frame()
 	s.frame()

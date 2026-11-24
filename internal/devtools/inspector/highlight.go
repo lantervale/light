@@ -1,7 +1,7 @@
 package inspector
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/lantervale/ember/geom"
@@ -141,8 +141,8 @@ func (in *Inspector) place() {
 		outer, inner := levels[i], levels[i+1]
 		style := placed(within(outer))
 		if i != edgeContent {
-			style += fmt.Sprintf("; border-width: %.1fpx %.1fpx %.1fpx %.1fpx", max(inner.Y-outer.Y, 0),
-				max(outer.X+outer.W-inner.X-inner.W, 0), max(outer.Y+outer.H-inner.Y-inner.H, 0), max(inner.X-outer.X, 0))
+			style += "; border-width: " + px(max(inner.Y-outer.Y, 0)) + " " + px(max(outer.X+outer.W-inner.X-inner.W, 0)) +
+				" " + px(max(outer.Y+outer.H-inner.Y-inner.H, 0)) + " " + px(max(inner.X-outer.X, 0))
 		}
 		restyle(edge, style)
 	}
@@ -156,7 +156,7 @@ func (in *Inspector) place() {
 			y = min(boxes.Border.Y+boxes.Border.H+4, area.Y+area.H-22)
 		}
 		x := min(max(boxes.Border.X, area.X), area.X+area.W-40)
-		restyle(in.label, fmt.Sprintf("left: %.1fpx; top: %.1fpx", x-stage.X, y-stage.Y))
+		restyle(in.label, "left: "+px(x-stage.X)+"; top: "+px(y-stage.Y))
 	}
 
 	selected, outlined := in.boxesOf(in.element(), area)
@@ -180,9 +180,13 @@ func (in *Inspector) labelled(n *ui.Node, border geom.Rect) string {
 	return cut(b.String(), 60) + "  " + number(border.W) + " × " + number(border.H)
 }
 
+// placed is the style that puts an element at r, in px as exact as the
+// layout's own, whose units are 1/64 of a device pixel.
 func placed(r geom.Rect) string {
-	return fmt.Sprintf("left: %.1fpx; top: %.1fpx; width: %.1fpx; height: %.1fpx", r.X, r.Y, max(r.W, 0), max(r.H, 0))
+	return "left: " + px(r.X) + "; top: " + px(r.Y) + "; width: " + px(max(r.W, 0)) + "; height: " + px(max(r.H, 0))
 }
+
+func px(v float32) string { return strconv.FormatFloat(float64(v), 'f', -1, 32) + "px" }
 
 func restyle(n *ui.Node, style string) {
 	if n.Style() != style {

@@ -3,6 +3,7 @@ package app //nolint:testpackage // the screen is driven by what it holds: its e
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -124,8 +125,10 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 		t.Fatalf("selected text offers %s", got)
 	}
 	s.choose("Copy")
+	// as Chrome's copy writes it (ember's decision 0224): the text in a span of the styles it shows in
 	if got, markup := s.win.Clipboard(), s.win.ClipboardHTML(); got != "lower vaults" ||
-		markup != "lower vaults" {
+		!strings.HasPrefix(markup, `<span style="color: rgb(0, 0, 0); font-family: Go, sans-serif; font-size: 16px;`) ||
+		!strings.HasSuffix(markup, `">lower vaults</span>`) {
 		t.Fatalf("copied %q, as markup %q", got, markup)
 	}
 	s.rightClickAt(s.inPage("vault"))
@@ -140,7 +143,7 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 	s.rightClickAt(s.inPage("vault"))
 	s.choose("Copy")
 	if got, markup := s.win.Clipboard(), s.win.ClipboardHTML(); got != "vault" ||
-		markup != `<a id="vault" href="/vaults">vault</a>` {
+		!strings.HasPrefix(markup, `<a id="vault" href="/vaults" style="`) || !strings.HasSuffix(markup, `">vault</a>`) {
 		t.Fatalf("copied %q in a link, as markup %q", got, markup)
 	}
 }
