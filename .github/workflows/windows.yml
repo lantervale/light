@@ -7,6 +7,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  push:
+    branches: [feat/v8-windows] # TEMP: until the workflow is on main
 
 permissions:
   contents: read
