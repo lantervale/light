@@ -113,3 +113,9 @@ every hour and points the cask at its DMGs and their checksums, so a release nee
 
 A release builds from `go.mod` and `go.sum` alone, without the workspace: `tools/release/preflight.sh` stops it
 early, saying so, while light needs an ember later than the one pinned.
+
+`.github/workflows/bump-ember.yml` keeps that pin on ember's `main`: every hour, and when run by hand, it pins
+ember's `main` once it moved, as it is done by hand (`tools/release/bump-ember.sh`: `go get` that commit, `go mod
+tidy`, then the preflight), and opens the pull request `bump/ember`, or updates the one open, which merges itself
+once its checks are green. `DRY_RUN=1 sh tools/release/bump-ember.sh` says whether the pin is behind, changing
+nothing.

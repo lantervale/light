@@ -1,0 +1,90 @@
+# Keeps light on ember's main: every hour, when ember's main moved past the commit go.mod pins, pins it as it is done
+# by hand (tools/release/bump-ember.sh: go get, go mod tidy, then the release preflight, which builds light from
+# go.mod alone), and opens a pull request, or updates the one open, that merges itself once its checks are green.
+# A pull request opened with the workflow's token starts no workflow by itself, so its Windows check is started
+# here, on its branch.
+name: bump ember
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write # the bump's branch
+  pull-requests: write # its pull request and auto-merge
+  actions: write # the Windows check on its branch
+
+concurrency:
+  group: bump-ember
+  cancel-in-progress: false
+
+env:
+  # What the libc++ headers V8 is built with ask for, as release.yml.
+  CLANG_VERSION: '21'
+  BRANCH: bump/ember
+
+jobs:
+  bump:
+    name: pin ember's main
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is ember's main pinned?
+        id: ember
+        run: |
+          sha=$(git ls-remote https://github.com/lantervale/ember refs/heads/main | cut -f1)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          DRY_RUN=1 sh tools/release/bump-ember.sh "$sha" | tee "$RUNNER_TEMP/dry"
+          if tail -1 "$RUNNER_TEMP/dry" | grep -q '^ember: up to date'; then
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "moved=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.ember.outputs.moved == 'true'
+        with:
+          go-version-file: go.mod
+
+      - name: Linux libraries (GLFW's X11 and GLX headers, ALSA, Vulkan) and Clang for V8
+        if: steps.ember.outputs.moved == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
+            libgl1-mesa-dev libasound2-dev libvulkan-dev
+          curl -fsSL https://apt.llvm.org/llvm.sh -o "$RUNNER_TEMP/llvm.sh"
+          sudo bash "$RUNNER_TEMP/llvm.sh" "$CLANG_VERSION"
+          echo "CC=clang-$CLANG_VERSION" >> "$GITHUB_ENV"
+          echo "CXX=clang++-$CLANG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Pin it, and open or update the pull request
+        if: steps.ember.outputs.moved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.ember.outputs.sha }}
+        run: |
+          sh tools/release/bump-ember.sh "$SHA"
+          if git diff --quiet; then
+            echo "go.mod and go.sum are as they were"
+            exit 0
+          fi
+          short=$(printf %.7s "$SHA")
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$BRANCH"
+          git commit -am "chore: pin ember $short" \
+            -m "ember's main at https://github.com/lantervale/ember/commit/$SHA, pinned by the bump ember workflow."
+          git push --force origin "$BRANCH"
+          title="chore: pin ember $short"
+          body="Pins ember's main, https://github.com/lantervale/ember/commit/$SHA, as done by hand: go get, go mod tidy and tools/release/preflight.sh, which built light from go.mod alone. Opened by the bump ember workflow; it merges itself once its checks are green."
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq length)" = 0 ]; then
+            gh pr create --base main --head "$BRANCH" --title "$title" --body "$body"
+          else
+            gh pr edit "$BRANCH" --title "$title" --body "$body"
+          fi
+          gh workflow run windows.yml --ref "$BRANCH"
+          gh pr merge "$BRANCH" --merge --auto
