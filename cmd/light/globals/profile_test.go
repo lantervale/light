@@ -37,11 +37,13 @@ func TestTheFolderIsTheOneGivenAndNoneForAHiddenOrADrivenRun(t *testing.T) {
 
 func TestTheOptionsOnlyOverrideWhatTheSettingsSay(t *testing.T) {
 	shown(t)
-	t.Setenv("HOME", "/home/someone")
-	usual := filepath.Join("/home/someone", "Downloads")
+	home, kept, elsewhere := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	usual := filepath.Join(home, "Downloads")
 	build := &globals.Build{Name: "light", Version: "1.2.3"}
-	got := (&globals.Profile{Dir: "/kept", Downloads: "/elsewhere"}).Options(build, false)
-	if got.Dir != "/kept" || got.Downloads != "/elsewhere" || got.DefaultDownloads != usual || got.Files == nil ||
+	got := (&globals.Profile{Dir: kept, Downloads: elsewhere}).Options(build, false)
+	if got.Dir != kept || got.Downloads != elsewhere || got.DefaultDownloads != usual || got.Files == nil ||
 		got.Version != "1.2.3" || got.Driven || got.Transport != nil || got.ScriptBudget != 0 {
 		t.Fatalf("the options are %+v", got)
 	}

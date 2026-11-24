@@ -27,18 +27,20 @@ func TestTheModelIsKeptInTheProfileAndALightThatKeepsNothingHasNone(t *testing.T
 }
 
 func TestADevelopersHelperAndFilesAreTakenButNotByARelease(t *testing.T) {
-	t.Setenv(model.EnvHelper, "/built/light-model")
-	t.Setenv(model.EnvDev, "library=/opt/lib;model=/m/q.gguf")
-	profile := &globals.Profile{Dir: "/kept"}
+	root := t.TempDir()
+	helper, library, file := filepath.Join(root, "built", "light-model"), filepath.Join(root, "opt", "lib"),
+		filepath.Join(root, "m", "q.gguf")
+	t.Setenv(model.EnvHelper, helper)
+	t.Setenv(model.EnvDev, "library="+library+";model="+file)
+	profile := &globals.Profile{Dir: filepath.Join(root, "kept")}
 	for _, version := range []string{"dev", "0.2.1-SNAPSHOT-abc1234"} {
 		opts, err := profile.Model(&globals.Build{Version: version}, false)
-		if err != nil || opts.Helper != "/built/light-model" || opts.Dev.Library != "/opt/lib" ||
-			opts.Dev.Model != "/m/q.gguf" {
+		if err != nil || opts.Helper != helper || opts.Dev.Library != library || opts.Dev.Model != file {
 			t.Fatalf("light %s takes %+v (%v)", version, opts, err)
 		}
 	}
 	opts, err := profile.Model(&globals.Build{Version: "0.2.0"}, false)
-	if err != nil || opts.Helper == "/built/light-model" || opts.Dev != (model.Dev{}) || !opts.Release {
+	if err != nil || opts.Helper == helper || opts.Dev != (model.Dev{}) || !opts.Release {
 		t.Fatalf("a released light takes %+v (%v)", opts, err)
 	}
 	t.Setenv(model.EnvDev, "nonsense")
