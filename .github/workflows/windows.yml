@@ -1,0 +1,45 @@
+# Builds light with its JavaScript engine on Windows and runs the tests of the engine and the DOM there: the V8 the
+# binding ships for Windows is built for the MSVC ABI, so light is compiled with LLVM's MSVC-target clang and LLD
+# rather than mingw-w64, which no other system checks. The release builds the same way (release.yml).
+name: windows
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CLANG_VERSION: '21'
+  GOWORK: 'off'
+  CGO_ENABLED: '1'
+  CGO_CXXFLAGS: -nostdinc++
+
+jobs:
+  v8:
+    name: Windows (amd64, v8)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Clang for V8 (MSVC target, LLD)
+        run: sh tools/release/llvm-windows.sh
+
+      - name: Build
+        run: go build -tags v8 -o dist/light.exe ./cmd/light && ls -l dist/light.exe
+
+      - name: Vet
+        run: go vet -tags v8 ./pkg/script/... ./internal/dom/...
+
+      - name: Test the engine and the DOM
+        run: go test -tags v8 ./pkg/script/... ./internal/dom/...

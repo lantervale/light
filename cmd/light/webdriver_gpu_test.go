@@ -1,4 +1,4 @@
-//go:build gpu && v8 && cgo && (darwin || linux) && (amd64 || arm64)
+//go:build gpu && v8 && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
 
 package main
 
