@@ -60,6 +60,7 @@ var (
 	idlMissing    = regexp.MustCompile(`must have|not found|missing|does not have`)
 	cssComputed   = regexp.MustCompile(`^Property (\S+) value '`)
 	cssSet        = regexp.MustCompile(`^e\.style\['([^']+)'\] = .* should (not )?set the property value`)
+	address       = regexp.MustCompile(`https?://[^\s)'"]+`)
 	number        = regexp.MustCompile(`\d+(?:\.\d+)?`)
 	space         = regexp.MustCompile(`\s+`)
 	gotUndefined  = regexp.MustCompile(`got undefined$`)
@@ -142,7 +143,11 @@ func exception(message string) (Cause, bool) {
 		return Cause{}, false
 	}
 	if m := notFunction.FindStringSubmatch(message); m != nil {
-		return Cause{Kind: MissingAPI, Key: "not a function: " + last(m[1])}, true
+		name := last(m[1])
+		if strings.HasPrefix(name, "__wptrunner") {
+			return Cause{Kind: HarnessError, Key: "testdriver: " + name}, true
+		}
+		return Cause{Kind: MissingAPI, Key: "not a function: " + name}, true
 	}
 	if m := notDefined.FindStringSubmatch(message); m != nil {
 		return Cause{Kind: MissingAPI, Key: "not defined: " + last(m[1])}, true
@@ -206,6 +211,10 @@ func assertion(test, name, rest string) Cause {
 		description, outcome = rest[:loc[0]], rest[loc[0]:]
 	}
 	key := name
+	if strings.Contains(description, "<") && strings.Contains(description, ">") {
+		fields := strings.Fields(description)
+		description = "layout " + fields[len(fields)-1]
+	}
 	if d := normalise(description); d != "" {
 		key += ": " + d
 	}
@@ -222,6 +231,7 @@ func assertion(test, name, rest string) Cause {
 }
 
 func normalise(s string) string {
+	s = address.ReplaceAllString(s, "<url>")
 	s = elideQuotes(s)
 	s = number.ReplaceAllString(s, "N")
 	return strings.TrimSpace(space.ReplaceAllString(s, " "))

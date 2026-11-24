@@ -53,6 +53,19 @@ func TestClassifySubtest(t *testing.T) {
 			triage.Cause{Kind: triage.Assertion, Key: `assert_equals: the "…" label`, Scope: "/dom"},
 		},
 		{
+			"/css/css-grid/abspos/a.html", "x",
+			"assert_equals: \n<div class=\"c\">\n  <div data-offset-y=\"45\"></div>\n</div>\noffsetTop expected 45 but got 69",
+			triage.Cause{Kind: triage.Assertion, Key: "assert_equals: layout offsetTop", Scope: "/css/css-grid"},
+		},
+		{
+			"/html/semantics/forms/a.html", "x", "window.__wptrunner_process_next_event is not a function",
+			triage.Cause{Kind: triage.HarnessError, Key: "testdriver: __wptrunner_process_next_event"},
+		},
+		{
+			"/html/a/b.html", "x", `light imports no module of the type "css" (http://web-platform.test:8000/a/b.css)`,
+			triage.Cause{Kind: triage.Exception, Key: `light imports no module of the type "…" (<url>)`, Scope: "/html/a"},
+		},
+		{
 			"/dom/a.html", "x", `assert_true: don't drop 'x' now expected true got false`,
 			triage.Cause{Kind: triage.Assertion, Key: `assert_true: don't drop '…' now`, Scope: "/dom"},
 		},
@@ -255,5 +268,32 @@ func TestMarkdownEscapesPipes(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), `a\|b`) {
 		t.Errorf("pipe not escaped:\n%s", buf.String())
+	}
+}
+
+func TestFix(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		cause triage.Cause
+		want  string
+	}{
+		{
+			triage.Cause{Kind: triage.Assertion, Key: "assert_equals: layout offsetLeft", Scope: "/css/css-grid"},
+			"ember ui layout",
+		},
+		{
+			triage.Cause{Kind: triage.Exception, Key: `"…" is not a valid selector`, Scope: "/html/semantics/forms"},
+			"selector",
+		},
+		{triage.Cause{Kind: triage.Assertion, Key: "assert_equals: href", Scope: "/url"}, "URL parser"},
+		{
+			triage.Cause{Kind: triage.Reftest, Key: "reference mismatch", Scope: "/css/css-flexbox"},
+			"ember ui layout and paint",
+		},
+	}
+	for _, c := range cases {
+		if got := triage.Fix(c.cause); !strings.Contains(got, c.want) {
+			t.Errorf("%+v: fix %q lacks %q", c.cause, got, c.want)
+		}
 	}
 }

@@ -32,6 +32,9 @@ func Fix(c Cause) string {
 	case MissingAPI:
 		return "light DOM/bindings: add the API (internal/dom, internal/dom/js)"
 	case Exception:
+		if strings.Contains(c.Key, "valid selector") {
+			return "light selectors (internal/dom selector.go, selector_css.go)"
+		}
 		return "light DOM/bindings: the API exists but throws or returns the wrong thing"
 	case CSSComputed:
 		return "ember ui CSS: the property's computed value (ui/css), light's getComputedStyle"
@@ -47,8 +50,15 @@ func Fix(c Cause) string {
 	case Crash:
 		return "light or ember stability: read crash.log"
 	case HarnessError:
+		if strings.HasPrefix(c.Key, "testdriver: ") {
+			return "light's wptrunner product: testdriver actions (tools/wpt/wptrunner_light.py, light drive)"
+		}
 		return "light script loading or a harness-level exception (" + owner(c.Scope) + ")"
-	case Assertion, Other:
+	case Assertion:
+		if strings.Contains(c.Key, ": layout ") {
+			return "ember ui layout (" + strings.TrimPrefix(c.Scope, "/css/") + "), as light's offset sizes report it"
+		}
+	case Other:
 	}
 	return owner(c.Scope)
 }
