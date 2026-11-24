@@ -82,6 +82,8 @@ Checksums are signed with cosign and each archive has its SBOM. From source: [Bu
 
 Plenty. Many pages show well, many do not.
 
+- Japanese, Chinese, Korean, Arabic and other scripts the Go fonts lack show as `?` unless the page names a font
+  that has them, installed or its own: light does not yet look for an installed font that does, as a browser does.
 - No canvas, audio or video; no workers, WebSockets or service workers.
 - No shadow DOM or custom elements; CSS is a [subset](https://github.com/lantervale/ember/blob/main/docs/05-ui/10-missing.md).
 - No HTTP cache, no file upload, no HTTP sign-in, no Content Security Policy.
