@@ -22,8 +22,9 @@ if [ -z "$have" ] || [ "$have" -lt "$want" ]; then
 		"https://github.com/llvm/llvm-project/releases/download/llvmorg-$release/LLVM-$release-win64.exe"
 	echo "$sha256  $exe" | sha256sum -c -
 	llvm='C:\LLVM'
-	# NSIS: silent, and /D last and unquoted.
-	"$exe" /S "/D=$llvm"
+	# NSIS: silent, and /D last and unquoted. MSYS_NO_PATHCONV keeps Git
+	# Bash from taking /S for a path.
+	MSYS_NO_PATHCONV=1 timeout 600 "$exe" /S "/D=$llvm"
 fi
 "$(cygpath -u "$llvm")/bin/clang" --version
 # Go splits CC on spaces, so clang is named, not given by its path: its
