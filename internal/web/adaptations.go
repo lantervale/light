@@ -85,8 +85,8 @@ var adaptations = []adaptation{
 	{
 		name: "page fonts",
 		what: "The fonts of the page's @font-face rules are fetched through light's loader when text first " +
-			"needs them (ui.FetchFonts), each asked by its sheet, " + megabytes(maxFont) + " at most; the text " +
-			"shows in the next family until they land.",
+			"needs them (ui.FetchFonts), each asked by its sheet, " + megabytes(maxFont) + " at most; until they " +
+			"land the text is laid out in the next family, hidden as its font-display says.",
 	},
 	{
 		name: "imported sheets",
@@ -98,8 +98,8 @@ var adaptations = []adaptation{
 	{
 		name: "svg pictures",
 		what: "An SVG picture in an img or a url() is drawn, at the size it shows at (light imports " +
-			"ui/svg), its text, clip paths, masks and patterns too; what it uses that ember's svg reader " +
-			"doesn't draw (filters, foreignObject, textPath…) is a warning naming the file.",
+			"ui/svg), its text, clip paths, masks, patterns and filters too; what it uses that ember's svg " +
+			"reader doesn't draw (foreignObject, animation…) is a warning naming the file.",
 	},
 
 	{
@@ -154,9 +154,11 @@ var adaptations = []adaptation{
 	},
 	{
 		name: "forms",
-		what: "A form is sent by a click on its submit button or by Enter in one of its fields, when its method " +
-			"is GET: the tab opens its action, from the page's address, with the names and values of its controls " +
-			"as the query, in the page's encoding. A form with another method is not sent.",
+		what: "A form is sent by a click on its submit button or by Enter in one of its fields, which clicks its " +
+			"first submit button or, without one, sends a form of that field alone, once ui finds its fields " +
+			"valid (unless novalidate): a GET opens its action, from the page's address, with the names and " +
+			"values of its controls as the query, in the page's encoding, a POST carries them. A form of " +
+			"multipart/form-data is not sent.",
 	},
 	{
 		name: "attributes left out",

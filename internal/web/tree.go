@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/identity"
@@ -63,12 +64,17 @@ type Tree struct {
 	// link itself: follow opens or saves what it names.
 	Activate func(a *ui.Node, follow func())
 	// Heard, when set, is told what ui tells a field's handlers: "input",
-	// "change" or "submit", as it happens.
-	Heard func(field *ui.Node, event string)
+	// "change" or "submit", as it happens, with the keys held when a key
+	// made it.
+	Heard func(field *ui.Node, event string, held Keys)
 	// Submit, when set, is asked to send a form whose submitter was
 	// activated in place of the form itself, and Enter in a field of a
 	// form is left to Heard: Send sends it.
 	Submit func(form, submitter *ui.Node)
+	// Break, when set, is told of Enter in a textarea, with the keys held,
+	// before ui breaks its line, and reports whether the page's scripts
+	// kept it from that.
+	Break func(textarea *ui.Node, held Keys) bool
 	// handlers is whether an element of the page has a script's handler.
 	handlers bool
 	// xml is a page read by XML's rules (documents.go), and prefixes
@@ -585,8 +591,11 @@ func (t *Tree) unset(n *html.Node, name string) {
 // and an a that follows its href as it is when clicked.
 func (b *builder) make(tag string) *ui.Node {
 	e := build(tag)
-	if tag == tagInput || tag == tagButton {
-		b.submits(e, tag)
+	switch tag {
+	case tagInput, tagButton:
+		b.submits(e)
+	case tagForm:
+		b.sent(e)
 	}
 	if b.tree == nil {
 		return e
@@ -600,15 +609,36 @@ func (b *builder) make(tag string) *ui.Node {
 	return e
 }
 
+// Keys are the modifier keys held with a key or a click.
+type Keys struct{ Ctrl, Shift, Alt, Meta bool }
+
 // heard has what ui tells field's handlers told to the page's scripts.
+// Enter in a one-line field, or with the shortcut modifier in a
+// textarea, is theirs before ui submits its form, so a keydown they
+// prevent keeps it unsent; Enter alone in a textarea, before ui breaks
+// its line, so a search box sends its form on Enter.
 func (b *builder) heard(field *ui.Node) {
+	ui.OnKey(func(e ui.Event) {
+		if e.Key != input.KeyEnter && e.Key != input.KeyPadEnter || b.tree.Heard == nil {
+			return
+		}
+		held := Keys{Ctrl: e.Control, Shift: e.Shift, Alt: e.Alt, Meta: e.Super}
+		textarea := field.Tag().String() == tagTextarea
+		switch {
+		case submitsImplicitly(field), textarea && e.Command:
+			e.PreventDefault()
+			b.tree.Heard(field, typeSubmit, held)
+		case textarea && b.tree.Break != nil && b.tree.Break(field, held):
+			e.PreventDefault()
+		}
+	}).Apply(field)
 	for _, told := range []struct {
 		event ui.EventType
 		name  string
 	}{{ui.EventInput, atom.Input.String()}, {ui.EventChange, "change"}, {ui.EventSubmit, "submit"}} {
 		ui.On(field, told.event, func() {
 			if b.tree.Heard != nil {
-				b.tree.Heard(field, told.name)
+				b.tree.Heard(field, told.name, Keys{})
 			}
 		})
 	}

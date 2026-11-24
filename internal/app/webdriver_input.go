@@ -13,9 +13,10 @@ import (
 	"github.com/lantervale/light/pkg/webdriver"
 )
 
-// wheelNotch is how many pixels of a scroll action are one notch of
-// the wheel light's window is given.
-const wheelNotch = 40
+// preciseLine is how many pixels of a scroll action are one line of the
+// precise wheel light's window is given, as a trackpad's: it scrolls by
+// them at once, where a notch glides.
+const preciseLine = 10
 
 // devices are the keys and buttons the driver holds down in the
 // window, and where each pointer is in the session's document, in CSS
@@ -420,7 +421,7 @@ func (d *Driver) pointing(f *flow, each webdriver.Step) {
 		in := s.win.Input()
 		in.SetMouse(point)
 		if action.Type == webdriver.ActionScroll {
-			in.AddWheel(geom.V2(float32(-action.DeltaX/wheelNotch), float32(-action.DeltaY/wheelNotch)))
+			in.AddPreciseWheel(geom.V2(float32(action.DeltaX/preciseLine), float32(action.DeltaY/preciseLine)))
 			return nil
 		}
 		d.keys.pointers[each.Source.ID] = at

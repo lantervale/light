@@ -130,10 +130,18 @@ func (r *Runtime) proceed() {
 		r.state = interactive
 		r.enter("ready", "interactive")
 	}
-	if r.state == interactive && r.racing == 0 && (r.host.Loading == nil || !r.host.Loading()) {
+	if r.state == interactive && r.racing == 0 && (r.host.Loading == nil || !r.host.Loading()) &&
+		!r.picturesLoading() {
 		r.state = complete
 		r.enter("ready", "complete")
 	}
+}
+
+// picturesLoading lays the page out, which asks for the pictures it
+// shows, and reports whether one is still to show.
+func (r *Runtime) picturesLoading() bool {
+	r.layout()
+	return r.page.PicturesLoading()
 }
 
 // load fetches what a module script element runs, its own text or what

@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v1.17.0
 	github.com/andybalholm/brotli v1.3.0
 	github.com/gost-dom/v8go v0.0.0-20261122151726-225b867b1836
-	github.com/lantervale/ember v0.0.0-20261123022416-cb6210ad7d9e
+	github.com/lantervale/ember v0.0.0-20261124193741-778b8c724d15
 	golang.org/x/image v0.29.0
 	golang.org/x/net v0.61.0
 )

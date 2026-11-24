@@ -82,30 +82,42 @@ func encoderOf(body []byte, contentType string) func(text string) string {
 	}
 }
 
-// submits makes control, an input or a button, send its form: a click
-// on one that submits, and Enter in a field. The page's scripts, when
-// they run, are asked first (Tree.Submit) and hear the field's Enter
-// themselves (Tree.Heard).
-func (b *builder) submits(control *ui.Node, tag string) {
+// submits makes control, a button or an input that submits, the
+// submitter of its form when clicked, for ui submits the form next and
+// sent sends it. The page's scripts, when they run, are asked in its place
+// (Tree.Submit) and hear Enter in a field themselves (Tree.Heard).
+func (b *builder) submits(control *ui.Node) {
 	ui.OnClick(func() {
 		form := SubmittedBy(control)
 		switch {
 		case form == nil:
-		case b.tree != nil && b.tree.Submit != nil:
+		case b.scripted():
 			b.tree.Submit(form, control)
 		default:
-			b.sendOrSay(form, control)
+			b.pressed = control
 		}
 	}).Apply(control)
-	if tag != tagInput {
-		return
-	}
-	ui.On(control, ui.EventSubmit, func() {
-		if form := FormOf(control); form != nil && (b.tree == nil || b.tree.Submit == nil) {
-			b.sendOrSay(form, Submitter(form))
-		}
-	})
 }
+
+// sent has form sent once ui submitted it: by a click on its submit
+// button, Enter in its field, the button or the form alone as HTML's
+// implicit submission has it, once its fields are valid.
+func (b *builder) sent(form *ui.Node) {
+	ui.OnSubmit(func() {
+		submitter := b.pressed
+		b.pressed = nil
+		if b.scripted() {
+			return
+		}
+		if submitter != nil && FormOf(submitter) != form {
+			submitter = nil
+		}
+		b.sendOrSay(form, submitter)
+	}).Apply(form)
+}
+
+// scripted reports whether the page's scripts send its forms.
+func (b *builder) scripted() bool { return b.tree != nil && b.tree.Submit != nil }
 
 // sendOrSay sends form, and has the page's links told of one that is
 // not sent.
@@ -168,11 +180,25 @@ func SubmittedBy(control *ui.Node) *ui.Node {
 	_, disabled := control.Attr("disabled")
 	switch tag := control.Tag().String(); {
 	case disabled:
-	case tag == tagButton && (kind == "" || kind == typeSubmit),
+	case tag == tagButton && kind != tagButton && kind != "reset",
 		tag == tagInput && (kind == typeSubmit || kind == "image"):
 		return FormOf(control)
 	}
 	return nil
+}
+
+// submitsImplicitly reports whether Enter in field submits its form, as
+// HTML's implicit submission has a one-line text field do.
+func submitsImplicitly(field *ui.Node) bool {
+	if field.Tag().String() != tagInput {
+		return false
+	}
+	switch kindOf(field) {
+	case "", "text", "search", "url", "tel", "email", "password", "date", "month", "week", "time",
+		"datetime-local", "number":
+		return true
+	}
+	return false
 }
 
 func kindOf(control *ui.Node) string {

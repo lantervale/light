@@ -793,11 +793,13 @@ not given one keeps them in memory.
   family of its list.
 - **Fonts**: a page's `@font-face` fonts are fetched when its text first needs them, TrueType, OpenType, WOFF and
   WOFF2, and each is a row of the Network panel asked by its stylesheet, sent with the sheet's address as its
-  `Referer` (the site alone to another site) and the cookies of its address. Until one lands the text shows in the
-  next family, then the page is laid out again: `font-display` is always `swap`, and an icon shows as nothing
-  meanwhile. A font is 16 MB at most and has 30 s to come; one that fails is a warning of the page. A variable font
-  shows its default weight, no bold or italic is made up from a regular face, colour fonts and collections are
-  not read, and an icon font that writes its icons as words (ligatures, as Material Icons) shows the words. A font
+  `Referer` (the site alone to another site) and the cookies of its address. Until one lands the text is laid out
+  in the next family and hidden as its `font-display` says, as in Chrome (up to 3 s for `auto` and `block`, never
+  for `swap`), then the page is laid out again; an icon shows as nothing meanwhile. A font is 16 MB at most and has
+  30 s to come; one that fails is a warning of the page. A variable font shows the weight and width its text asks
+  for, a bold or italic the family lacks is made up from the face it has, the font's OpenType features and
+  ligatures apply (an icon font that writes its icons as words, as Material Icons, shows the icons), and colour
+  fonts and collections are not read. A font
   of another site is used whatever its `Access-Control-Allow-Origin`, where a browser refuses it without one.
   A sheet an `@import` names is fetched as the page shows, asked by the sheet that imports it, and taken when it
   is served as `text/css` or as no type; the page shows without it until it lands. light keeps its own
@@ -942,8 +944,8 @@ What does not:
   shadow trees, custom elements, canvas contexts, WebGL, media: absent, or answering with
   nothing. An `svg` is in the tree and scripts change it:
   it is drawn as one picture, again the frame after a change, with `currentColor` the colour of its text, but the
-  page's rules do not reach the shapes inside it (`svg path { fill: … }`), and filters, `foreignObject` and
-  `textPath` are not drawn; scripts run once the whole page is read, so `document.write` writes nothing.
+  page's rules do not reach the shapes inside it (`svg path { fill: … }`), and `foreignObject` and animations
+  are not drawn; scripts run once the whole page is read, so `document.write` writes nothing.
 - **Requests**: an answer's bytes reach a script as they came (`arrayBuffer()`, `bytes()`, `blob()`, an
   `XMLHttpRequest` of type `arraybuffer` or `blob`), and are decoded where it asks for text: as UTF-8 by `text()`
   and `json()` whatever the answer says of its encoding, by the answer's charset (or `overrideMimeType`'s) for
@@ -1121,9 +1123,12 @@ What does not:
   - Not there: IndexedDB in workers (light has none), `IDBObjectStore.getAllRecords()` and the options form of
     `getAll()` (later drafts), `storage.getDirectory()`. Of the `IndexedDB/` directory of the web platform tests,
     172 of the 229 tests in a window pass ([the result](#the-result-of-20-november-2026)).
-- **Scrolling** from a script (`scrollTo`, `scrollX`…), `blur()`, `IntersectionObserver` and `ResizeObserver`
+- **Scrolling** from a script (`scrollTo`, `scrollX`…), `IntersectionObserver` and `ResizeObserver`
   (each tells once, as if everything were in view), and the observers of performance.
-- **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys.
+- **Keys**: in a focused text field, scripts hear typed characters and Enter, not the other keys. A key event
+  says the modifiers held with it (`shiftKey`, `altKey`, `ctrlKey`, `metaKey`, `getModifierState()`), so a page
+  that sends on Enter lets Shift+Enter break a textarea's line. Cmd+Enter (Ctrl+Enter off macOS) in a textarea
+  submits its form, as ember's field does, unless a script prevents its keydown.
 - A script that runs long is not stopped in a person's light, which [asks](#a-page-that-is-slow); in a hidden or
   a driven run it is stopped after 2 seconds (`--script-budget` of `light drive`) and reported in the Console. A
   page's timers get 8 ms a frame; what is left waits for the next. A page holds 500,000 nodes at most.
@@ -1188,7 +1193,7 @@ actions and screenshots work.
 | Element Clear, Element Send Keys | Yes, through the window's keyboard, so the page hears its events. Clear selects the field's text and deletes it. No file upload. |
 | Execute Script, Execute Async Script | With the engine. Arguments and results as the standard copies them (elements as references, collections as lists, `undefined` as null), a promise returned awaited, a throw or a rejection `javascript error` with its message and stack, `script timeout` after the session's. A run without a pause is also stopped at the script budget (2 seconds, or `--script-budget`). An async script goes on across frames of light, not across a navigation of its own document. |
 | Get All Cookies, Get Named Cookie, Add Cookie, Delete Cookie, Delete All Cookies | Yes, over the profile's one jar, for the address of the session's page. A cookie the jar's rules refuse is `unable to set cookie`. |
-| Perform Actions, Release Actions | `key`, `pointer` (mouse; move to the view, the pointer or an element, down, up) and `pause`, tick by tick through the window's input; `wheel` scrolls by notches of 40 pixels, approximately. Touch and pen pointers act as the mouse. A move is one jump, whatever its duration. |
+| Perform Actions, Release Actions | `key`, `pointer` (mouse; move to the view, the pointer or an element, down, up) and `pause`, tick by tick through the window's input; `wheel` scrolls by its pixels at once, as a trackpad does. Touch and pen pointers act as the mouse. A move is one jump, whatever its duration. |
 | Dismiss Alert, Accept Alert, Get and Send Alert Text | Yes, with the engine, over the dialog the session's window shows (see "What a page asks"); `no such alert` with none, `element not interactable` for a text sent to an `alert` or a `confirm`. A script run by Execute Script that opens one is answered null at once and goes on when the prompt is answered. Any other command that meets an open prompt handles it as `unhandledPromptBehavior` says (`dismiss and notify` by default, `dismiss`, `accept`, `accept and notify`, `ignore`), failing with `unexpected alert open` and the prompt's text in `data.text` where it notifies; Status, the session, timeouts and window commands leave it alone. |
 | Take Screenshot | The page's view, without light's header, as a PNG of one pixel a CSS pixel: an 800 by 600 view gives 800 by 600 pixels on a display of any scale, each the mean of the device pixels it covers, which is what reference tests compare. Taken from the window's own next frame, hidden or not. Not on light's own pages. |
 | Take Element Screenshot | The part of the element in the view, the same way. |

@@ -418,8 +418,11 @@ func (s *Screen) arrived(tab *tabs.Tab, strategy string) (bool, error) {
 		return !onTheWeb(address), nil
 	case page.Err != nil:
 		return true, webdriver.Errorf(webdriver.UnknownError, address+" was not reached: "+page.Err.Error())
-	case page.Doc == nil || !s.scripting() || !page.Scripted():
+	case page.Doc == nil:
 		return true, nil
+	case !s.scripting() || !page.Scripted():
+		_, laid := page.Doc.BoxOf(page.Doc.HTML())
+		return laid && !page.PicturesLoading(), nil
 	}
 	live := session.scripts
 	if live == nil || live.page != page || live.rt.Closed() {

@@ -19,12 +19,13 @@ import (
 // a request of the developer tools and a text field, else a link, a
 // picture and selected text in any combination, else the page.
 type target struct {
-	tab       int
-	request   *netlog.Row
-	field     *ui.Node
-	link      string
-	picture   string
-	selection string
+	tab     int
+	request *netlog.Row
+	field   *ui.Node
+	link    string
+	picture string
+	// selection is the text selected, markup the same as HTML.
+	selection, markup string
 	// archive is whether the click is on what saves the requests of the
 	// developer tools: its button, or their table.
 	archive bool
@@ -55,16 +56,17 @@ func (s *Screen) closeMenuWhenMoved() {
 // pointer, in the innermost of its own frames: the Inspector is shown
 // the page's iframe for what is in one.
 func (s *Screen) targetOf(n *ui.Node) target {
-	t := target{tab: -1, selection: s.doc.Selection().Text}
+	t := target{tab: -1, selection: s.doc.Selection().Text, markup: s.doc.SelectionHTML()}
 	base := s.browser.Tab().Current()
 	var frame *ui.Node
 	if page := s.session().pages[base]; n == s.host && page != nil && page.Doc != nil {
 		at, _ := s.doc.FramePoint(s.host, s.win.Input().Mouse())
 		var doc *ui.Document
 		n, doc, base, frame = s.innermost(page, at)
-		if t.selection = doc.Selection().Text; t.selection == "" {
-			t.selection = page.Doc.Selection().Text
+		if doc.Selection().Text == "" {
+			doc = page.Doc
 		}
+		t.selection, t.markup = doc.Selection().Text, doc.SelectionHTML()
 	}
 	if t.node = s.ofPage(n); t.node == nil && frame != nil {
 		t.node = frame
@@ -134,7 +136,7 @@ func (s *Screen) entries(t target) []menu.Entry {
 	}
 	if t.selection != "" {
 		groups = append(groups, []menu.Entry{
-			{Label: "Copy", Do: func() { s.win.SetClipboard(t.selection) }},
+			{Label: "Copy", Do: func() { s.win.SetClipboardHTML(t.markup, t.selection) }},
 			{Label: searchLabel(s.engine().Name, t.selection),
 				Do: func() { s.openBeside(s.search(words(t.selection)), ahead) }},
 		})

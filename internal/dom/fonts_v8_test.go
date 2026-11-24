@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/image/font/gofont/gobold"
 )
@@ -63,4 +64,28 @@ func TestDocumentFontsTellsScriptsOfThePagesFontsAsTheyLand(t *testing.T) {
 		t.Errorf("ready answered within the script: %s", got)
 	}
 	s.frames("ready of a page whose fonts are there", func() bool { return s.eval(`later`) == "yes" })
+}
+
+func TestFontsReadyAskedWhileAFontCameBetweenTwoFramesIsAnswered(t *testing.T) {
+	release, came := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		defer close(came)
+		<-release
+		_, _ = w.Write(gobold.TTF)
+	}))
+	t.Cleanup(srv.Close)
+	s := run(t, `<style>@font-face { font-family: Heavy; src: url(`+srv.URL+`/heavy.ttf); }
+		p { font-family: Heavy; }</style><p>text</p>`)
+	s.layout()
+	asked := `window.ready = "no"; document.fonts.ready.then(() => { ready = "yes" }); document.fonts.status`
+	if got := s.eval(asked); got != "loading" {
+		t.Fatalf("the font is %s when ready is asked", got)
+	}
+	close(release)
+	<-came
+	for end := time.Now().Add(time.Second); s.eval(`document.fonts.status`) != "loaded" && time.Now().Before(end); {
+		time.Sleep(time.Millisecond)
+		s.layout()
+	}
+	s.frames("ready, the font landed before a frame saw it on its way", func() bool { return s.eval(`ready`) == "yes" })
 }

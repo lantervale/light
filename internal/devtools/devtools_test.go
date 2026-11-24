@@ -26,6 +26,10 @@ import (
 	"github.com/lantervale/light/pkg/netlog"
 )
 
+// glide is how many frames a scroll by the wheel takes to land, as
+// Chrome glides it: 12 at most, and one to start.
+const glide = 14
+
 type shown struct {
 	t     *testing.T
 	doc   *ui.Document
@@ -777,8 +781,9 @@ func TestTheConsoleFollowsItsLastLineUnlessScrolledUp(t *testing.T) {
 	s.in.SetMouse(view.Center())
 	s.frame()
 	s.in.AddWheel(geom.Vec2{Y: -100})
-	s.frame()
-	s.frame()
+	for range glide {
+		s.frame()
+	}
 	if !seen(0) {
 		t.Fatal("the wheel did not scroll the console up")
 	}

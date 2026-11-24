@@ -126,6 +126,7 @@ func TestInspectElementOfTheMenuSelectsWhatIsUnderIt(t *testing.T) {
 	srv, _ := crypt(t)
 	s := show(t)
 	doc := s.visit(srv.URL + "/")
+	s.until("the door is drawn", func() bool { return box(t, doc, "door").W == 30 })
 	s.rightClickAt(s.inPage("door"))
 	s.choose("Inspect element")
 	for range 3 {

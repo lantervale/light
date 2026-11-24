@@ -71,11 +71,11 @@ func TestAFormIsSentUnlessAScriptHoldsIt(t *testing.T) {
 			s.rt.Frame()
 		}, []string{to + "btnG=Search"}, nil},
 		{"Enter in its field", `addEventListener("submit", (e) => seen.push(e.submitter.id))`, func(s *scripted) {
-			s.page.Tree.Heard(s.byID("q"), "submit")
+			s.page.Tree.Heard(s.byID("q"), "submit", dom.Keys{})
 			s.rt.Frame()
 		}, []string{to + "btnG=Search"}, nil},
 		{"Enter a script holds", `form.onsubmit = () => false`, func(s *scripted) {
-			s.page.Tree.Heard(s.byID("q"), "submit")
+			s.page.Tree.Heard(s.byID("q"), "submit", dom.Keys{})
 			s.rt.Frame()
 		}, nil, nil},
 		{"a script's submit", `form.onsubmit = () => seen.push("told"); form.submit()`, func(*scripted) {}, nil,

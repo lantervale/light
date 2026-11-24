@@ -182,6 +182,8 @@ func svgPicturesAreDrawn(t *testing.T) {
 		label = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="12"><text y="10">Abc</text></svg>`
 		blur  = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><filter id="f"><feGaussianBlur ` +
 			`stdDeviation="1"/></filter><rect width="8" height="8" filter="url(#f)"/></svg>`
+		foreign = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><foreignObject width="8" ` +
+			`height="8"><p xmlns="http://www.w3.org/1999/xhtml">a</p></foreignObject></svg>`
 	)
 	seen := &asked{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +191,7 @@ func svgPicturesAreDrawn(t *testing.T) {
 		seen.paths = append(seen.paths, r.URL.Path)
 		seen.Unlock()
 		files := map[string]string{"/art/star.svg": star, "/icon": star, "/wide": wide, "/label.svg": label,
-			"/blur.svg": blur}
+			"/blur.svg": blur, "/foreign.svg": foreign}
 		svg := files[r.URL.Path]
 		switch {
 		case svg != "":
@@ -200,7 +202,7 @@ func svgPicturesAreDrawn(t *testing.T) {
 			_, _ = w.Write([]byte(`<style>body { margin: 0; width: 200px; }
 				#panel { height: 40px; background: url(art/star.svg) no-repeat left bottom; background-size: 101%; }</style>
 				<div id="panel"></div><div><img id="icon" src="/icon"></div><div><img id="wide" src="/wide"></div>
-				<img id="label" src="label.svg"><img id="blur" src="blur.svg">`))
+				<img id="label" src="label.svg"><img id="blur" src="blur.svg"><img src="foreign.svg">`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -217,9 +219,9 @@ func svgPicturesAreDrawn(t *testing.T) {
 		return r.W == 200 && r.H == 50
 	})
 	s.until("the background was asked for", func() bool { return seen.has("/art/star.svg") })
-	s.until("the filter of blur.svg is reported", func() bool {
+	s.until("the foreignObject of foreign.svg is reported", func() bool {
 		return slices.ContainsFunc(doc.Warnings(), func(err error) bool {
-			return strings.Contains(err.Error(), "blur.svg: image/svg+xml is not drawn: filter")
+			return strings.Contains(err.Error(), "foreign.svg: image/svg+xml is not drawn: foreignObject")
 		})
 	})
 	if r := box(t, doc, "label"); r.W != 40 || r.H != 12 {
@@ -229,7 +231,7 @@ func svgPicturesAreDrawn(t *testing.T) {
 		s.frame()
 	}
 	for _, err := range doc.Warnings() {
-		if strings.Contains(err.Error(), "image ") && !strings.Contains(err.Error(), "blur.svg") ||
+		if strings.Contains(err.Error(), "image ") && !strings.Contains(err.Error(), "foreign.svg") ||
 			strings.Contains(err.Error(), "label.svg") {
 			t.Errorf("a picture warns: %v", err)
 		}
@@ -260,8 +262,9 @@ func theViewportScrolls(t *testing.T) {
 	s.in.SetMouse(geom.V2(host.X+host.W/2, host.Y+host.H/2))
 	s.frame()
 	s.in.AddWheel(geom.V2(0, 2))
-	s.frame()
-	s.frame()
+	for range glide {
+		s.frame()
+	}
 	first := -doc.HTML().Box().Y
 	if first <= 0 {
 		t.Fatal("the wheel over the page doesn't scroll it")
@@ -273,7 +276,9 @@ func theViewportScrolls(t *testing.T) {
 		s.in.AddWheel(geom.V2(0, 10))
 		s.frame()
 	}
-	s.frame()
+	for range glide {
+		s.frame()
+	}
 	if end := doc.HTML().Box(); end.Y+end.H != host.H {
 		t.Errorf("at its end the page's box is %v in a view %v high: its bottom, the picture's, isn't the view's",
 			end, host.H)

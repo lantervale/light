@@ -471,16 +471,21 @@ func (r *Runtime) computed(n *ui.Node, a arguments) (any, error) {
 			return used, nil
 		}
 	}
-	return resolved(name, value), nil
+	return resolved(name, value, r.fontSizes(n, name)), nil
 }
 
-// reflow has ui style and lay the page out at once when it has not
-// styled n, an element of the page a script made or moved since the
-// last frame: a script reads the style of what it just put there.
+// reflow has ui style and lay the page out at once, as a browser does
+// when a script reads a size: ui keeps the boxes when nothing changed
+// since the last layout, and lays out what a script made, moved or
+// restyled since.
 func (r *Runtime) reflow(n *ui.Node) {
-	if _, styled := r.doc.ComputedValue(n, "display"); styled || !r.connected(n) {
-		return
+	if r.connected(n) {
+		r.layout()
 	}
+}
+
+// layout has ui style and lay the page out in its viewport.
+func (r *Runtime) layout() {
 	var size geom.Vec2
 	if r.host.Viewport != nil {
 		size.X, size.Y = r.host.Viewport()
@@ -516,19 +521,45 @@ func (r *Runtime) computedStyle(n *ui.Node, _ arguments) (any, error) {
 		return nothing()
 	}
 	out := make([][2]string, len(all))
+	own, inherited := r.fontSizes(n, ""), r.fontSizes(n, "font-size")
 	for i, p := range all {
-		out[i] = [2]string{p.Name, resolved(p.Name, p.Value)}
+		fonts := own
+		if p.Name == "font-size" {
+			fonts = inherited
+		}
+		out[i] = [2]string{p.Name, resolved(p.Name, p.Value, fonts)}
 	}
 	return out, nil
+}
+
+// fontSizes are what em and rem stand for in n's property name: the
+// font size of n, of its parent for font-size itself, and of the root.
+func (r *Runtime) fontSizes(n *ui.Node, name string) fontSizes {
+	px := func(n *ui.Node) float64 {
+		if n == nil {
+			return 0
+		}
+		size, _ := r.doc.ComputedValue(n, "font-size")
+		v, _ := strconv.ParseFloat(strings.TrimSuffix(size, "px"), 64)
+		return v
+	}
+	of := n
+	if name == "font-size" {
+		of = n.Parent()
+	}
+	return fontSizes{em: px(of), rem: px(r.doc.HTML())}
 }
 
 var hexColour = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
 
 // resolved is a computed value as a browser's getComputedStyle writes
-// it: a colour given in hexadecimal as rgb() or rgba(), but a custom
-// property's, which stays as written.
-func resolved(name, value string) string {
-	if strings.HasPrefix(name, "--") || !hexColour.MatchString(value) {
+// it: its math functions worked out and a colour given in hexadecimal
+// as rgb() or rgba(), but a custom property's, which stays as written.
+func resolved(name, value string, fonts fontSizes) string {
+	if strings.HasPrefix(name, "--") {
+		return value
+	}
+	if value = worked(name, value, fonts); !hexColour.MatchString(value) {
 		return value
 	}
 	digits := value[1:]
