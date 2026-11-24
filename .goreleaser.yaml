@@ -72,8 +72,10 @@ builds:
       - CGO_CXXFLAGS=-nostdinc++
       - CC=clang -fuse-ld=lld
       - CXX=clang++ -fuse-ld=lld
-      # GLFW's cgo flags put its copy of mingw-w64's XInput header first, which names mingw's WINBOOL.
-      - CGO_CFLAGS=-O2 -g -DWINBOOL=BOOL
+      # GLFW's cgo flags put its copy of mingw-w64's XInput header first, which names mingw's WINBOOL, and it leaves
+      # out the system libraries mingw-w64 links by default (tools/release/llvm-windows.sh says the same).
+      - CGO_CFLAGS=-O2 -g -DWINBOOL=BOOL -D_CRT_SECURE_NO_WARNINGS
+      - CGO_LDFLAGS=-O2 -g -luser32 -lshell32 -ladvapi32
     flags: *flags
     mod_timestamp: *mod_timestamp
     ldflags:

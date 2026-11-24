@@ -20,9 +20,13 @@ fi
 # folder comes first on PATH.
 echo "$llvm" >> "$GITHUB_PATH"
 # GLFW's cgo flags put its copy of mingw-w64's DirectInput and XInput
-# headers before the Windows SDK's, and its xinput.h names mingw's WINBOOL.
+# headers before the Windows SDK's, and its xinput.h names mingw's WINBOOL;
+# the Microsoft C runtime's warnings on strcpy and the like are its own. The
+# system libraries mingw-w64 links by default and GLFW therefore does not
+# name are named here.
 {
 	echo "CC=clang -fuse-ld=lld"
 	echo "CXX=clang++ -fuse-ld=lld"
-	echo "CGO_CFLAGS=-O2 -g -DWINBOOL=BOOL"
+	echo "CGO_CFLAGS=-O2 -g -DWINBOOL=BOOL -D_CRT_SECURE_NO_WARNINGS"
+	echo "CGO_LDFLAGS=-O2 -g -luser32 -lshell32 -ladvapi32"
 } >> "$GITHUB_ENV"
