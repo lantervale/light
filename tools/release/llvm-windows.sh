@@ -4,21 +4,31 @@
 # Windows is built for the MSVC ABI, so light is not built with mingw-w64
 # there. The runner's Visual Studio Build Tools give the Microsoft C runtime
 # and the Windows SDK. CLANG_VERSION is the oldest major version taken (what
-# V8's libc++ headers ask for); an older LLVM is replaced with Chocolatey's.
+# V8's libc++ headers ask for): the runner's LLVM when it is that recent,
+# else LLVM's own installer of the release below, checked, in a folder of its
+# own.
 set -eu
 want=${CLANG_VERSION:?}
-llvm='C:\Program Files\LLVM\bin'
-bin=$(cygpath -u "$llvm")
-have=$("$bin/clang" -dumpversion 2> /dev/null | cut -d. -f1 || true)
+release=21.1.8
+sha256=7a5386c26497db1691f320121e5b113364dd0274b98e55f15f4dbc00c0450113
+
+llvm='C:\Program Files\LLVM'
+have=$("$(cygpath -u "$llvm")/bin/clang" -dumpversion 2> /dev/null | cut -d. -f1 || true)
 if [ -z "$have" ] || [ "$have" -lt "$want" ]; then
-	echo "llvm: clang ${have:-none} at $llvm, installing LLVM $want"
-	v=$(choco search llvm --exact --all-versions --limit-output | awk -F'|' -v w="$want" 'index($2, w ".") == 1 { print $2 }' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
-	choco install llvm --version "${v:?no LLVM $want on Chocolatey}" --allow-downgrade --force -y --no-progress
+	[ "${release%%.*}" -ge "$want" ] || { echo "llvm: $release is older than $want: update this script" >&2; exit 1; }
+	echo "llvm: clang ${have:-none} in $llvm, installing LLVM $release"
+	exe=$RUNNER_TEMP/LLVM-$release-win64.exe
+	curl -fsSL --retry 5 --retry-all-errors -o "$exe" \
+		"https://github.com/llvm/llvm-project/releases/download/llvmorg-$release/LLVM-$release-win64.exe"
+	echo "$sha256  $exe" | sha256sum -c -
+	llvm='C:\LLVM'
+	# NSIS: silent, and /D last and unquoted.
+	"$exe" /S "/D=$llvm"
 fi
-"$bin/clang" --version
-# Go splits CC on spaces, so clang is named, not given by its path: LLVM's
+"$(cygpath -u "$llvm")/bin/clang" --version
+# Go splits CC on spaces, so clang is named, not given by its path: its
 # folder comes first on PATH.
-echo "$llvm" >> "$GITHUB_PATH"
+echo "$llvm\\bin" >> "$GITHUB_PATH"
 # GLFW's cgo flags put its copy of mingw-w64's DirectInput and XInput
 # headers before the Windows SDK's, and its xinput.h names mingw's WINBOOL;
 # the Microsoft C runtime's warnings on strcpy and the like are its own. The
