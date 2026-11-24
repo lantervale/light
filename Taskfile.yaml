@@ -14,8 +14,9 @@ dotenv:
   - PROJECT
   - .env.default
 
-# The v8 tag builds light with its JavaScript engine (V8, through cgo: macOS and Linux, amd64 and arm64). V8's
-# headers need its own libc++, hence CGO_CXXFLAGS. Without the tag light builds everywhere and runs no script.
+# The v8 tag builds light with its JavaScript engine (V8, through cgo: macOS and Linux, amd64 and arm64, and Windows
+# amd64 with LLVM's clang, see docs/development.md). V8's headers need its own libc++, hence CGO_CXXFLAGS. Without
+# the tag light builds everywhere and runs no script.
 env:
   CGO_CXXFLAGS: -nostdinc++
 

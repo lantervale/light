@@ -2,8 +2,8 @@
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
-Gecko in it. Scripts run in V8 on macOS and Linux; the Windows build runs no script. It is a demo of how far
-ember's UI goes on real pages, not a browser to live in.
+Gecko in it. Scripts run in V8 on macOS, Linux and Windows. It is a demo of how far ember's UI goes on real pages,
+not a browser to live in.
 
 ## What is new
 
@@ -33,7 +33,7 @@ ember's UI goes on real pages, not a browser to live in.
 | macOS 13 or later, Intel | `light_<version>_darwin_amd64.dmg` | yes (V8) |
 | Linux, x86-64 (glibc 2.35 or later) | `light_<version>_linux_amd64.tar.gz` | yes (V8) |
 | Linux, arm64 (glibc 2.35 or later) | `light_<version>_linux_arm64.tar.gz` | yes (V8) |
-| Windows 10 or later, x86-64 | `light_<version>_windows_amd64.zip` | **no**: pages show without their scripts |
+| Windows 10 or later, x86-64 | `light_<version>_windows_amd64.zip` | yes (V8) |
 
 On macOS, Homebrew installs it too: `brew install --cask lantervale/tap/light`.
 
@@ -75,7 +75,6 @@ runs them on your machine only.
 
 ## Known limits
 
-- Windows runs no script, so pages that build themselves in JavaScript show little there.
 - No notarization on macOS, no installer or package on Linux or Windows, no automatic update.
 - No cache, no sign-in prompt (401, 407), no file upload or `multipart/form-data` form, no AVIF, and
   `window.open` opens nothing.
