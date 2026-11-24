@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/css"
 
 	"github.com/lantervale/light/internal/web"
 )
@@ -515,8 +517,28 @@ func (r *Runtime) matcher(scope *html.Node) matcher {
 		target:   r.targeted,
 		document: func(n *html.Node) bool { return n == r.tree.Root() || r.docs[n] != nil },
 		scope:    scope,
+		shown: func(n *html.Node, pseudo string) bool {
+			u := r.tree.Node(n)
+			return u != nil && shownSelectors()[pseudo].Matches(u)
+		},
 	}
 }
+
+// shownSelectors are ember's selectors of the pseudo-classes it keeps,
+// by name.
+//
+//nolint:gochecknoglobals // read once
+var shownSelectors = sync.OnceValue(func() map[string]css.Selector {
+	all := map[string]css.Selector{}
+	for _, pseudo := range append([]string{opened, "user-valid", "user-invalid"}, shownStates...) {
+		parsed, err := css.ParseSelectors(":" + pseudo)
+		if err != nil || len(parsed) != 1 {
+			panic("ember reads no :" + pseudo)
+		}
+		all[pseudo] = parsed[0]
+	}
+	return all
+})
 
 // query finds the elements under a node that match a selector, in the
 // whole page for no node: the first, or all of them.

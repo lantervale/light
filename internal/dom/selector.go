@@ -31,6 +31,10 @@ type matcher struct {
 	document func(*html.Node) bool
 	// scope is the element :scope stands for.
 	scope *html.Node
+	// shown reports whether the page as shown puts an element in a
+	// pseudo-class only the pointer, the keys and the pickers set
+	// (shownStates).
+	shown func(n *html.Node, pseudo string) bool
 }
 
 // selectors is a selector list: an element matches when one of them
@@ -575,12 +579,21 @@ func states() map[string]func(*html.Node, matcher) bool {
 		"root": func(n *html.Node, m matcher) bool {
 			return n.Parent != nil && n.Parent.Type == html.DocumentNode && (m.document == nil || m.document(n.Parent))
 		},
-		"scope":  func(n *html.Node, m matcher) bool { return n == m.scope },
-		"focus":  func(n *html.Node, m matcher) bool { return m.focused != nil && m.focused(n) },
-		"target": func(n *html.Node, m matcher) bool { return m.target != nil && m.target(n) },
-		"hover":  never, "active": never, "visited": never, "focus-visible": never,
-		"focus-within": never,
+		"scope":   func(n *html.Node, m matcher) bool { return n == m.scope },
+		"focus":   func(n *html.Node, m matcher) bool { return m.focused != nil && m.focused(n) },
+		"target":  func(n *html.Node, m matcher) bool { return m.target != nil && m.target(n) },
+		"visited": never, "autofill": never, "-webkit-autofill": never,
+	}
+	for _, pseudo := range shownStates {
+		all[pseudo] = func(n *html.Node, m matcher) bool { return m.shown != nil && m.shown(n, pseudo) }
 	}
 	maps.Copy(all, controlStates())
 	return all
 }
+
+// shownStates are the pseudo-classes of what a person does to the page
+// as shown: where the pointer is, what a press holds, what the keys
+// focused, the pickers and popovers open.
+//
+//nolint:gochecknoglobals // a table
+var shownStates = []string{"hover", "active", "focus-visible", "focus-within", "popover-open", "modal"}

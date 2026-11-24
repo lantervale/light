@@ -263,5 +263,20 @@ func controlStates() map[string]func(*html.Node, matcher) bool {
 		"out-of-range": func(n *html.Node, m matcher) bool { return m.said.outOfRange[n] },
 		"defined":      func(n *html.Node, _ matcher) bool { return n.Namespace != "" || !strings.Contains(n.Data, "-") },
 		"link":         link, "any-link": link,
+		opened: func(n *html.Node, m matcher) bool {
+			if n.Data == "details" || n.Data == "dialog" {
+				return has(n, opened)
+			}
+			return m.shown != nil && m.shown(n, opened)
+		},
+		"user-valid":   func(n *html.Node, m matcher) bool { return interacted(n, m) && m.said.valid[n] },
+		"user-invalid": func(n *html.Node, m matcher) bool { return interacted(n, m) && m.said.invalid[n] },
 	}
+}
+
+// interacted reports whether a person changed the control n, or sent
+// its form, since it was made or last reset: then :user-valid and
+// :user-invalid say what :valid and :invalid do.
+func interacted(n *html.Node, m matcher) bool {
+	return m.shown != nil && (m.shown(n, "user-valid") || m.shown(n, "user-invalid"))
 }
