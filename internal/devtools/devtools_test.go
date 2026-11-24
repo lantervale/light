@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -715,14 +716,19 @@ func TestKeysWalkWhatWasTypedInTheConsole(t *testing.T) {
 	}
 	s.frame()
 	line := s.node("dt-eval")
+	previous, next := input.KeyLeftAlt, input.KeyLeftAlt
+	up, down := input.KeyUp, input.KeyDown
+	if runtime.GOOS == "darwin" {
+		previous, next, up, down = input.KeyLeftControl, input.KeyLeftControl, input.KeyP, input.KeyN
+	}
 	for _, c := range []struct {
 		with, key input.Key
 		want      string
 	}{
 		{input.KeyLeftAlt, input.KeyUp, "second"}, {input.KeyLeftAlt, input.KeyUp, "first"},
-		{input.KeyLeftControl, input.KeyP, "first"},
-		{input.KeyLeftAlt, input.KeyDown, "second"}, {input.KeyLeftControl, input.KeyN, "draft"},
-		{input.KeyLeftAlt, input.KeyDown, "draft"}, {input.KeyLeftControl, input.KeyP, "second"},
+		{previous, up, "first"},
+		{input.KeyLeftAlt, input.KeyDown, "second"}, {next, down, "draft"},
+		{input.KeyLeftAlt, input.KeyDown, "draft"}, {previous, up, "second"},
 	} {
 		s.in.SetKey(c.with, true)
 		s.frame()
