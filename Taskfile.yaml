@@ -137,3 +137,8 @@ tasks:
         --log-wptreport "{{.WPT_OUT}}/wptreport.json" --log-raw "{{.WPT_OUT}}/raw.log" --log-grouped -
         light {{.CLI_ARGS | default "--include-file tools/wpt/subset.txt"}} < /dev/null
       - python3 tools/wpt/summary.py "{{.WPT_OUT}}/wptreport.json" | tee "{{.WPT_OUT}}/summary.txt"
+
+  wpt:triage:
+    desc: Group the failures of the last task wpt run by cause, ranked by the tests each would make pass alone (tools/wpttriage); triage.json and triage.md go beside its report
+    cmds:
+      - go run ./tools/wpttriage -report "{{.WPT_OUT}}/wptreport.json" -json "{{.WPT_OUT}}/triage.json" -md "{{.WPT_OUT}}/triage.md"

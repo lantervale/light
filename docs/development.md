@@ -72,6 +72,7 @@ task lint             # golangci-lint, without and with the v8 tag (after task g
 task model:build      # light-model, the helper that runs the model, into dist/ (its own Go module)
 task model:test       # its vet and tests
 task wpt              # the web-platform-tests of tools/wpt/subset.txt (see "Web platform tests")
+task wpt:triage       # the failures of the last task wpt grouped by cause, ranked by the tests each unlocks
 ```
 
 `.github/workflows/windows.yml` builds light with the `v8` tag on Windows and runs every test there, those of

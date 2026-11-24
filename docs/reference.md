@@ -1239,6 +1239,15 @@ wpt.fyi reads), `raw.log` (every event, the screenshots of a failed reference te
 line a test, with its status and its subtests passed over all. No result fails the task yet: there is no list of
 expected results to compare with.
 
+`task wpt:triage` reads that report and says what to fix first (`tools/wpttriage`). Each failing test and subtest
+gets a cause: a missing API (`x.foo is not a function`, `Foo is not defined`, a member idlharness finds missing),
+another exception, a harness error, a timeout, a crash, a reference mismatch, a computed value or a value a CSS
+parsing test expects, or an assertion with what it checks; quoted values and numbers are elided so alike failures
+meet. A missing API is one cause wherever it fails; the others are counted per directory (`/css/css-flexbox`,
+`/html/semantics/forms`). The causes are ranked by the tests that fail for that cause alone, which fixing it would
+make pass, then by the subtests it fails; `triage.md` shows the first 60 (`-top`), with their directories, three
+tests each and a guess of where the fix lives, and `triage.json` holds them all.
+
 #### The result of 20 November 2026
 
 `task wpt` on light `c02bb21` with this subset, ember `3f64950` and web-platform-tests `d6179d3` (the commit
