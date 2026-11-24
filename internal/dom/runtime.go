@@ -263,6 +263,9 @@ type Runtime struct {
 	swept   time.Time
 	// activation is the click a script was told of last (events.go).
 	activation activation
+	// breaking is the textarea whose line ui breaks for an Enter scripts
+	// let be, until the input it makes is told to them (events.go).
+	breaking *ui.Node
 	// bases is the page's use of its site's databases (indexeddb.go).
 	bases  bases
 	closed bool
@@ -308,7 +311,7 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 		ctx.Close()
 		return nil, err
 	}
-	page.Tree.Activate, page.Tree.Heard, page.Tree.Submit = r.activate, r.heard, r.submit
+	page.Tree.Activate, page.Tree.Heard, page.Tree.Submit, page.Tree.Break = r.activate, r.heard, r.submit, r.breakLine
 	return r, nil
 }
 
@@ -515,6 +518,10 @@ func (r *Runtime) frame() bool {
 	r.activation = activation{}
 	waiting := r.waiting
 	r.waiting = nil
+	if broke := r.breaking; broke != nil {
+		r.breaking = nil
+		waiting = append(waiting, func() { r.Fire(broke, "keyup", enter()) })
+	}
 	for _, run := range waiting {
 		run()
 	}
@@ -613,7 +620,7 @@ func (r *Runtime) Close() {
 		}
 	}
 	r.unbased()
-	r.tree.Activate, r.tree.Heard, r.tree.Submit = nil, nil, nil
+	r.tree.Activate, r.tree.Heard, r.tree.Submit, r.tree.Break = nil, nil, nil, nil
 	r.entry.Release()
 	r.ctx.Close()
 	r.handles = newHandles(nil)

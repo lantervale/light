@@ -429,4 +429,10 @@ func TestKeysAreToldToTheFocusedElement(t *testing.T) {
 	if got := s.eval(`seen.slice(4).join() + " " + document.activeElement.id`); got != "blur name,focusin other other" {
 		t.Errorf("as the focus moved the page saw %q", got)
 	}
+	s.eval(`document.getElementById("name").blur(); other.blur()`)
+	frame()
+	s.rt.Frame()
+	if s.page.Doc.Focused(s.byID("other")) || s.eval(`document.activeElement === document.body`) != "true" {
+		t.Error("blur() left the focus where it was")
+	}
 }

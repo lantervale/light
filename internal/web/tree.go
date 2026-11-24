@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/ui"
 
 	"github.com/lantervale/light/pkg/identity"
@@ -69,6 +70,9 @@ type Tree struct {
 	// activated in place of the form itself, and Enter in a field of a
 	// form is left to Heard: Send sends it.
 	Submit func(form, submitter *ui.Node)
+	// Break, when set, is told of Enter in a textarea before ui breaks
+	// its line, and reports whether the page's scripts kept it from that.
+	Break func(textarea *ui.Node) bool
 	// handlers is whether an element of the page has a script's handler.
 	handlers bool
 	// xml is a page read by XML's rules (documents.go), and prefixes
@@ -585,8 +589,11 @@ func (t *Tree) unset(n *html.Node, name string) {
 // and an a that follows its href as it is when clicked.
 func (b *builder) make(tag string) *ui.Node {
 	e := build(tag)
-	if tag == tagInput || tag == tagButton {
-		b.submits(e, tag)
+	switch tag {
+	case tagInput, tagButton:
+		b.submits(e)
+	case tagForm:
+		b.sent(e)
 	}
 	if b.tree == nil {
 		return e
@@ -601,7 +608,22 @@ func (b *builder) make(tag string) *ui.Node {
 }
 
 // heard has what ui tells field's handlers told to the page's scripts.
+// Enter in a one-line field is theirs before ui submits its form, so a
+// keydown they prevent keeps it unsent; in a textarea, before ui breaks
+// its line, so a search box sends its form on Enter.
 func (b *builder) heard(field *ui.Node) {
+	ui.OnKey(func(e ui.Event) {
+		if e.Key != input.KeyEnter && e.Key != input.KeyPadEnter || b.tree.Heard == nil {
+			return
+		}
+		switch {
+		case submitsImplicitly(field):
+			e.PreventDefault()
+			b.tree.Heard(field, typeSubmit)
+		case field.Tag().String() == tagTextarea && !e.Command && b.tree.Break != nil && b.tree.Break(field):
+			e.PreventDefault()
+		}
+	}).Apply(field)
 	for _, told := range []struct {
 		event ui.EventType
 		name  string

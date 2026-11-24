@@ -306,6 +306,28 @@ func TestANavigationIsTheUsersOwn(t *testing.T) {
 	}
 }
 
+func TestANavigationEndsOnceThePicturesOfThePageShow(t *testing.T) {
+	pic := picture(t, 30, 20)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pic.png" {
+			time.Sleep(300 * time.Millisecond)
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(pic)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<body style="margin: 0"><img id="pic" src="/pic.png">`))
+	}))
+	t.Cleanup(srv.Close)
+	d := drive(t)
+	d.begin("{}")
+	d.open(srv.URL + "/")
+	doc := d.session().pages[srv.URL+"/"].Doc
+	if got, _ := doc.BoxOf(doc.ByID("pic")); got.W != 30 || got.H != 20 {
+		t.Fatalf("Navigate To answered with the picture laid out %v by %v, want 30 by 20", got.W, got.H)
+	}
+}
+
 func TestAPageThatFailsOrNeverEndsIsAnErrorAndLightGoesOn(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -565,6 +587,24 @@ func TestPointerActionsClickThroughTheWindowsInput(t *testing.T) {
 	d.ok("DELETE", "/{s}/actions", "")
 	if len(d.driver.keys.buttons) != 0 || len(d.driver.keys.keys) != 0 {
 		t.Fatal("Release Actions left a key or a button held")
+	}
+}
+
+func TestAWheelActionScrollsByItsPixelsAtOnce(t *testing.T) {
+	srv, _ := answers(t, map[string]answer{
+		"/": typed("text/html", `<body style="margin: 0"><div id="tall" style="height: 5000px"></div>`),
+	})
+	d := drive(t)
+	d.begin("{}")
+	d.open(srv.URL + "/")
+	d.frame()
+	page := d.session().pages[srv.URL+"/"].Doc
+	for _, step := range []struct{ delta, at float32 }{{130, 130}, {-50, 80}} {
+		d.ok("POST", "/{s}/actions", `{"actions":[{"type":"wheel","id":"wheel","actions":[
+			{"type":"scroll","x":20,"y":20,"deltaX":0,"deltaY":`+string(mustJSON(t, step.delta))+`}]}]}`)
+		if got := page.Scroll(page.HTML()); got != geom.V2(0, step.at) {
+			t.Fatalf("once a scroll of %v is performed the page is scrolled to %v, want %v", step.delta, got, step.at)
+		}
 	}
 }
 

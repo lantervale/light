@@ -124,14 +124,24 @@ func TestARightClickOnSelectedTextCopiesIt(t *testing.T) {
 		t.Fatalf("selected text offers %s", got)
 	}
 	s.choose("Copy")
-	if got := s.win.Clipboard(); got != "lower vaults" {
-		t.Fatalf("copied %q", got)
+	if got, markup := s.win.Clipboard(), s.win.ClipboardHTML(); got != "lower vaults" ||
+		markup != "lower vaults" {
+		t.Fatalf("copied %q, as markup %q", got, markup)
 	}
 	s.rightClickAt(s.inPage("vault"))
 	if got, want := labels(s.entries()),
 		"[Open link in new tab Open link in new window Save link as… Copy link address - Copy "+
 			"Search DuckDuckGo for “lower vaults” - Inspect element]"; got != want {
 		t.Fatalf("a link with text selected offers %s, want %s", got, want)
+	}
+	s.menu.Close()
+	link := doc.ByID("vault").Children()[0]
+	doc.Select(ui.Position{Node: link, Offset: 4}, ui.Position{Node: link, Offset: 9})
+	s.rightClickAt(s.inPage("vault"))
+	s.choose("Copy")
+	if got, markup := s.win.Clipboard(), s.win.ClipboardHTML(); got != "vault" ||
+		markup != `<a id="vault" href="/vaults">vault</a>` {
+		t.Fatalf("copied %q in a link, as markup %q", got, markup)
 	}
 }
 

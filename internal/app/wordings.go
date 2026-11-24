@@ -151,7 +151,7 @@ func (p *wording) read(doc *ui.Document) bool {
 	if _, shown := doc.BoxOf(p.block); !shown {
 		return false
 	}
-	if kept, _ := doc.ComputedValue(p.block, "white-space"); strings.HasPrefix(kept, "pre") {
+	if kept, _ := doc.ComputedValue(p.block, "white-space-collapse"); kept != "collapse" {
 		return false
 	}
 	for _, part := range p.parts {

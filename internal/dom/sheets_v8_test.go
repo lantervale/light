@@ -95,6 +95,22 @@ func TestThePagesOwnStyleElementIsEditedAndRemovedByAScript(t *testing.T) {
 	s.quiet()
 }
 
+func TestANestedRuleIsOneRuleOfItsSheet(t *testing.T) {
+	s := run(t, `<head><style id="own">body { margin: 0; .box { width: 120px; } }</style></head>
+		<body><div id="box" class="box">box</div>`)
+	s.wide(120, "a rule nested in the page's own")
+	if got := s.eval(`own.sheet.cssRules.length + " " + own.sheet.cssRules[0].selectorText`); got != "1 body" {
+		t.Errorf("the sheet's rules are %q", got)
+	}
+	s.eval(`own.sheet.insertRule("#box { & { width: 60px; } }", 1)`)
+	s.wide(60, "a nested rule inserted")
+	if got := s.eval(`own.sheet.cssRules.length`); got != "2" {
+		t.Errorf("with a nested rule inserted the sheet has %s rules", got)
+	}
+	s.eval(`own.sheet.deleteRule(1)`)
+	s.wide(120, "the nested rule deleted")
+}
+
 //nolint:lll // a script is one line of its table
 func TestRulesAreInsertedAndDeletedThroughASheet(t *testing.T) {
 	s := run(t, styledPage+`<script>var sheet = own.sheet;</script>`)
@@ -393,4 +409,35 @@ func TestThePagesOwnLinksAreEditedAndRemovedByAScript(t *testing.T) {
 	if got := s.byID("box").Box().H; got != 10 {
 		t.Errorf("a link that is no stylesheet any more leaves the box %v high, want 10", got)
 	}
+}
+
+func TestSizesAreReadAsLaidOutAtOnce(t *testing.T) {
+	s := run(t, `<head><style>body { margin: 0 } .half { width: 50vw; height: 10vh }</style></head>
+		<body><div id="box" style="width: 100px; height: 20px">box</div>`)
+	for _, c := range []struct{ name, script, want string }{
+		{"an element a script made", `(e => { document.body.appendChild(e); e.className = "half";
+			return getComputedStyle(e).width + " " + e.offsetWidth })(document.createElement("div"))`, "400px 400"},
+		{"markup a script set", `document.body.innerHTML = '<div id="made" style="width: 30px; height: 5px"></div>';
+			getComputedStyle(made).width + " " + made.offsetHeight`, "30px 5"},
+		{"a style a script changed", `made.style.width = "70px"; getComputedStyle(made).width + " " + made.offsetWidth`,
+			"70px 70"},
+		{"a sheet a script added", `document.head.appendChild(Object.assign(document.createElement("style"),
+			{ textContent: "#made { height: 9px !important }" }));
+			getComputedStyle(made).height + " " + made.offsetHeight`, "9px 9"},
+	} {
+		if got := s.eval(c.script); got != c.want {
+			t.Errorf("%s: read %q, want %q", c.name, got, c.want)
+		}
+	}
+	s.quiet()
+}
+
+func TestAComputedStyleWorksItsMathFunctionsOut(t *testing.T) {
+	s := run(t, `<body><div id="box" style="opacity: calc(log(1) + 0.5); z-index: round(up, 2.1);
+		margin-left: calc(1px * pow(2, 3))">box</div>`)
+	if got := s.eval(`(cs => [cs.opacity, cs.zIndex, cs.marginLeft, cs.getPropertyValue("opacity")].join(" "))(
+		getComputedStyle(box))`); got != "0.5 3 8px 0.5" {
+		t.Errorf("the computed style reads %q", got)
+	}
+	s.quiet()
 }

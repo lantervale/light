@@ -1,6 +1,7 @@
 package app //nolint:testpackage // the screen is driven by what it holds: its elements, its tabs, its sessions
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -175,6 +176,9 @@ func TestACommandShiftClickShowsTheTabItOpens(t *testing.T) {
 }
 
 func TestOffMacOSControlIsTheKey(t *testing.T) {
+	if runtime.GOOS == macOS {
+		t.Skip("a Control click is a context click on a Mac, whatever light's system says (ember's decision 0142)")
+	}
 	srv, _ := crypt(t)
 	s := show(t)
 	s.system = "linux"
