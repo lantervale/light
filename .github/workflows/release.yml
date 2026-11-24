@@ -3,7 +3,8 @@
 # (on macOS a DMG, and its SBOM made from the app); one job then gathers them and adds the other SBOMs, the source
 # archive and the checksums (tools/release/assemble.sh), and the last signs the checksums with cosign (keyless) and
 # publishes the GitHub release, only once every target built. Run by hand (workflow_dispatch), it does the same as a
-# snapshot up to the publishing, which it leaves out: the files stay as the run's artifacts.
+# snapshot up to the publishing, which it leaves out: the files stay as the run's artifacts, unless it runs on a
+# v* tag with publish set, as tag.yml starts it (a tag its token pushes starts no workflow by itself).
 name: release
 
 on:
@@ -11,11 +12,18 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the release of the tag this runs on, as a pushed tag does
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 env:
+  # A run by hand builds a snapshot, unless it publishes a v* tag.
+  SNAPSHOT: ${{ github.event_name == 'workflow_dispatch' && !(inputs.publish && startsWith(github.ref, 'refs/tags/v')) }}
   # What the libc++ headers V8 is built with ask for (AppleClang 21 or Clang 21; on Windows LLVM's MSVC-target clang).
   CLANG_VERSION: '21'
 
@@ -91,7 +99,7 @@ jobs:
           install-only: true
 
       - name: Build and pack
-        run: goreleaser --version && goreleaser build --clean ${{ matrix.args }} ${{ github.event_name == 'workflow_dispatch' && '--snapshot' || '' }}
+        run: goreleaser --version && goreleaser build --clean ${{ matrix.args }} ${{ env.SNAPSHOT == 'true' && '--snapshot' || '' }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -130,7 +138,7 @@ jobs:
 
   publish:
     name: GitHub release
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (inputs.publish && startsWith(github.ref, 'refs/tags/v'))
     needs: assemble
     runs-on: ubuntu-latest
     permissions:

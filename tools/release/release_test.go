@@ -129,3 +129,75 @@ func TestTheBumpPinsMainAsByHandOnceItMoved(t *testing.T) {
 		t.Errorf("a branch name taken for a commit: %s", out)
 	}
 }
+
+const notes = `## light v1.2.3
+
+light is a small web browser.
+
+## What is new
+
+- Something hand-written for v1.2.3.
+
+## What to download
+
+| System | Archive |
+|---|---|
+| macOS | ` + "`light_<version>_darwin_arm64.dmg`" + ` |
+
+## Known limits
+
+- No cache.
+`
+
+func TestTheNotesAreDraftedFromTheConventionalCommitsSinceTheLastTag(t *testing.T) {
+	needs(t, "sh", "git", "awk")
+	dir := repo(t, "feat: before the tag", "tag v1.2.3",
+		"feat(dom): blur() takes the focus off", "fix: the window loads once its pictures show",
+		"chore: pin ember 778b8c7", "docs: a page's fonts", "perf(layout): lines are cut once",
+		"fix(webdriver)!: scroll by pixels", "docs(release): the notes of v1.2.3", "feat: JavaScript on Windows")
+	path := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(path, []byte(notes), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, failed := script(t, dir, "draft-notes.sh", []string{"NOTES=" + path}, "v1.2.4")
+	if failed {
+		t.Fatal(out)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `## light v1.2.4
+
+light is a small web browser.
+
+## What is new
+
+### New
+
+- **dom**: blur() takes the focus off
+- JavaScript on Windows
+
+### Fixed
+
+- the window loads once its pictures show
+- **webdriver**: scroll by pixels
+
+### Faster
+
+- **layout**: lines are cut once
+
+## What to download
+
+| System | Archive |
+|---|---|
+| macOS | ` + "`light_<version>_darwin_arm64.dmg`" + ` |
+
+## Known limits
+
+- No cache.
+`
+	if string(got) != want {
+		t.Errorf("the notes drafted:\n%s\nwant:\n%s", got, want)
+	}
+}
