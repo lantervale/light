@@ -209,21 +209,24 @@ func TestGrammarsKeepAnAnswerToWordsOrJSON(t *testing.T) {
 }
 
 func TestADevelopersFilesAreNamedByOneVariable(t *testing.T) {
-	dev, err := model.ParseDev(
-		"library=/opt/homebrew/lib; backends=/opt/homebrew/opt/ggml/libexec;model=/m/q.gguf;embedding=/m/e.gguf")
-	want := model.Dev{Library: "/opt/homebrew/lib", Backends: "/opt/homebrew/opt/ggml/libexec", Model: "/m/q.gguf",
-		Embedding: "/m/e.gguf"}
+	root := t.TempDir()
+	at := func(parts ...string) string { return filepath.Join(append([]string{root}, parts...)...) }
+	want := model.Dev{Library: at("opt", "lib"), Backends: at("opt", "ggml", "libexec"), Model: at("m", "q.gguf"),
+		Embedding: at("m", "e.gguf")}
+	dev, err := model.ParseDev("library=" + want.Library + "; backends=" + want.Backends + ";model=" + want.Model +
+		";embedding=" + want.Embedding)
 	if err != nil || dev != want {
 		t.Fatalf("%+v, %v", dev, err)
 	}
-	if dev, err = model.ParseDev("library=/lib;model=/m.gguf"); err != nil || dev.Backends != "/lib" {
+	if dev, err = model.ParseDev("library=" + at("lib") + ";model=" + at("m.gguf")); err != nil ||
+		dev.Backends != at("lib") {
 		t.Fatalf("the backends are not the library's folder: %+v, %v", dev, err)
 	}
 	if dev, err = model.ParseDev("  "); err != nil || dev != (model.Dev{}) {
 		t.Fatalf("no value is %+v, %v", dev, err)
 	}
-	for _, bad := range []string{"library=/lib", "model=/m.gguf", "library=lib;model=/m.gguf",
-		"library=/lib;model=/m.gguf;port=/x", "nonsense"} {
+	for _, bad := range []string{"library=" + at("lib"), "model=" + at("m.gguf"), "library=lib;model=" + at("m.gguf"),
+		"library=" + at("lib") + ";model=" + at("m.gguf") + ";port=" + at("x"), "nonsense"} {
 		if _, err = model.ParseDev(bad); err == nil {
 			t.Errorf("%q is taken", bad)
 		}

@@ -6,6 +6,8 @@ import (
 	"net/http/httptrace"
 	"sync"
 	"time"
+
+	"github.com/lantervale/light/pkg/instant"
 )
 
 // Mark is one step of a page's load, in the order they come.
@@ -80,10 +82,10 @@ func (t *Timing) Mark(m Mark) {
 	case m == Asked:
 		t.asking = true
 		if t.at[m].IsZero() {
-			t.at[m] = time.Now()
+			t.at[m] = instant.Now()
 		}
 	case again && t.asking, !again && t.at[m].IsZero():
-		t.at[m] = time.Now()
+		t.at[m] = instant.Now()
 	}
 }
 
@@ -95,7 +97,7 @@ func (t *Timing) settle() {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	now := time.Now()
+	now := instant.Now()
 	t.asking = false
 	for _, m := range []Mark{Connected, Sent, Answered} {
 		if t.at[m].Before(t.at[Asked]) {

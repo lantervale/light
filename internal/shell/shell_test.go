@@ -32,3 +32,12 @@ func TestAFileIsHandedAsOneArgumentNeverAsACommand(t *testing.T) {
 		}
 	}
 }
+
+func TestTheFolderShownIsTakenByTheSeparatorOfTheSystemAsked(t *testing.T) {
+	if args, _ := shell.Command("linux", shell.Reveal, "/home/a/b.pdf"); args[1] != "/home/a" {
+		t.Errorf("linux shows %q", args[1])
+	}
+	if args, _ := shell.Command("linux", shell.Reveal, `/home/a\b.pdf`); args[1] != "/home" {
+		t.Errorf("a backslash in a linux path is taken as a folder: %q", args[1])
+	}
+}

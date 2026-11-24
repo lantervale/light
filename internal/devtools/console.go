@@ -3,6 +3,7 @@ package devtools
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -134,15 +135,15 @@ func (c *spoke) chip(id, name string, do func()) *ui.Node {
 }
 
 // keys are the keys that walk what was typed in the console, as a menu
-// never shown: Alt with the up or down arrow, and Control with P or N.
-// The arrows alone are the line's own, which a ui text field tells
-// nobody of.
+// never shown: Alt with the up or down arrow. The arrows alone are the
+// line's own, which a ui text field tells nobody of.
 func (c *spoke) keys() *ui.Node {
 	menu := ui.Div(ui.ID("dt-keys"), ui.Attr("role", "menu"), ui.Attr("aria-label", "Console history"))
+	previous, next := historyKeys(runtime.GOOS)
 	for _, item := range []struct {
 		name, keys string
 		step       int
-	}{{"Previous line", "Alt+ArrowUp Control+P", -1}, {"Next line", "Alt+ArrowDown Control+N", 1}} {
+	}{{"Previous line", previous, -1}, {"Next line", next, 1}} {
 		menu.Append(ui.Div(ui.Attr("role", "menuitem"), ui.Attr("aria-keyshortcuts", item.keys), ui.Text(item.name),
 			ui.OnClick(func() {
 				if c.p.state.Open && c.p.state.Shown() == consoleTab && c.p.doc.Focused(c.eval) {
@@ -151,6 +152,17 @@ func (c *spoke) keys() *ui.Node {
 			})))
 	}
 	return menu
+}
+
+// historyKeys are the keys that walk the console's history on system, as
+// runtime.GOOS names it: Alt with the up or down arrow, and on macOS
+// Control with P or N too, as Chrome has them. Elsewhere Control is the
+// shortcuts' key, and Control with N opens a window.
+func historyKeys(system string) (string, string) {
+	if system == "darwin" {
+		return "Alt+ArrowUp Control+P", "Alt+ArrowDown Control+N"
+	}
+	return "Alt+ArrowUp", "Alt+ArrowDown"
 }
 
 func (c *spoke) show() {

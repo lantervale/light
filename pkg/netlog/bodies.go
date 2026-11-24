@@ -7,6 +7,8 @@ import (
 	"net/http/httptrace"
 	"slices"
 	"time"
+
+	"github.com/lantervale/light/pkg/instant"
 )
 
 // KeepBodies has the log keep what its requests carry and the bodies of
@@ -180,7 +182,7 @@ func (r Row) Timing() Timing {
 // traced is the trace that marks row's steps as the transport takes them.
 func (l *Log) traced(row *Row) *httptrace.ClientTrace {
 	mark := func(which func(m *marks) *time.Time) {
-		now := time.Now()
+		now := instant.Now()
 		l.change(row, func(r *Row) {
 			if at := which(&r.marks); at.IsZero() {
 				*at = now

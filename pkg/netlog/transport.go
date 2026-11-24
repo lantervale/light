@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/andybalholm/brotli"
+
+	"github.com/lantervale/light/pkg/instant"
 )
 
 type key struct{}
@@ -99,7 +101,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method == http.MethodOptions && req.Header.Get("Access-Control-Request-Method") != "" {
 		a.wanted = Preflight
 	}
-	start := time.Now()
+	start := instant.Now()
 	row := a.log.add(Row{
 		Address: req.URL.String(), Method: req.Method, Type: a.wanted, Initiator: a.initiator,
 		Started: start, Request: req.Header.Clone(),
@@ -120,7 +122,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		var refused interface{ Blocked() string }
 		a.log.change(row, func(r *Row) {
-			r.Err, r.Done, r.Took = reason(err), true, time.Since(start)
+			r.Err, r.Done, r.Took = reason(err), true, instant.Since(start)
 			if errors.As(err, &refused) {
 				r.Blocked, r.Err = true, refused.Blocked()
 			}
@@ -130,12 +132,12 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	media, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	a.log.change(row, func(r *Row) {
 		r.Status, r.Reason, r.Proto = resp.StatusCode, http.StatusText(resp.StatusCode), resp.Proto
-		r.marks.answered = time.Now()
+		r.marks.answered = instant.Now()
 		r.Media = media
 		if resp.StatusCode < http.StatusBadRequest {
 			r.Type = TypeOf(media, a.wanted)
 		}
-		r.Response, r.Took = resp.Header.Clone(), time.Since(start)
+		r.Response, r.Took = resp.Header.Clone(), instant.Since(start)
 	})
 	if resp.Header.Get("Location") != "" {
 		a.log.redirected(row, resp)
@@ -243,7 +245,7 @@ type body struct {
 
 func (b *body) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
-	b.log.read(b.row, p[:n], b.wire.n, time.Since(b.start))
+	b.log.read(b.row, p[:n], b.wire.n, instant.Since(b.start))
 	if err != nil {
 		b.end(err)
 	}
@@ -261,7 +263,7 @@ func (b *body) end(err error) {
 	}
 	b.ended = true
 	b.log.change(b.row, func(r *Row) {
-		r.Done, r.Took = true, time.Since(b.start)
+		r.Done, r.Took = true, instant.Since(b.start)
 		if err != nil && !errors.Is(err, io.EOF) {
 			r.Err = reason(err)
 		}

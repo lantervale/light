@@ -324,7 +324,7 @@ func TestAnAnswerEndsWithItsPage(t *testing.T) {
 		t.Fatal("the card stays open over another page")
 	}
 	s.click("back")
-	s.frame()
+	s.until("the page is back", func() bool { return s.readable() != nil })
 	s.wonders(fake, ferryQuestion)
 	s.clickAt(geom.V2(300, 600))
 	if s.answerShown() {
