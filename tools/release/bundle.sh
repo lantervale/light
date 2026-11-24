@@ -218,6 +218,15 @@ mkdir -p "$stage"
 licences "$stage"
 cp "$src" "$stage/$lib"
 if [ "$goos" = windows ]; then
+	# The PE subsystem, at 68 in the optional header after the 24 bytes of
+	# the signature and the file header: 2 is a windowed program, 3 one that
+	# opens a console.
+	pe=$(od -An -t u4 -j 60 -N 4 "$bin" | tr -d ' ')
+	subsystem=$(od -An -t u2 -j $((pe + 24 + 68)) -N 2 "$bin" | tr -d ' ')
+	if [ "$subsystem" != 2 ]; then
+		echo "bundle: $bin is not a windowed program (PE subsystem $subsystem): a console would open with it" >&2
+		exit 1
+	fi
 	cp "$bin" "$stage/light.exe"
 	helper "$stage/light-model.exe"
 	out=$name.zip

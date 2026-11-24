@@ -80,8 +80,9 @@ builds:
     mod_timestamp: *mod_timestamp
     ldflags:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }}
-      # A windowed program: no console opens with it.
-      - -H=windowsgui
+      # A windowed program: no console opens with it. Go asks clang for one with -mwindows, which the MSVC target
+      # ignores, so LLD is told itself; Go's entry point is main, not WinMain.
+      - -H=windowsgui -extldflags=-Wl,-subsystem:windows,-entry:mainCRTStartup
     hooks: *hooks
 
 gomod:
