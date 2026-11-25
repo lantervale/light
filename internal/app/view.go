@@ -38,6 +38,21 @@ func (s *Screen) title(address string) string {
 	return shownAs(address)
 }
 
+// language is the language of the page at address, which its title is
+// in: its html element's lang, else its Content-Language; "" for a page
+// light holds none of, so the machine's faces are chosen by script.
+func (s *Screen) language(address string) string {
+	for _, session := range s.sessions {
+		if page := session.pages[address]; page != nil && page.Doc != nil {
+			if lang, ok := page.Doc.HTML().Attr("lang"); ok {
+				return lang
+			}
+			return page.Doc.Language()
+		}
+	}
+	return ""
+}
+
 // shownPage is one page as the view shows it: its elements, the class
 // that styles them, and whether it scrolls sideways too.
 type shownPage struct {
