@@ -242,7 +242,7 @@ define(window, { ValidityState });
 // validityAsked is a selector that names a state only these rules
 // know; tellValidity gives light the controls of the tree of a node in
 // each, before it matches one.
-const validityAsked = /:(?:in)?valid|:(?:in|out-of)-range/i;
+const validityAsked = /:(?:user-)?(?:in)?valid|:(?:in|out-of)-range/i;
 const tellValidity = (ref) => {
   let root = ref ? wrap(ref) : document;
   while (root.parentNode) root = root.parentNode;

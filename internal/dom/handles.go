@@ -17,6 +17,7 @@ const (
 	style   = "style"
 	checked = "checked"
 	submit  = "submit"
+	opened  = "open"
 )
 
 // numbers are the numbers scripts know nodes by: a text node's is

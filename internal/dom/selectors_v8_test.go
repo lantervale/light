@@ -2,7 +2,68 @@
 
 package dom_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lantervale/ember"
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/platform"
+)
+
+func TestPseudoClassesFollowWhatAPersonDoesToThePage(t *testing.T) {
+	s := run(t, `<!DOCTYPE html><body style="margin:0"><details id="d" open><summary>s</summary></details>
+		<details id="c"></details><dialog id="g" open>g</dialog><select id="s" style="display:block;height:30px">
+		<option>a</option><option>b</option></select><div id="p" popover>p</div><input id="req" required>
+		<input id="opt">`)
+	win := platform.NewWindow(platform.Size(800, 600))
+	win.Add(s.page.Doc)
+	w := ember.New().AddEntities(win)
+	in := win.Input()
+	in.SetMouse(geom.V2(700, 500))
+	w.RunFrames(1)
+	const ids = `const ids = (selector) => [...document.querySelectorAll(selector)].map((e) => e.id).join(" ");`
+	matches := func(selector, want string) {
+		t.Helper()
+		if got := s.eval(ids + "ids(`" + selector + "`)"); got != want {
+			t.Errorf("%s:\n got %q\nwant %q", selector, got, want)
+		}
+	}
+	matches(":open", "d g")
+	matches(":popover-open, :modal, :user-valid, :user-invalid, body :hover, :active, :focus-visible, :focus-within", "")
+	matches(":is(:open, :popover-open", "d g")
+	if got := s.eval(`[document.createElement("details"), document.createElement("dialog")].map((e) => {
+		e.open = true; return e.matches(":open") }).join()`); got != "true,true" {
+		t.Errorf("a details and a dialog open out of the page match :open %s", got)
+	}
+
+	at, shown := s.page.Doc.BoxOf(s.byID("s"))
+	if !shown {
+		t.Fatal("the select is not shown")
+	}
+	in.SetMouse(geom.V2(at.X+at.W/2, at.Y+at.H/2))
+	w.RunFrames(1)
+	matches("body :hover", "s")
+	in.SetMouseButton(input.MouseLeft, true)
+	w.RunFrames(1)
+	matches("body :active", "s")
+	in.SetMouseButton(input.MouseLeft, false)
+	w.RunFrames(1)
+	matches(":open", "d g s")
+	matches("body :focus-within", "s")
+
+	s.page.Doc.ShowPopover(s.byID("p"), nil)
+	matches(":popover-open", "p")
+
+	s.page.Doc.Focus(s.byID("req"))
+	in.AddText('x')
+	w.RunFrames(1)
+	s.page.Doc.Blur()
+	w.RunFrames(1)
+	matches(":user-valid", "req")
+	matches(":user-invalid", "")
+	s.quiet()
+}
 
 func TestSelectorsAreReadAsCSSWritesThem(t *testing.T) {
 	s := run(t, `<!DOCTYPE html><html lang="en"><body><div id="0start" class="a:b" title="T" data-v="é">x</div>
