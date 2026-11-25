@@ -868,7 +868,10 @@ not given one keeps them in memory.
 
 ### Limits of its JavaScript
 
-What runs: classic scripts, inline and `src`, in document order, with `defer` and `async`; modules (below);
+What runs: classic scripts, inline and `src`, in document order, with `defer` and `async`, of the types and
+`language`s the HTML Standard names JavaScript's; a script element a script puts in the page, fills with text or
+gives a `src` (its text runs at once, a `src` once fetched: in the order they were put in the page when `async` is
+set false, as each comes otherwise, and the page's `load` waits for them); modules (below);
 `on…` attributes; the
 DOM (the tree as the parser made it: comments, the doctype, text, `svg`, `noscript`, `template` and its content,
 `script` and `style` where the page has them, every attribute as written; classes, `style`, `dataset`, `innerHTML`

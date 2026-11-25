@@ -1473,7 +1473,7 @@ const idbCalls = {
 let entries = 0, scripts = 0;
 const entered = (calls) => function light(call, ...args) {
   if (entries === 0 && scripts === 0) settle();
-  if (call === "script") scripts = Math.max(0, scripts + (args[0] ? 1 : -1));
+  if (call === "script") scripts = Math.max(0, scripts + (args[1] ? -1 : 1));
   if (call === "idb") return idbCalls[args[0]](...args.slice(1));
   entries++;
   try {

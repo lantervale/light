@@ -278,6 +278,9 @@ func (r *Runtime) create(a arguments) (any, error) {
 		return r.own(&html.Node{Type: html.DocumentNode}, a, 2), nil
 	}
 	n := r.tree.Element(tag, a.text(1))
+	if isScript(n) {
+		r.scripts.forced[n] = true
+	}
 	if prefix := a.text(3); prefix != "" {
 		r.prefixes[n] = prefix
 	}
@@ -321,22 +324,21 @@ func (r *Runtime) insert(parent *html.Node, a arguments) (any, error) {
 		r.adopt(child, to)
 	}
 	r.settle(r.tree.Insert(parent, child, before))
+	r.prepare(parent)
 	return nothing()
 }
 
-// settle runs the scripts among what entered the page, those that
-// never ran.
+// settle prepares the scripts among what entered the page.
 func (r *Runtime) settle(entered []*html.Node) {
 	for _, n := range entered {
-		if n.DataAtom == atom.Script && !r.ran[n] {
-			r.ran[n] = true
-			r.added(n)
-		}
+		r.prepare(n)
 	}
 }
 
 func (r *Runtime) remove(n *html.Node, _ arguments) (any, error) {
+	parent := n.Parent
 	r.tree.Remove(n)
+	r.prepare(parent)
 	return nothing()
 }
 
@@ -364,6 +366,9 @@ func (r *Runtime) copyOf(n *html.Node, deep bool) *html.Node {
 	}
 	if r.ran[n] {
 		r.ran[c] = true
+	}
+	if _, async := attribute(c, "async"); isScript(c) && !async {
+		r.scripts.forced[c] = true
 	}
 	if !deep {
 		return c
@@ -418,6 +423,7 @@ func (r *Runtime) setText(n *html.Node, a arguments) (any, error) {
 			r.tree.Insert(n, &html.Node{Type: html.TextNode, Data: text}, nil)
 		}
 	}
+	r.prepare(n)
 	return nothing()
 }
 
@@ -442,6 +448,7 @@ func (r *Runtime) setHTML(n *html.Node, a arguments) (any, error) {
 	for _, c := range made {
 		r.tree.Insert(into, c, nil)
 	}
+	r.prepare(n)
 	return nothing()
 }
 

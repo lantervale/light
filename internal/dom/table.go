@@ -37,6 +37,7 @@ func (r *Runtime) table() map[string]op {
 		"handles":       r.held,
 		"keeper":        r.keptBy,
 		"release":       r.let,
+		"async":         r.of(r.async),
 		// elements (element.go)
 		"attr":         r.of(r.attr),
 		"setAttr":      r.of(r.setAttr),

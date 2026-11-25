@@ -230,6 +230,8 @@ type Runtime struct {
 	loaded moduleMap
 	later  []*turn
 	racing int
+	// scripts are the script elements scripts put in the page (scripts.go).
+	scripts scriptsOf
 	// state is how far the page is in its load, starting while its
 	// scripts are found and proceeding while those in turn run.
 	state                int
@@ -292,6 +294,7 @@ func New(page *web.Page, host Host) (*Runtime, error) {
 		page: page, doc: page.Tree.Document(), tree: page.Tree, began: time.Now(),
 		handles: newHandles(host.Kin.numbers()), selectors: map[string]selectors{}, stores: map[string]Storage{},
 		ran: map[*html.Node]bool{}, requests: map[int]func(){}, kept: map[int]bool{}, loaded: newModuleMap(),
+		scripts: scriptsOf{forced: map[*html.Node]bool{}},
 	}
 	r.asking.handover = host.Kin.handover()
 	r.host = r.framed(host)
@@ -390,11 +393,15 @@ func (r *Runtime) Start() { r.whenFree(r.start) }
 
 func (r *Runtime) start() {
 	r.starting = true
+	prepared := r.parsedScripts()
 	for _, s := range r.page.Scripts {
-		if s.Node != nil {
+		if s.Node != nil && prepared[s.Node] {
 			r.ran[s.Node] = true
 		}
+	}
+	for _, s := range r.page.Scripts {
 		switch {
+		case s.Node != nil && !prepared[s.Node]:
 		case s.Skipped != "":
 			r.say("warn", fmt.Sprintf("A script was not run: %s.", s.Skipped), s.Address)
 			r.arrived(s.Node, "error")
@@ -436,10 +443,13 @@ func (r *Runtime) run(source, address string, element *html.Node) {
 	if r.closed {
 		return
 	}
-	r.enter("script", r.ref(element))
+	outer := r.scripts.running
+	r.scripts.running = element
+	r.enter("script", r.ref(element), false)
 	_, err := r.ctx.Run(source, address)
 	r.failed(err)
-	r.enter("script", 0)
+	r.scripts.running = outer
+	r.enter("script", r.ref(outer), true)
 }
 
 // enter calls light's own script, and reports what it throws.

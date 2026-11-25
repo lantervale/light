@@ -90,7 +90,9 @@ func (s *scripted) start(markup string, host dom.Host) {
 	host.Post = post("script ")
 	host.Moved = func(how, to string) { s.went = append(s.went, how+" "+to) }
 	host.Viewport = func() (float32, float32) { return 800, 600 }
-	host.Fetch = s.fetch
+	if host.Fetch == nil {
+		host.Fetch = s.fetch
+	}
 	if s.stores != nil {
 		host.Storage = func(area string) dom.Storage { return s.stores[area] }
 	}

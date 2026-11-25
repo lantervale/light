@@ -61,15 +61,19 @@ func (r *Runtime) attribute(n *html.Node, a arguments) (any, error) {
 		}
 	case "set":
 		space, local, value := a.text(2), a.text(4), a.text(5)
+		_, had := r.tree.AttrNS(n, space, local)
 		r.tree.SetAttrNS(n, space, a.text(3), local, value)
 		if space == "" {
 			r.stated(n, local, value)
+			r.scriptAttr(n, local, had)
 		}
 	case "replace":
 		space, local, value := a.text(2), a.text(4), a.text(5)
+		_, had := r.tree.AttrNS(n, space, local)
 		r.tree.ReplaceAttrNS(n, space, a.text(3), local, value)
 		if space == "" {
 			r.stated(n, local, value)
+			r.scriptAttr(n, local, had)
 		}
 	case opRemove:
 		space, local := a.text(2), a.text(3)
