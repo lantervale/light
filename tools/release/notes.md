@@ -7,23 +7,18 @@ not a browser to live in.
 
 ## What is new
 
-### New
-
-- **wpt**: triage a run's failures by cause, ranked by the tests each unlocks
-- **wpt**: name layout checks, testdriver gaps and selectors in the triage
-- **dom**: showPicker and navigator.userActivation
-- adopt ember's font fallback for scripts the page's fonts lack
-
-### Fixed
-
-- **fetch**: a page's text leaves out its byte order mark
-- **dom**: offsets from the offset parent, as CSSOM View
-- **dom**: match :open, :popover-open, :user-valid and the pointer's pseudo-classes
-- prepare script elements as the HTML Standard does
-- **dom**: a control's form is its form owner, the form attribute's first
-- a script moved to another document once prepared does not run
-- **dom**: document.fonts lays the page out before it answers
-- **dom**: a change and a select light fires neither cancel nor cross shadow roots
+- **Japanese, Chinese, Korean and Arabic text**: where a page's fonts lack a script, light draws it with a font
+  installed on your system, chosen by the script and by the page's language (its `lang`, else its
+  `Content-Language`). These pages showed question marks before.
+- **Scripts**: script elements a page adds, fills or points elsewhere run in the order and at the moment Chrome runs
+  them, and the page's load waits for them.
+- **Forms**: a control belongs to the form its `form` attribute names; `form.elements` finds them across the page;
+  `showPicker()` and `navigator.userActivation` answer as in Chrome; `change` and `select` events are no longer
+  cancelable.
+- **Selectors and sizes**: `:open`, `:popover-open`, `:modal`, `:user-valid`, `:user-invalid`, `:hover`, `:active`,
+  `:focus-visible` and `:focus-within` work in a page's scripts; `offsetParent`, `offsetLeft` and `offsetTop` are
+  measured from the right parent; `document.fonts` lays the page out before it answers.
+- A page starting with a byte order mark no longer opens in quirks mode with a stray line of text at its top.
 
 ## What to download
 
