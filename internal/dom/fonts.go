@@ -18,6 +18,8 @@ type fontWatch struct {
 // fontOps are the operations document.fonts is made of.
 func (r *Runtime) fontOps() {
 	r.ops["fontsLoading"] = func(arguments) (any, error) {
+		r.fresh()
+		r.layout()
 		loading := r.doc.FontsLoading()
 		r.fonts.waited = r.fonts.waited || loading > 0
 		return loading, nil
