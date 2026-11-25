@@ -367,6 +367,10 @@ func TestWhatFieldsTellUIIsToldToScripts(t *testing.T) {
 		for (const type of ["input", "change", "submit"]) {
 			document.addEventListener(type, (e) => seen.push(type + " " + e.target.id + " " + (e.target.value || "")));
 		}
+		var shapes = [];
+		for (const type of ["input", "change"]) {
+			document.addEventListener(type, (e) => shapes.push([type, e.bubbles, e.cancelable, e.composed].join(" ")));
+		}
 		alone.addEventListener("keydown", (e) => {
 			seen.push("key " + e.key);
 			if (window.hold) e.preventDefault();
@@ -382,6 +386,9 @@ func TestWhatFieldsTellUIIsToldToScripts(t *testing.T) {
 	s.rt.Frame()
 	if got := s.eval(`seen.join()`); got != "input name Ann,change agree on,submit form ,key Enter,submit alone " {
 		t.Errorf("the page saw %q", got)
+	}
+	if got := s.eval(`shapes.join()`); got != "input true false true,change true false false" {
+		t.Errorf("an input and a change are %q, as type, bubbles, cancelable and composed", got)
 	}
 	s.eval(`seen.length = 0; window.hold = true`)
 	s.page.Tree.Heard(s.byID("alone"), "submit", dom.Keys{})

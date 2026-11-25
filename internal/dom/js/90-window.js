@@ -180,6 +180,7 @@ const eventOf = (type, init) => {
   else if (type.startsWith("key")) event = new KeyboardEvent(type, full);
   else if (type === "input") event = new InputEvent(type, { ...full, cancelable: false });
   else if (type === "beforeinput") event = new InputEvent(type, full);
+  else if (type === "change" || type === "select") event = new Event(type, { ...full, cancelable: false, composed: false });
   else if (type === "focus" || type === "blur") event = new FocusEvent(type, { ...full, bubbles: false, cancelable: false });
   else if (type === "focusin" || type === "focusout") event = new FocusEvent(type, { ...full, cancelable: false });
   else if (type === "submit") event = new SubmitEvent(type, { ...full, submitter: wrap(full.submitter || 0) });
