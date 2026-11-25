@@ -45,6 +45,7 @@ const scripted = /^[\t\n\f\r ]*j[\t\n\r]*a[\t\n\r]*v[\t\n\r]*a[\t\n\r]*s[\t\n\r]
 // told whether the click stands.
 activation = (event, path) => {
   const state = eventStates.get(event);
+  if (state.trusted && activating(state.type, event)) [activatedAt, everActivated] = [now(), true];
   if (state.trusted || state.type !== "click" || !(event instanceof MouseEvent)) return null;
   const node = activatable(path[0]) ? path[0] : state.bubbles ? path.slice(1).find(activatable) : undefined;
   if (!node) return null;
@@ -54,3 +55,46 @@ activation = (event, path) => {
     else if (back) back();
   };
 };
+
+// ---- user activation
+
+// A person's key or press activates the page: for transientActivation
+// after it a script may ask, once, for what only a person may
+// (showPicker), as Chrome counts it.
+const transientActivation = 5000;
+let activatedAt = -Infinity, everActivated = false;
+const activating = (type, event) => (type === "keydown" ? event.key !== "Escape"
+  : type === "mousedown" || type === "touchend" ||
+    (type === "pointerdown" || type === "pointerup") && (event.pointerType === "mouse") === (type === "pointerdown"));
+const activeNow = () => now() - activatedAt < transientActivation;
+const userActivationKey = Symbol("userActivation");
+class UserActivation {
+  constructor(key) { if (key !== userActivationKey) illegal(); }
+  get hasBeenActive() { return everActivated; }
+  get isActive() { return activeNow(); }
+}
+define(window, { UserActivation });
+navigator.userActivation = new UserActivation(userActivationKey);
+
+// showPicker opens no picker of light's, but asks what a browser asks
+// first, and takes the activation it needs.
+const readOnlyApplies = /^(text|search|url|tel|email|password|date|month|week|time|datetime-local|number)$/;
+const picking = (control, readOnly) => {
+  if (control.matches(":disabled") || readOnly && control.hasAttribute("readonly")) {
+    throw new DOMException("A control disabled or read-only shows no picker.", "InvalidStateError");
+  }
+  if (!activeNow()) throw new DOMException("showPicker() needs a person's activation.", "NotAllowedError");
+};
+define(HTMLInputElement.prototype, {
+  showPicker() {
+    picking(this, readOnlyApplies.test(this.type));
+    activatedAt = -Infinity;
+  },
+});
+define(HTMLSelectElement.prototype, {
+  showPicker() {
+    picking(this, false);
+    if (!host("laid", this[REF])) throw new DOMException("A select not shown shows no picker.", "NotSupportedError");
+    activatedAt = -Infinity;
+  },
+});
