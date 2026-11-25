@@ -63,6 +63,9 @@ func (s *Screen) showTabs() {
 		title := s.title(tab.Current())
 		t.name.SetText(title)
 		t.listed.SetText(title)
+		lang := s.language(tab.Current())
+		speak(t.name, lang)
+		speak(t.listed, lang)
 		name, loads := s.icon(tab.Current()), s.waited(tab) != ""
 		if loads {
 			name = spinner
@@ -99,6 +102,15 @@ func (s *Screen) buildTabs() {
 	s.tabs.Append(
 		s.button("new-tab", "New tab", "plus", s.newTab),
 		s.button("all-tabs", "List all tabs", "tabs", func() { toggle(s.list, "shown", !s.list.HasClass("shown")) }))
+}
+
+// speak puts n in the language lang, or in none for "".
+func speak(n *ui.Node, lang string) {
+	if lang == "" {
+		n.RemoveAttr("lang")
+		return
+	}
+	n.SetAttr("lang", lang)
 }
 
 // depict has a tab's icon show the picture named, or nothing.

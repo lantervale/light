@@ -250,8 +250,10 @@ func (p *Profile) screen(win *platform.Window, address string) *Screen {
 	s.savesSeen = p.saves.Version()
 	s.apply()
 	s.features = features()
+	// The shell shows the pages' titles, addresses and text, in any script: the machine's faces draw what
+	// the engine's lack. Its sheets name only generic families, which stay the engine's faces.
 	s.doc = ui.NewDocument(ui.CSS(sheet), ui.CSS(menu.Sheet), ui.CSS(devtools.Sheet), ui.Images(icons()),
-		ui.FetchImages(s.picture), ui.RightDragSelects(), ui.WheelScroll(p.config.ScrollFactor()))
+		ui.FetchImages(s.picture), ui.RightDragSelects(), ui.WheelScroll(p.config.ScrollFactor()), ui.SystemFonts())
 	s.build()
 	s.header()
 	s.visit(address)
