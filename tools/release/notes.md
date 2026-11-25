@@ -1,4 +1,4 @@
-## light v0.2.5
+## light v0.2.6
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,32 +7,18 @@ not a browser to live in.
 
 ## What is new
 
-- **JavaScript on Windows**: the Windows build runs scripts in V8, as on macOS and Linux.
-- **Text**: shaped with the face's OpenType tables as Chrome shapes it, Arabic joined, Hebrew, Thai, Hangul and the
-  Indic scripts; CJK line breaking and spacing (`line-break`, `text-spacing-trim`, `text-autospace`); colour and
-  variable fonts; `text-wrap: balance` and `pretty`, soft hyphens, `line-clamp` and drop caps (`initial-letter`).
-- **Vertical writing and right to left**: `writing-mode`, `text-orientation` and `text-combine-upright`, laid out,
-  selected and scrolled; right-to-left scrollers, carets, selections and selects that start from the right.
-- **Scrolling**: smooth scrolls and scroll snapping, `::-webkit-scrollbar` and `scrollbar-color`, a held click on a
-  scrollbar's track paging on, and precise wheel turns on Windows and Wayland.
-- **Forms and controls**: a `select` with `multiple` or a `size` is a listbox, `optgroup`, type-ahead in selects,
-  resizable textareas, `appearance: none` and controls styled part by part, the `popover` attribute.
-- **Layout and drawing**: anchor positioning, `translate`, `rotate` and `scale`, transforms that hold fixed boxes
-  and turn their overflow, columns cutting tables, grids and flex boxes, `@property`, CSS nesting and `@scope`,
-  every colour space and `color-mix()`, animated GIF and WebP pictures, lazy pictures.
-- **Keys and copies**: Enter in a search box sends it, also where the page's script listens for the key on a
-  textarea; Shift, Alt, Control and Meta reach a page's key events, so Shift+Enter adds a line where Enter sends;
-  Ctrl+N opens a window on Windows and Linux; a copy on macOS and Windows carries the page's markup and styles,
-  as Chrome's does.
-- A page counts as loaded once its pictures show; its scripts read sizes as the page is laid out now, computed
-  styles with their math functions worked out, and a `document.fonts.ready` that settles.
-- New in v0.2.4, the release before: CSS animations and transitions, filters, masks and blend modes, container
-  queries and `:has()`.
-
-> [!WARNING]
-> A very early preview, not even an alpha. Its security is not hardened yet: **do not open sensitive pages with
-> it and do not type a password, a card number or any other secret anywhere in it.** light says so itself at its
-> first start.
+- **Japanese, Chinese, Korean and Arabic text**: where a page's fonts lack a script, light draws it with a font
+  installed on your system, chosen by the script and by the page's language (its `lang`, else its
+  `Content-Language`). These pages showed question marks before.
+- **Scripts**: script elements a page adds, fills or points elsewhere run in the order and at the moment Chrome runs
+  them, and the page's load waits for them.
+- **Forms**: a control belongs to the form its `form` attribute names; `form.elements` finds them across the page;
+  `showPicker()` and `navigator.userActivation` answer as in Chrome; `change` and `select` events are no longer
+  cancelable.
+- **Selectors and sizes**: `:open`, `:popover-open`, `:modal`, `:user-valid`, `:user-invalid`, `:hover`, `:active`,
+  `:focus-visible` and `:focus-within` work in a page's scripts; `offsetParent`, `offsetLeft` and `offsetTop` are
+  measured from the right parent; `document.fonts` lays the page out before it answers.
+- A page starting with a byte order mark no longer opens in quirks mode with a stray line of text at its top.
 
 ## What to download
 
