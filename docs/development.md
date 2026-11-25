@@ -98,14 +98,22 @@ packs the binary with `light-model` and the wgpu-native library, checked against
 syft reads no DMG), a `.tar.gz` on Linux and a `.zip` on Windows; the next job adds the other archives' SBOMs, the
 source archive and the checksums (`tools/release/assemble.sh`), and the last signs them and publishes the GitHub
 release, once every target built.
-Run by hand from the Actions tab, the workflow does the same as a snapshot and publishes nothing.
+Run by hand from the Actions tab, the workflow does the same as a snapshot and publishes nothing, unless it runs on
+a `v*` tag with `publish` set.
+
+A release is tagged by `.github/workflows/tag.yml`, run by hand from the Actions tab ("tag a release"): once
+`main`'s checks are green it takes the next patch version after the last `v*` tag. While `tools/release/notes.md`
+is not that version's, it drafts them from the conventional commits since the last tag
+(`tools/release/draft-notes.sh`: `feat`, `fix` and `perf` under "What is new", the rest of the notes kept) into a
+pull request that merges itself once green; rewrite the draft there, then run the workflow again. With the notes on
+`main`, it tags `main` and runs `release.yml` on the tag with `publish`.
 
 It needs [GoReleaser](https://goreleaser.com) v2 (the open-source one), and syft for the SBOMs:
 `brew install goreleaser syft`.
 
 ```sh
-task release:snapshot   # this system's archive in dist/, as the workflow builds it (a .dmg on a Mac)
-git tag v0.1.0 && git push origin v0.1.0
+task release:snapshot                            # this system's archive in dist/, as the workflow builds it (a .dmg on a Mac)
+sh tools/release/draft-notes.sh v0.2.6           # the notes drafted by hand, from the commits since the last tag
 ```
 
 The Homebrew cask, `brew install --cask lantervale/tap/light`, lives in
@@ -114,3 +122,9 @@ every hour and points the cask at its DMGs and their checksums, so a release nee
 
 A release builds from `go.mod` and `go.sum` alone, without the workspace: `tools/release/preflight.sh` stops it
 early, saying so, while light needs an ember later than the one pinned.
+
+`.github/workflows/bump-ember.yml` keeps that pin on ember's `main`: every hour, and when run by hand, it pins
+ember's `main` once it moved, as it is done by hand (`tools/release/bump-ember.sh`: `go get` that commit, `go mod
+tidy`, then the preflight), and opens the pull request `bump/ember`, or updates the one open, which merges itself
+once its checks are green. `DRY_RUN=1 sh tools/release/bump-ember.sh` says whether the pin is behind, changing
+nothing.

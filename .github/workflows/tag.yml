@@ -1,0 +1,97 @@
+# Releases the next patch version of light from main, run by hand. Once main's checks are green it takes the last
+# v* tag's next patch version. While tools/release/notes.md is not that version's, it drafts them from the
+# conventional commits since the last tag (tools/release/draft-notes.sh) and opens a pull request that merges itself
+# once green: rewrite the draft there, then run this again. With the notes on main, it tags main and starts
+# release.yml on the tag (a tag pushed with the workflow's token starts no workflow by itself), which builds and
+# publishes the release.
+name: tag a release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # the tag, the notes' branch
+  pull-requests: write # the notes' pull request and auto-merge
+  actions: write # release.yml on the tag, the Windows check on the notes' branch
+  checks: read # main's checks
+
+concurrency:
+  group: tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: tag main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0 # the tags and the commits since the last
+
+      - name: main's checks are green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs" --paginate \
+            --jq '.check_runs[] | select(.name != "tag main") | [.name, .status, (.conclusion // "")] | @tsv' \
+            > "$RUNNER_TEMP/checks"
+          cat "$RUNNER_TEMP/checks"
+          if [ ! -s "$RUNNER_TEMP/checks" ]; then
+            echo "::error::main ($sha) has no checks to be green"
+            exit 1
+          fi
+          if awk -F'\t' '$2 != "completed" || ($3 != "success" && $3 != "skipped" && $3 != "neutral")' "$RUNNER_TEMP/checks" | grep -q .; then
+            echo "::error::main ($sha) is not green: a check is still running or failed"
+            exit 1
+          fi
+
+      - name: The next patch version
+        id: version
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*')
+          next=$(echo "$last" | awk -F. -v OFS=. '{ sub(/-.*/, "", $3); $3 = $3 + 1; print }')
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "$last, next $next"
+
+      - name: Notes first, by pull request
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LAST: ${{ steps.version.outputs.last }}
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          if [ "$(head -1 tools/release/notes.md)" = "## light $NEXT" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          branch="release/notes-$NEXT"
+          sh tools/release/draft-notes.sh "$NEXT" "$LAST"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$branch"
+          git commit -am "docs(release): the notes of $NEXT"
+          git push --force origin "$branch"
+          if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = 0 ]; then
+            gh pr create --base main --head "$branch" --title "docs(release): the notes of $NEXT" \
+              --body "The notes of $NEXT, drafted from the conventional commits since $LAST by the tag a release workflow. Rewrite them here; once this is merged, run the workflow again to tag $NEXT."
+          fi
+          gh workflow run windows.yml --ref "$branch"
+          gh pr merge "$branch" --merge --auto
+          echo "::notice::the notes of $NEXT are a pull request: merge it, then run this workflow again to tag"
+
+      - name: Tag main and start the release
+        if: steps.notes.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$NEXT" -m "light $NEXT" HEAD
+          git push origin "$NEXT"
+          gh workflow run release.yml --ref "$NEXT" -f publish=true
+          echo "::notice::tagged $NEXT at $(git rev-parse HEAD); release.yml builds and publishes it"

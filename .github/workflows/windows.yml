@@ -1,10 +1,14 @@
 # Builds light with its JavaScript engine on Windows and runs its tests there, those of the engine and the DOM first:
 # the V8 the binding ships for Windows is built for the MSVC ABI, so light is compiled with LLVM's MSVC-target clang
-# and LLD rather than mingw-w64, which no other system checks. The release builds the same way (release.yml).
+# and LLD rather than mingw-w64, which no other system checks. The release builds the same way (release.yml). It runs
+# on main too, whose checks tag.yml waits green for, and by hand, as the bump and notes workflows start it on their
+# pull requests' branches.
 name: windows
 
 on:
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
   workflow_dispatch:
 
