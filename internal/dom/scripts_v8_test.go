@@ -110,3 +110,15 @@ func TestTheAsyncOfAScript(t *testing.T) {
 		t.Errorf("the scripts are async %q, want %q", got, want)
 	}
 }
+
+func TestAScriptMovedToAnotherDocumentRunsInNeither(t *testing.T) {
+	h := &held{waiting: map[string]func(dom.Response){}}
+	s := &scripted{t: t, answers: map[string]dom.Response{}}
+	s.start(`<script>var seen = [];
+		const moved = document.createElement("script"); moved.src = "/moved.js";
+		moved.onload = moved.onerror = (e) => seen.push(e.type); document.head.appendChild(moved);
+		document.implementation.createHTMLDocument().body.appendChild(moved);
+		window.onload = () => seen.push("load");</script>`, dom.Host{Fetch: h.fetch})
+	h.answer(t, "https://site.test/moved.js", `seen.push("ran")`)
+	s.frames("the load", func() bool { return s.eval(`seen.join()`) == "load" })
+}

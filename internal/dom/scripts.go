@@ -94,7 +94,13 @@ func (r *Runtime) prepare(n *html.Node) {
 	case kind == web.ModuleScript:
 		next := r.awaited(ordered)
 		r.load(n, text, address, external, func(e *moduleElement) {
-			r.waiting = append(r.waiting, func() { r.came(next, func() { r.execute(e) }) })
+			r.waiting = append(r.waiting, func() {
+				r.came(next, func() {
+					if r.ours(n) {
+						r.execute(e)
+					}
+				})
+			})
 		})
 	case !external:
 		r.run(text, r.page.Address, n)
@@ -102,7 +108,10 @@ func (r *Runtime) prepare(n *html.Node) {
 		next := r.awaited(ordered)
 		r.request(Request{Method: methodGet, Address: address, Script: true}, func(answer Response) {
 			r.came(next, func() {
-				if answer.Err != nil || answer.Status < 200 || answer.Status > 299 {
+				switch {
+				case !r.ours(n):
+					return
+				case answer.Err != nil || answer.Status < 200 || answer.Status > 299:
 					r.say("warn", "A script was not run: "+failure(answer), address)
 					r.fire(n, "error", nil)
 					return
@@ -113,6 +122,11 @@ func (r *Runtime) prepare(n *html.Node) {
 		})
 	}
 }
+
+// ours reports whether the script element n is still of the page's
+// document: one moved to another document once prepared runs in
+// neither.
+func (r *Runtime) ours(n *html.Node) bool { return r.keeper(n) == r && r.home(n) == nil }
 
 // awaited is the turn of a dynamic script the load waits for: among
 // those that run in order, or on its own.
