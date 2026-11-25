@@ -89,3 +89,21 @@ func TestFontsReadyAskedWhileAFontCameBetweenTwoFramesIsAnswered(t *testing.T) {
 	}
 	s.frames("ready, the font landed before a frame saw it on its way", func() bool { return s.eval(`ready`) == "yes" })
 }
+
+func TestFontsReadyWaitsForTheFontsOfTextAScriptJustAdded(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		_, _ = w.Write(gobold.TTF)
+	}))
+	t.Cleanup(srv.Close)
+	s := run(t, `<style>@font-face { font-family: Heavy; src: url(`+srv.URL+`/heavy.ttf); }</style><p>plain</p>`)
+	s.eval(`const p = document.createElement("p"); p.style.fontFamily = "Heavy"; p.textContent = "text";
+		document.body.append(p); window.ready = "no"; document.fonts.ready.then(() => { ready = "yes" })`)
+	s.frames("a frame after the script", func() bool { return true })
+	if got := s.eval(`ready + " " + document.fonts.status`); got != "no loading" {
+		t.Errorf("before the font came, ready and the status are %q", got)
+	}
+	close(release)
+	s.frames("ready once the font came", func() bool { return s.eval(`ready`) == "yes" })
+}
