@@ -799,9 +799,7 @@ not given one keeps them in memory.
   30 s to come; one that fails is a warning of the page. A variable font shows the weight and width its text asks
   for, a bold or italic the family lacks is made up from the face it has, the font's OpenType features and
   ligatures apply (an icon font that writes its icons as words, as Material Icons, shows the icons), and colour
-  fonts and collections are not read. A character none of the page's fonts has is drawn by Go Mono, or as `?`:
-  light does not yet look among the machine's fonts for one that has it, so Japanese, Chinese, Korean and Arabic
-  show only where the page names a font that has them. A font
+  fonts and collections are not read. A font
   of another site is used whatever its `Access-Control-Allow-Origin`, where a browser refuses it without one.
   A sheet an `@import` names is fetched as the page shows, asked by the sheet that imports it, and taken when it
   is served as `text/css` or as no type; the page shows without it until it lands. light keeps its own
