@@ -175,6 +175,27 @@ func TestTextIsDecodedByItsCharset(t *testing.T) {
 	}
 }
 
+func TestTextLeavesOutItsByteOrderMark(t *testing.T) {
+	const page = "<!DOCTYPE html><p>é"
+	var le, be []byte
+	for _, r := range page {
+		le, be = append(le, byte(r), byte(r>>8)), append(be, byte(r>>8), byte(r))
+	}
+	for name, c := range map[string]struct {
+		header, body string
+	}{
+		"UTF-8":                         {"text/html", "\xef\xbb\xbf" + page},
+		"UTF-8 over the type's charset": {"text/html; charset=windows-1252", "\xef\xbb\xbf" + page},
+		"UTF-16LE":                      {"text/html", "\xff\xfe" + string(le)},
+		"UTF-16BE":                      {"text/html", "\xfe\xff" + string(be)},
+	} {
+		a := &fetch.Answer{Header: http.Header{"Content-Type": {c.header}}, Body: []byte(c.body)}
+		if got := a.Text(); got != page {
+			t.Errorf("%s reads %q, want %q", name, got, page)
+		}
+	}
+}
+
 func TestCodeIsUTF8UnlessItsTypeNamesACharset(t *testing.T) {
 	late := strings.Repeat(" ", 2048) + "var r = {À: 'A'}"
 	for name, c := range map[string]struct {
