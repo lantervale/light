@@ -13,8 +13,10 @@ import (
 
 // put sets an attribute of n, and what of n's state it stands for.
 func (r *Runtime) put(n *html.Node, name, value string) {
+	_, had := attribute(n, name)
 	r.tree.SetAttr(n, name, value)
 	r.stated(n, name, value)
+	r.scriptAttr(n, name, had)
 }
 
 func (r *Runtime) attr(n *html.Node, a arguments) (any, error) {

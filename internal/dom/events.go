@@ -323,42 +323,6 @@ func (r *Runtime) watchFocus() {
 	}
 }
 
-// added is a script element a script put in the page: it runs at the
-// next frame, once fetched when it names a source.
-func (r *Runtime) added(element *html.Node) {
-	kind, _ := attribute(element, "type")
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "", "text/javascript", "application/javascript":
-		if _, fallback := attribute(element, "nomodule"); fallback {
-			return
-		}
-	case "module":
-		source, external := attribute(element, "src")
-		r.load(element, textOf(element), r.resolve(source), external, r.execute)
-		return
-	case "importmap":
-		r.mapImports(textOf(element))
-		return
-	default:
-		return
-	}
-	source, external := attribute(element, "src")
-	if !external {
-		r.waiting = append(r.waiting, func() { r.run(textOf(element), r.page.Address, element) })
-		return
-	}
-	address := r.resolve(source)
-	r.request(Request{Method: methodGet, Address: address, Script: true}, func(answer Response) {
-		if answer.Err != nil || answer.Status < 200 || answer.Status > 299 {
-			r.say("warn", "A script was not run: "+failure(answer), address)
-			r.fire(element, "error", nil)
-			return
-		}
-		r.run(answer.Text, answer.Address, element)
-		r.fire(element, "load", nil)
-	})
-}
-
 func failure(answer Response) string {
 	if answer.Err != nil {
 		return answer.Err.Error() + "."

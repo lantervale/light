@@ -130,7 +130,7 @@ func (r *Runtime) proceed() {
 		r.state = interactive
 		r.enter("ready", "interactive")
 	}
-	if r.state == interactive && r.racing == 0 && (r.host.Loading == nil || !r.host.Loading()) &&
+	if r.state == interactive && r.racing == 0 && r.scripts.waited == 0 && (r.host.Loading == nil || !r.host.Loading()) &&
 		!r.picturesLoading() {
 		r.state = complete
 		r.enter("ready", "complete")
@@ -484,12 +484,5 @@ func typed(kind, media string) bool {
 	if kind == typeJSON {
 		return media == "application/json" || media == "text/json" || strings.HasSuffix(media, "+json")
 	}
-	switch media {
-	case "application/ecmascript", "application/javascript", "application/x-ecmascript", "application/x-javascript",
-		"text/ecmascript", "text/javascript", "text/javascript1.0", "text/javascript1.1", "text/javascript1.2",
-		"text/javascript1.3", "text/javascript1.4", "text/javascript1.5", "text/jscript", "text/livescript",
-		"text/x-ecmascript", "text/x-javascript":
-		return true
-	}
-	return false
+	return web.JavaScriptType(media)
 }

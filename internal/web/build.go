@@ -219,11 +219,11 @@ func (b *builder) load(ctx context.Context, root *html.Node) {
 // script keeps the script element n, its source fetched meanwhile when
 // it names one.
 func (b *builder) script(ctx context.Context, n *html.Node, wg *sync.WaitGroup, limit chan struct{}) {
-	kind := scriptKind(n)
-	if kind == "" {
+	kind := ScriptKind(n)
+	if _, fallback := lookup(n, "nomodule"); kind == "" || kind == ClassicScript && fallback {
 		return
 	}
-	s := &Script{Address: b.base.String(), Node: n, Module: kind == moduleScript, ImportMap: kind == importMap}
+	s := &Script{Address: b.base.String(), Node: n, Module: kind == ModuleScript, ImportMap: kind == ImportMap}
 	_, deferred := lookup(n, "defer")
 	_, async := lookup(n, "async")
 	src, external := lookup(n, "src")

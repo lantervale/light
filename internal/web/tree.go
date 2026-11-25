@@ -681,26 +681,49 @@ func (b *builder) live(a *ui.Node) {
 
 // The kinds of script elements that are scripts.
 const (
-	classicScript = "classic"
-	moduleScript  = "module"
-	importMap     = "importmap"
+	ClassicScript = "classic"
+	ModuleScript  = "module"
+	ImportMap     = "importmap"
 )
 
-// scriptKind is the kind of script a script element is, "" for one
-// that is none: one of another type holds data, and one marked nomodule
-// is for the browsers that read no module.
-func scriptKind(n *html.Node) string {
-	switch kind := strings.ToLower(strings.TrimSpace(attr(n, "type"))); kind {
-	case "", "text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript",
-		"application/x-javascript", "text/jscript", "text/livescript":
-		if _, fallback := lookup(n, "nomodule"); fallback {
-			return ""
-		}
-		return classicScript
-	case moduleScript, importMap:
-		return kind
+// ScriptKind is the kind of script a script element is by its type, or
+// by its language where it has no type, "" for one that is none: one of
+// another type holds data. Its nomodule is not read here.
+func ScriptKind(n *html.Node) string {
+	kind, typed := lookup(n, "type")
+	language, named := lookup(n, "language")
+	switch {
+	case typed && kind == "", !typed && (!named || language == ""):
+		return ClassicScript
+	case !typed:
+		kind = "text/" + language
+	}
+	kind = strings.Trim(kind, asciiSpace)
+	switch {
+	case JavaScriptType(kind):
+		return ClassicScript
+	case strings.EqualFold(kind, ModuleScript):
+		return ModuleScript
+	case strings.EqualFold(kind, ImportMap):
+		return ImportMap
 	}
 	return ""
+}
+
+// asciiSpace is what HTML strips from the ends of a value.
+const asciiSpace = " \t\n\f\r"
+
+// JavaScriptType reports whether media names JavaScript: one of the
+// essences of JavaScript's MIME types, in any case, with no parameter.
+func JavaScriptType(media string) bool {
+	switch strings.ToLower(media) {
+	case "application/ecmascript", "application/javascript", "application/x-ecmascript", "application/x-javascript",
+		"text/ecmascript", "text/javascript", "text/javascript1.0", "text/javascript1.1", "text/javascript1.2",
+		"text/javascript1.3", "text/javascript1.4", "text/javascript1.5", "text/jscript", "text/livescript",
+		"text/x-ecmascript", "text/x-javascript":
+		return true
+	}
+	return false
 }
 
 // Fetched reports whether address is one light fetches: of http or of

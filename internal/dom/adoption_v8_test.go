@@ -107,7 +107,7 @@ func TestANodeMovesBetweenTheDocumentsOfKin(t *testing.T) {
 	top.gives(t,
 		[2]string{`(() => { const ran = document.getElementById("ran"); d.body.appendChild(ran);
 			const fresh = document.createElement("script"); fresh.textContent = "window.ranIn = window.mark;";
-			d.body.appendChild(fresh); return [window.runs, window.ranIn, w.runs, w.ranIn].join(); })()`, "1,,,"},
+			d.body.appendChild(fresh); return [window.runs, window.ranIn, w.runs, w.ranIn].join(); })()`, "1,,,one"},
 	)
 	one.rt.Frame()
 	top.gives(t,

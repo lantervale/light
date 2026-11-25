@@ -43,6 +43,15 @@ const flag = (attribute) => ({
   get() { return (ownAttr(this, attribute) !== null); },
   set(on) { this.toggleAttribute(attribute, Boolean(on)); },
 });
+// forceAsync is a script's async: true for one a script made until
+// it is set, whatever its attribute says.
+const forceAsync = {
+  get() { return host("async", this[REF], false); },
+  set(on) {
+    host("async", this[REF], true);
+    this.toggleAttribute("async", Boolean(on));
+  },
+};
 // numbered is a number read from its attribute, where it is one and in
 // range, and written back unless the kind says not to.
 const numbered = (attribute, read, written) => ({
@@ -318,7 +327,7 @@ for (const [interfaceOf, properties] of [
   [HTMLBRElement, { clear: "clear" }],
   [HTMLHtmlElement, { version: "version" }],
   [HTMLScriptElement, {
-    src: located("src"), type: "type", noModule: flag("nomodule"), charset: "charset", async: flag("async"),
+    src: located("src"), type: "type", noModule: flag("nomodule"), charset: "charset", async: forceAsync,
     defer: flag("defer"), crossOrigin, integrity: "integrity", event: "event", htmlFor: "for", referrerPolicy,
   }],
   [HTMLSlotElement, { name: "name" }],
