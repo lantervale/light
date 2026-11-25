@@ -254,7 +254,7 @@ func TestAScriptAddedToThePageRuns(t *testing.T) {
 	s := &scripted{t: t, answers: map[string]dom.Response{
 		"https://site.test/lib.js": {Status: 200, Text: `window.lib = "loaded"`},
 	}}
-	s.start(`<script>var seen = [];
+	s.start(`<body><script>var seen = [];
 		const inline = document.createElement("script"); inline.textContent = "seen.push('inline')";
 		document.body.appendChild(inline);
 		const lib = document.createElement("script"); lib.src = "/lib.js"; lib.onload = () => seen.push("lib " + window.lib);

@@ -77,14 +77,14 @@ func (s *Screen) documentOf(n *ui.Node) (*frame, bool) {
 		return nil, false
 	}
 	root := rootOf(n)
-	if root == rootOf(page.Doc.Body()) || page.Tree != nil && root == rootOf(page.Tree.Head()) {
+	if root == rootOf(page.Doc.HTML()) || page.Tree != nil && root == rootOf(page.Tree.Head()) {
 		return nil, true
 	}
 	for _, f := range session.frames[page].frameList() {
 		if f.gone || f.page == nil || f.page.Doc == nil {
 			continue
 		}
-		if root == rootOf(f.page.Doc.Body()) || f.page.Tree != nil && root == rootOf(f.page.Tree.Head()) {
+		if root == rootOf(f.page.Doc.HTML()) || f.page.Tree != nil && root == rootOf(f.page.Tree.Head()) {
 			return f, true
 		}
 	}

@@ -950,7 +950,9 @@ What does not:
   nothing. An `svg` is in the tree and scripts change it:
   it is drawn as one picture, again the frame after a change, with `currentColor` the colour of its text, but the
   page's rules do not reach the shapes inside it (`svg path { fill: … }`), and `foreignObject` and animations
-  are not drawn; scripts run once the whole page is read, so `document.write` writes nothing.
+  are not drawn; scripts run once the whole page is read (a script that is no `defer`, `async` or module script sees
+  the page as far as a parser had read it, what follows it put back in the tree, node by node, after it ran), so
+  `document.write` writes nothing.
 - **Requests**: an answer's bytes reach a script as they came (`arrayBuffer()`, `bytes()`, `blob()`, an
   `XMLHttpRequest` of type `arraybuffer` or `blob`), and are decoded where it asks for text: as UTF-8 by `text()`
   and `json()` whatever the answer says of its encoding, by the answer's charset (or `overrideMimeType`'s) for

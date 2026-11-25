@@ -182,7 +182,7 @@ func TestScriptsRunInTheOrderOfThePage(t *testing.T) {
 }
 
 func TestTheConsoleIsTold(t *testing.T) {
-	s := run(t, `<script>console.log("a", 1, {b: [true, null]}, document.body);
+	s := run(t, `<body><script>console.log("a", 1, {b: [true, null]}, document.body);
 		console.warn("careful %s: %d", "now", 4.7); console.error(new TypeError("bad"));
 		alert("hello"); console.info("after");</script><script>
 		undefinedFunction()</script><script>console.log("still runs")</script>

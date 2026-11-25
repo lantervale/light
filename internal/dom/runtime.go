@@ -399,7 +399,20 @@ func (r *Runtime) start() {
 			r.ran[s.Node] = true
 		}
 	}
+	var first *html.Node
 	for _, s := range r.page.Scripts {
+		if !s.Deferred && s.Node != nil {
+			first = s.Node
+			break
+		}
+	}
+	held := r.holdBack(first)
+	for _, s := range r.page.Scripts {
+		if s.Deferred {
+			r.reach(held, nil)
+		} else if s.Node != nil {
+			r.reach(held, s.Node)
+		}
 		switch {
 		case s.Node != nil && !prepared[s.Node]:
 		case s.Skipped != "":
@@ -415,6 +428,7 @@ func (r *Runtime) start() {
 			r.ranFrom(s.Source, s.Address, s.Node)
 		}
 	}
+	r.reach(held, nil)
 	r.preload()
 	r.starting = false
 	r.proceed()

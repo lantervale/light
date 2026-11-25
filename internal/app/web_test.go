@@ -22,9 +22,9 @@ const article = `<!doctype html><html class="site"><head><title> A  crypt </titl
 <style>p.note { height: 50px } ul li { height: 31px; }</style></head><body id="top">
 <h1>The crypt</h1>
 <p class="note">It floods <b>every</b> spring, says <a id="vault" href="/vaults?x=1">the vault page</a>.</p>
-<script>alert(1)</script>
 <ul><li id="torch">Torch</li><li><a id="jump" href="#top">Top</a></li></ul>
 <img id="map" src="map.png" alt="The map"><img id="lost" src="/lost.png">
+<script>alert(1)</script>
 </body></html>`
 
 const siteSheet = `/* a { height: 99px } */

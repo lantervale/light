@@ -353,7 +353,7 @@ func (s *Screen) asks(f *frame) string {
 
 // rooted reports whether n is in doc.
 func rooted(n *ui.Node, doc *ui.Document) bool {
-	return doc != nil && rootOf(n) == rootOf(doc.Body())
+	return doc != nil && rootOf(n) == rootOf(doc.HTML())
 }
 
 func rootOf(n *ui.Node) *ui.Node {
