@@ -13,9 +13,9 @@ class HTMLElement extends Element {
   get outerText() { return this.textContent; }
   get offsetWidth() { return Math.round(host("box", this[REF])[2]); }
   get offsetHeight() { return Math.round(host("box", this[REF])[3]); }
-  get offsetLeft() { return Math.round(host("box", this[REF])[0] + window.scrollX); }
-  get offsetTop() { return Math.round(host("box", this[REF])[1] + window.scrollY); }
-  get offsetParent() { return this === document.body || !this.isConnected ? null : document.body; }
+  get offsetLeft() { return offsetFrom(this, 0); }
+  get offsetTop() { return offsetFrom(this, 1); }
+  get offsetParent() { return offsetParentOf(this); }
   get isContentEditable() { return false; }
   focus() { host("focus", this[REF]); }
   blur() { host("blur", this[REF]); }
@@ -25,6 +25,45 @@ class HTMLElement extends Element {
   }
 }
 withHandlers(HTMLElement.prototype);
+
+// containsAbsolute reports whether an element is the containing block
+// of the absolutely positioned boxes in it: positioned, or transformed,
+// filtered or given a perspective.
+const containsAbsolute = (element) => {
+  const style = computedStyle(element);
+  if ((style.position || "static") !== "static") return true;
+  return ["transform", "filter", "perspective"].some((name) => {
+    const value = style.getPropertyValue(name);
+    return value !== "" && value !== "none";
+  });
+};
+// offsetParentOf is an element's offset parent (CSSOM View): the
+// nearest ancestor holding its absolutely positioned boxes, a table or
+// cell round a box that is not positioned, else the body; none for the
+// root, the body, an element not shown and a fixed one.
+const offsetParentOf = (element) => {
+  if (!element.isConnected || element === document.body || element === document.documentElement) return null;
+  if (!host("laid", element[REF])) return null;
+  const position = computedStyle(element).position || "static";
+  if (position === "fixed") return null;
+  for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    if (ancestor === document.body || containsAbsolute(ancestor)) return ancestor;
+    if (position === "static" && ["td", "th", "table"].includes(ancestor.localName)) return ancestor;
+  }
+  return null;
+};
+// offsetFrom is an element's offsetLeft (axis 0) or offsetTop (axis 1):
+// from its offset parent's padding edge, or from the page where that
+// parent is the body or there is none.
+const offsetFrom = (element, axis) => {
+  const at = host("box", element[REF])[axis];
+  const parent = offsetParentOf(element);
+  if (parent === null || parent === document.body) return Math.round(at + (axis ? window.scrollY : window.scrollX));
+  const side = axis ? "border-top-width" : "border-left-width";
+  const border = parseFloat(computedStyle(parent).getPropertyValue(side)) || 0;
+  return Math.round(at - host("box", parent[REF])[axis] - border);
+};
+
 class HTMLUnknownElement extends HTMLElement {}
 
 // absolute is a reference as an address, from the page's.
