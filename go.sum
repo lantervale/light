@@ -22,8 +22,8 @@ github.com/gost-dom/v8go v0.0.0-20261122151726-225b867b1836 h1:VFKfOTYYrRPhqTak5
 github.com/gost-dom/v8go v0.0.0-20261122151726-225b867b1836/go.mod h1:P47YiDxZIvzP3leeox7sZhbt4bdpOZfdUbF8JYvVg0o=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
-github.com/lantervale/ember v0.0.0-20261125171116-83416ed86588 h1:2cN17ACuZhaIUk0aAB7amErHVEQYV2I00nESk0BjWNA=
-github.com/lantervale/ember v0.0.0-20261125171116-83416ed86588/go.mod h1:fIHtTAuViBjFfYMjhxMjdb72FXlQK/t02F9iraC2U9g=
+github.com/lantervale/ember v0.0.0-20261127042305-2f46e2ae67d0 h1:isRSrJ8PHGbZNLEGMRrRlkoGR//BpexDKEzdnIxkn9c=
+github.com/lantervale/ember v0.0.0-20261127042305-2f46e2ae67d0/go.mod h1:fIHtTAuViBjFfYMjhxMjdb72FXlQK/t02F9iraC2U9g=
 github.com/quic-go/quic-go v0.59.0 h1:OLJkp1Mlm/aS7dpKgTc6cnpynnD2Xg7C1pwL6vy/SAw=
 github.com/quic-go/quic-go v0.59.0/go.mod h1:upnsH4Ju1YkqpLXC305eW3yDZ4NfnNbmQRCMWS58IKU=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
