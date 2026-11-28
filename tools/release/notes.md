@@ -7,9 +7,22 @@ not a browser to live in.
 
 ## What is new
 
+light now runs on [ember v0.1.0](https://github.com/lantervale/ember/releases/tag/v0.1.0), the engine's first
+release. ember now passes 95.5% of the CSS 2.1 tests it can draw, up from 80%, so pages lay out and paint closer to
+Chrome:
+
+- **Text and encodings:** pages and style sheets are decoded in their declared charset, bidi control characters no
+  longer show as "?", right-to-left text reorders and breaks as Chrome does, and `monospace` defaults to 13px.
+- **Tables:** fixed layout, min/max heights, captions, anonymous tables inside inline elements, and the backgrounds
+  of rows and columns.
+- **Floats and positioning:** floats split across columns, relative offsets on inline blocks, and absolutely
+  positioned boxes among lines.
+- **New CSS:** `clip: rect()`.
+
 ### Fixed
 
-- draw the shell's text in scripts the engine's faces lack
+- A tab's title in a script ember's own fonts lack (Arabic, for example) shows its letters, in the page's language,
+  instead of question marks.
 
 ## What to download
 
