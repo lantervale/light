@@ -1,4 +1,4 @@
-## light v0.2.6
+## light v0.2.7
 
 light is a small web browser written from scratch in Go on the [ember](https://github.com/lantervale/ember) engine.
 It fetches a page, builds it, lays it out and draws it with its own HTML and CSS code: there is no WebKit, Blink or
@@ -7,18 +7,22 @@ not a browser to live in.
 
 ## What is new
 
-- **Japanese, Chinese, Korean and Arabic text**: where a page's fonts lack a script, light draws it with a font
-  installed on your system, chosen by the script and by the page's language (its `lang`, else its
-  `Content-Language`). These pages showed question marks before.
-- **Scripts**: script elements a page adds, fills or points elsewhere run in the order and at the moment Chrome runs
-  them, and the page's load waits for them.
-- **Forms**: a control belongs to the form its `form` attribute names; `form.elements` finds them across the page;
-  `showPicker()` and `navigator.userActivation` answer as in Chrome; `change` and `select` events are no longer
-  cancelable.
-- **Selectors and sizes**: `:open`, `:popover-open`, `:modal`, `:user-valid`, `:user-invalid`, `:hover`, `:active`,
-  `:focus-visible` and `:focus-within` work in a page's scripts; `offsetParent`, `offsetLeft` and `offsetTop` are
-  measured from the right parent; `document.fonts` lays the page out before it answers.
-- A page starting with a byte order mark no longer opens in quirks mode with a stray line of text at its top.
+light now runs on [ember v0.1.0](https://github.com/lantervale/ember/releases/tag/v0.1.0), the engine's first
+release. ember now passes 95.5% of the CSS 2.1 tests it can draw, up from 80%, so pages lay out and paint closer to
+Chrome:
+
+- **Text and encodings:** pages and style sheets are decoded in their declared charset, bidi control characters no
+  longer show as "?", right-to-left text reorders and breaks as Chrome does, and `monospace` defaults to 13px.
+- **Tables:** fixed layout, min/max heights, captions, anonymous tables inside inline elements, and the backgrounds
+  of rows and columns.
+- **Floats and positioning:** floats split across columns, relative offsets on inline blocks, and absolutely
+  positioned boxes among lines.
+- **New CSS:** `clip: rect()`.
+
+### Fixed
+
+- A tab's title in a script ember's own fonts lack (Arabic, for example) shows its letters, in the page's language,
+  instead of question marks.
 
 ## What to download
 
